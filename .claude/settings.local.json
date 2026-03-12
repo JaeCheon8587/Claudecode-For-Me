@@ -3,5 +3,8 @@
     "allow": [
       "WebFetch(domain:github.com)"
     ]
+  },
+  "enabledPlugins": {
+    "claudecode-for-me@claudecode-for-me": true
   }
 }
