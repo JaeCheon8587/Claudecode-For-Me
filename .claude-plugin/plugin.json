@@ -1,0 +1,8 @@
+{
+  "name": "claudecode-for-me",
+  "description": "Claude Code 커스텀 스킬 모음 플러그인",
+  "version": "1.0.0",
+  "author": {
+    "name": "jc.jeong"
+  }
+}
