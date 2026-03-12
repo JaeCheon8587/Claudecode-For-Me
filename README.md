@@ -9,15 +9,6 @@ Claude Code 커스텀 스킬/커맨드 모음 플러그인
 /plugin install claudecode-for-me@claudecode-for-me
 ```
 
-## 스킬 vs 커맨드
-
-| 구분 | 스킬 (`skills/`) | 커맨드 (`commands/`) |
-|------|------------------|---------------------|
-| 위치 | `skills/{name}/SKILL.md` | `commands/{name}.md` |
-| 트리거 | Claude가 컨텍스트에 따라 자동 감지하거나 슬래시 커맨드로 실행 | 슬래시 커맨드로만 실행 |
-| 프론트매터 | `name`, `description`, `argument-hint` 등 지원 | `allowed-tools`, `description` 등 지원 |
-| 용도 | 복잡한 멀티스텝 워크플로우 (에이전트 위임, 파이프라인 등) | 단순 반복 작업 자동화 (커밋, 린트 등) |
-
 ## 스킬 목록
 
 | 스킬 | 실행 명령 | 설명 |
