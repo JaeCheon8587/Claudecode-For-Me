@@ -39,6 +39,7 @@ Agent 도구로 **Explore 에이전트**를 호출하여 코드 추적을 위임
 ```
 Agent(
   subagent_type: "Explore",
+  model: "sonnet",
   description: "{기능명} 코드 추적",
   prompt: 아래 프롬프트 템플릿 사용
 )
