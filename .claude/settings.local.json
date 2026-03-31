@@ -10,10 +10,22 @@
       "mcp__plugin_playwright_playwright__browser_navigate",
       "mcp__plugin_playwright_playwright__browser_take_screenshot",
       "mcp__plugin_playwright_playwright__browser_run_code",
-      "Bash(echo \"EXIT:$?\")"
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(xargs grep:*)",
+      "Bash(find . -name *.atdd -o -name *atdd.md -o -name *ATDD*)",
+      "Bash(find . -type f \\\\\\(-name *.md -o -name *.txt \\\\\\))",
+      "Bash(find D:/WorkSpace/Project/Claduecode-For-me/WebApplication1 -type f -name *.cs)",
+      "Bash(find D:/WorkSpace/Project/Claduecode-For-me/WebApplication1.Test -type f -name *.cs)",
+      "Bash(dotnet build:*)",
+      "Bash(dotnet test:*)",
+      "Bash(mkdir -p /tmp/bcrypttest)",
+      "Read(//tmp/**)",
+      "Bash(dotnet new:*)",
+      "Bash(dotnet add:*)"
     ]
   },
   "enabledPlugins": {
-    "claudecode-for-me@claudecode-for-me": true
+    "claudecode-for-me@claudecode-for-me": true,
+    "document-skills@anthropic-agent-skills": true
   }
 }
