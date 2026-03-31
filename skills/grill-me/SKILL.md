@@ -57,15 +57,20 @@ The list below is a starting point. Skip irrelevant areas, add new ones based on
 
 ### Question Format
 
+**모든 질문은 `AskUserQuestion` 도구를 사용하여 수행한다.** 텍스트로 질문을 출력하지 않는다.
+
+질문 전에 필요하면 텍스트로 한 줄 pushback 또는 acknowledgment를 출력한 뒤, `AskUserQuestion`을 호출한다.
+
 ```
-[Optional: one-sentence pushback or acknowledgment of the previous answer — call out gaps explicitly if present]
+텍스트 출력 (선택): [한 줄 pushback 또는 acknowledgment — 갭이 있으면 명시적으로 지적]
 
-**Q[N]:** [The question]
-
-*My take:* [Your position or recommended direction — be specific and direct, not wishy-washy]
+AskUserQuestion 호출:
+- question: "Q[N]: {질문}"
+- options: 추천 선택지 2개 (My take에 해당하는 추천 방향에 "(Recommended)" 표기)
+- "Other" 옵션은 자동 제공되므로 별도로 추가하지 않는다
 ```
 
-*My take* is mandatory. State a clear position so the user can agree, push back, or refine.
+*My take*는 선택지 중 "(Recommended)" 표기로 대체한다. 명확한 입장을 제시하여 유저가 동의, 반박, 또는 정제할 수 있게 한다.
 
 ### Progress Tracker
 
@@ -92,11 +97,16 @@ Use sparingly — only when genuine weak spots emerge, not as filler.
 
 ---
 
-## Phase 4: Generate Summary
+## Phase 4: Requirements Summary 생성 및 리뷰
 
 When all areas are resolved or the user wants to wrap up, produce a structured summary.
 
-Format:
+1. **Summary 초안을 텍스트로 출력하여 유저에게 보여준다.**
+2. **`AskUserQuestion`으로 리뷰를 요청한다** — "이대로 확정할까요?" 선택지: 확정 / 수정 필요
+3. 유저가 수정을 요청하면 반영 후 다시 보여준다. 승인할 때까지 반복한다.
+
+### 출력 포맷
+
 ```
 ## Requirements Summary
 
@@ -123,15 +133,17 @@ Format:
 **Q. [question that led to a key decision]**
 A. [agreed answer + brief rationale]
 
-**Q. [question that led to a key decision]**
-A. [agreed answer + brief rationale]
-
 ### Open Items ⚠️
 - [anything still unresolved or needing further discussion]
 
 ### Next Steps
 [2–3 sentences: how concretized this idea/task is now, and what should happen next]
 ```
+
+### 작성 규칙
+
+- 세션 중 **실제로 논의된 내용만** 기술한다. 추측으로 채우지 않는다.
+- 미해결 항목이 없으면 "없음"으로 표기한다.
 
 ---
 

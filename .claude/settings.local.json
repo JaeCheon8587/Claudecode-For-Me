@@ -9,7 +9,8 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "mcp__plugin_playwright_playwright__browser_navigate",
       "mcp__plugin_playwright_playwright__browser_take_screenshot",
-      "mcp__plugin_playwright_playwright__browser_run_code"
+      "mcp__plugin_playwright_playwright__browser_run_code",
+      "Bash(echo \"EXIT:$?\")"
     ]
   },
   "enabledPlugins": {
