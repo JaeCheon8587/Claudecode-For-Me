@@ -22,7 +22,9 @@
       "Read(//tmp/**)",
       "Bash(dotnet new:*)",
       "Bash(dotnet add:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(find C:/Users/cross/OneDrive/Desktop/Claudecode-For-Me/WebApplication1/WebApplication1.Test -name *.cs)",
+      "Bash(cd:*)"
     ]
   },
   "enabledPlugins": {
