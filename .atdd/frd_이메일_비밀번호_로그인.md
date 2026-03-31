@@ -5,79 +5,70 @@
 
 ### 2. API 스펙
 
-| Method | Endpoint | Request Body | Response (200) | 설명 |
-|--------|----------|-------------|----------------|------|
-| POST | /api/v1/auth/login | `{ email: string, password: string }` | `{ accessToken: string, refreshToken: string, expiresIn: number }` | 이메일/비밀번호로 인증 후 JWT 토큰 발급 |
-
-**에러 응답 포맷**: `{ error: string, code: string }`
-
-| Status | Code | 조건 |
-|--------|------|------|
-| 400 Bad Request | VALIDATION_ERROR | email 또는 password가 null이거나 빈 문자열 |
-| 401 Unauthorized | INVALID_PASSWORD | 비밀번호 불일치 |
-| 403 Forbidden | ACCOUNT_DISABLED | 계정 비활성화 |
-| 403 Forbidden | ACCOUNT_LOCKED | 계정 잠금 |
-| 404 Not Found | USER_NOT_FOUND | 이메일에 해당하는 사용자 미존재 |
-| 429 Too Many Requests | RATE_LIMIT_EXCEEDED | Rate Limit 초과 |
+| Method | Endpoint | Request Body | Response | 설명 |
+|--------|----------|-------------|----------|------|
+| POST | /api/v1/auth/login | `{ email: string, password: string }` | `{ accessToken: string, refreshToken: string, expiresIn: number }` | 이메일/비밀번호 인증 후 토큰 발급 |
 
 ### 3. 설명
-등록된 이메일과 비밀번호를 입력하여 인증 토큰을 발급받는다. 인증 성공 시 JWT Access Token(30분)과 Refresh Token(7일)을 반환한다. 분리된 에러 응답을 통해 사용자에게 구체적인 실패 사유를 안내하며, Rate Limiting으로 User Enumeration 공격을 방어한다.
+등록된 이메일과 비밀번호를 입력하여 인증 토큰을 발급받는다. 인증 성공 시 JWT 기반 Access Token(30분)과 GUID 기반 Refresh Token(7일)을 반환한다. 보안을 위해 로그인 실패 시 이메일/비밀번호 구분 없이 통합 에러 메시지를 반환하며, 5회 연속 실패 시 15분 계정 잠금을 적용한다.
 
 ### 4. 기능 시나리오
 
-1. **요청 수신** — 클라이언트가 email, password를 POST로 전송한다.
-   - 예외: email 또는 password가 null/빈 문자열 → 400 Bad Request (VALIDATION_ERROR)
+1. **입력값 검증** — 이메일과 비밀번호의 유효성을 검사한다.
+   - 예외: 이메일이 빈 값 → 400 Bad Request (`"email 필드는 필수입니다"`)
+   - 예외: 비밀번호가 빈 값 → 400 Bad Request (`"password 필드는 필수입니다"`)
+   - 예외: 이메일 형식 오류 → 400 Bad Request (`"올바른 이메일 형식이 아닙니다"`)
 
-2. **Rate Limit 확인** — IP 및 이메일 기준으로 요청 빈도를 확인한다.
-   - 예외: IP당 분당 10회 초과 → 429 Too Many Requests (RATE_LIMIT_EXCEEDED)
-   - 예외: 이메일당 분당 5회 초과 → 429 Too Many Requests (RATE_LIMIT_EXCEEDED)
+2. **이메일 정규화** — 입력된 이메일을 소문자로 변환한다.
+   - 엣지: `User@Email.COM` → `user@email.com`으로 정규화 후 조회
 
-3. **이메일 정규화 및 사용자 조회** — 이메일을 소문자로 변환한 뒤 DB에서 사용자를 조회한다.
-   - 예외: 사용자 미존재 → 404 Not Found (USER_NOT_FOUND)
-   - 엣지: 대소문자가 다른 이메일 입력 → 소문자 정규화 후 동일 계정으로 조회
+3. **계정 잠금 확인** — 해당 이메일의 로그인 실패 횟수를 확인한다.
+   - 예외: 5회 연속 실패로 잠금 상태 → 429 Too Many Requests (`"계정이 일시적으로 잠금되었습니다. {남은시간}분 후 다시 시도해 주세요"`)
 
-4. **비밀번호 검증** — BCrypt (work factor 12)로 해싱된 비밀번호와 비교한다.
-   - 예외: 비밀번호 불일치 → 401 Unauthorized (INVALID_PASSWORD)
+4. **사용자 조회** — 정규화된 이메일로 사용자를 조회한다.
+   - 예외: 이메일에 해당하는 사용자 없음 → 401 Unauthorized (`"이메일 또는 비밀번호가 올바르지 않습니다"`)
 
-5. **계정 상태 확인** — 사용자 계정의 활성화/잠금 상태를 확인한다.
-   - 예외: 계정 비활성화 → 403 Forbidden (ACCOUNT_DISABLED), 토큰 발급하지 않음
-   - 예외: 계정 잠금 → 403 Forbidden (ACCOUNT_LOCKED), 토큰 발급하지 않음
+5. **비밀번호 검증** — BCrypt로 해싱된 비밀번호와 입력 비밀번호를 비교한다.
+   - 예외: 비밀번호 불일치 → 실패 횟수 증가 + 401 Unauthorized (`"이메일 또는 비밀번호가 올바르지 않습니다"`)
+   - 엣지: 이메일 미존재와 비밀번호 불일치 모두 동일한 401 메시지 반환 (User Enumeration 방지)
 
-6. **토큰 발급** — Access Token(JWT, HS256, 30분)과 Refresh Token(7일)을 생성한다.
-   - Access Token Claims: sub(userId), email, role, iat, exp
-   - Refresh Token: SQL Server에 저장, Rotation 적용 (사용 시 기존 폐기 + 새 토큰 발급)
-   - Reuse Detection: 탈취된 토큰 재사용 감지 시 해당 사용자의 모든 Refresh Token 폐기
+6. **계정 상태 확인** — 인증 성공 후 계정 활성 상태를 검사한다.
+   - 예외: 비활성화/정지된 계정 → 403 Forbidden (`"계정이 비활성화되었습니다"`)
 
-7. **Audit Log 기록** — 로그인 성공 및 실패 모두를 기록한다.
-   - 기록 항목: 이메일, IP, 시각, 성공/실패 사유
-   - 비밀번호는 절대 로그에 포함하지 않음
-
-8. **응답 반환** — `{ accessToken, refreshToken, expiresIn: 1800 }` 반환 (expiresIn 단위: 초)
+7. **토큰 발급** — Access Token과 Refresh Token을 생성한다.
+   - Access Token: JWT(HS256), 만료 30분, Claim에 userId와 email 포함
+   - Refresh Token: GUID 랜덤 문자열, 만료 7일, ITokenRepository를 통해 저장
+   - 로그인 실패 횟수 초기화
+   - 응답: `{ accessToken, refreshToken, expiresIn: 1800 }`
 
 ### 5. 보안 고려사항
-- 분리된 에러 응답(404/401) 사용 — User Enumeration 위험은 Rate Limiting으로 방어
-- Rate Limit: IP당 분당 10회, 이메일당 분당 5회, 초과 시 429 반환
-- 비밀번호 해싱: BCrypt (work factor 12), BCrypt.Net-Next 패키지 사용
-- Refresh Token Rotation + Reuse Detection으로 토큰 탈취 대응
-- Audit Log에 비밀번호를 절대 포함하지 않음
+- 이메일 미존재와 비밀번호 불일치를 동일한 에러 메시지로 처리하여 User Enumeration 공격 방지
+- BCrypt를 사용한 비밀번호 해싱/검증 (IPasswordHasher 인터페이스로 추상화)
+- 5회 연속 로그인 실패 시 15분 계정 잠금으로 Brute Force 방지
+- 잠금 상태에서 로그인 시도 시 429 Too Many Requests 반환
 
 ### 6. 성능 고려사항
-- BCrypt work factor 12는 해싱에 약 200-300ms 소요 — 로그인 API 응답 시간에 반영
-- Refresh Token DB 저장 시 인덱스 설계 필요 (userId, token 값 기준)
+- 해당 없음 (현재 스코프에서 특별한 성능 요구사항 없음)
 
 ### 7. 미해결 항목 ⚠️
-- 없음
+- [DEFERRED] Refresh Token 저장소의 실제 DB 구현 (현재는 ITokenRepository 인터페이스만 정의)
 
 ### 8. 핵심 Q&A 기록
 
-**Q. 에러 응답을 통합(401)할 것인가, 분리(404/401)할 것인가?**
-A. 분리 에러 응답 선택. User Enumeration 위험은 Rate Limiting으로 방어.
+**Q. 로그인 실패 시 에러 메시지를 이메일/비밀번호 별로 구분할 것인가?**
+A. 통합 메시지 사용. "이메일 또는 비밀번호가 올바르지 않습니다"로 통일하여 User Enumeration 공격을 방지한다.
 
-**Q. Refresh Token의 수명 주기를 어떻게 관리할 것인가?**
-A. SQL Server에 저장 + Rotation 적용. 탈취된 토큰 재사용 시 해당 사용자의 모든 토큰 폐기(Reuse Detection).
+**Q. 비활성화/정지 계정의 로그인 시도는 어떻게 처리하는가?**
+A. 인증 성공 후 계정 상태를 검사하여 403 Forbidden으로 구분 처리. 401과 분리하여 사용자에게 명확한 안내 제공.
 
-**Q. 입력값 유효성 검증 범위는?**
-A. null/빈 문자열 검증만 수행. 이메일 형식이나 비밀번호 길이 검증은 하지 않음.
+**Q. Refresh Token 저장 전략은?**
+A. ITokenRepository 인터페이스로 추상화. 테스트에서는 Mock 사용, 실제 DB 구현은 후속 작업으로 DEFERRED.
 
-**Q. 계정 비활성화/잠금 시 어떻게 처리하는가?**
-A. 인증 성공 후 계정 상태 확인. 비활성화/잠금 시 403 Forbidden + 사유 반환.
+**Q. 토큰 생성 방식은?**
+A. Access Token은 JWT(HS256, 30분), Refresh Token은 GUID(7일). JWT Claim에 userId, email 포함.
+
+**Q. 비밀번호 해싱은?**
+A. BCrypt 사용. IPasswordHasher 인터페이스로 추상화하되 기본 구현은 BCrypt.
+
+**Q. 로그인 시도 횟수 제한은?**
+A. 5회 연속 실패 시 15분 계정 잠금. 잠금 상태에서는 429 반환. 성공 시 실패 횟수 초기화.

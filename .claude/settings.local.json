@@ -21,7 +21,8 @@
       "Bash(mkdir -p /tmp/bcrypttest)",
       "Read(//tmp/**)",
       "Bash(dotnet new:*)",
-      "Bash(dotnet add:*)"
+      "Bash(dotnet add:*)",
+      "Bash(ls:*)"
     ]
   },
   "enabledPlugins": {
