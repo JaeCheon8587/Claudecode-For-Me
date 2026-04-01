@@ -24,7 +24,12 @@
       "Bash(dotnet add:*)",
       "Bash(ls:*)",
       "Bash(find C:/Users/cross/OneDrive/Desktop/Claudecode-For-Me/WebApplication1/WebApplication1.Test -name *.cs)",
-      "Bash(cd:*)"
+      "Bash(cd:*)",
+      "Bash(python3:*)",
+      "Bash(git reset:*)",
+      "Bash(git push:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m ':*)"
     ]
   },
   "enabledPlugins": {
