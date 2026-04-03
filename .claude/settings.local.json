@@ -29,7 +29,10 @@
       "Bash(git reset:*)",
       "Bash(git push:*)",
       "Bash(git add:*)",
-      "Bash(git commit -m ':*)"
+      "Bash(git commit -m ':*)",
+      "Bash(mkdir:*)",
+      "Bash(dotnet clean:*)",
+      "Bash(rm -rf obj bin WebApplication.Test/obj WebApplication.Test/bin)"
     ]
   },
   "enabledPlugins": {
