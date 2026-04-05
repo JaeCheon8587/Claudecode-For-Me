@@ -32,7 +32,10 @@
       "Bash(git commit -m ':*)",
       "Bash(mkdir:*)",
       "Bash(dotnet clean:*)",
-      "Bash(rm -rf obj bin WebApplication.Test/obj WebApplication.Test/bin)"
+      "Bash(rm -rf obj bin WebApplication.Test/obj WebApplication.Test/bin)",
+      "Bash(grep:*)",
+      "Bash(dotnet sln:*)",
+      "Bash(rm:*)"
     ]
   },
   "enabledPlugins": {
