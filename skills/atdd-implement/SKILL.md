@@ -1,6 +1,6 @@
 ---
 name: atdd-implement
-description: 이미 작성된 테스트 코드를 통과시키는 프로덕션 코드를 구현하고, 빌드와 테스트를 실행하여 검증한다. ATDD의 Green 단계 — 테스트는 이미 존재하며 수정하지 않는다. atdd-pipeline에서 Phase 3으로 호출되거나, /atdd-implement로 독립 실행 가능.
+description: 이미 작성된 테스트 코드를 통과시키는 프로덕션 코드를 구현하고, 빌드와 테스트를 실행하여 검증한다. ATDD의 Green 단계 — 테스트는 이미 존재하며 수정하지 않는다. atdd-pipeline의 Phase 3에서 서브 에이전트로 호출된다.
 argument-hint: "[기능명]"
 input: .atdd/frd_{기능명}.md, 테스트 코드 파일
 output: 프로덕션 코드 + 빌드/테스트 결과 + .atdd/impl_{기능명}.md
