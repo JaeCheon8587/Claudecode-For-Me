@@ -2,12 +2,27 @@
 
 Claude Code 커스텀 스킬/커맨드 모음 플러그인
 
-## 설치
+## 설치 (다른 프로젝트에서 처음 사용할 때)
+
+다른 작업 디렉터리(예: 사내 프로젝트, 새 레포 등)에서 Claude Code를 켜고 다음을 순서대로 실행한다.
 
 ```
+# 1. 마켓플레이스 등록
 /plugin marketplace add JaeCheon8587/Claudecode-For-Me
+
+# 2. 플러그인 설치 (글로벌 캐시 ~/.claude/plugins/cache/ 에 다운로드됨)
 /plugin install claudecode-for-me@claudecode-for-me
+
+# 3. ★ 반드시 Claude Code 세션을 종료하고 다시 시작 ★
+# (세션 시작 시점에 plugin manifest를 한 번만 로드하므로 install 직후 같은 세션에서는 호출 안 됨)
+
+# 4. 새 세션에서 동작 검증 — 슬래시 자동완성에 노출 확인
+/claudecode-for-me:meta-prompter 작업 요청 텍스트
+/claudecode-for-me:grill-me 주제
+/claudecode-for-me:atdd-pipeline 기능명
 ```
+
+플러그인은 글로벌(`~/.claude/plugins/`)에 설치되므로 한 번 설치하면 **모든 프로젝트의 새 세션**에서 자동으로 사용 가능하다. 프로젝트별 재설치 불필요.
 
 ## 업데이트
 
@@ -19,7 +34,9 @@ Claude Code 커스텀 스킬/커맨드 모음 플러그인
 ```
 
 - `plugin.json` / `marketplace.json`의 `version` 값이 올라가야 클라이언트가 변경을 인식한다.
-- 업데이트 후 `commands/`에 추가된 슬래시 커맨드(`/claudecode-for-me:<name>`)가 곧바로 노출된다.
+- **업데이트 후 Claude Code 세션 재시작 필수**: Claude Code는 세션 시작 시점에 플러그인 매니페스트를 한 번만 로드하며 런타임 hot-reload를 하지 않는다. 업데이트만 하고 같은 세션을 유지하면 새로 추가된 스킬/커맨드가 보이지 않는다.
+  - 현재 세션 종료 → 새 세션 시작 → `/claudecode-for-me:<name>` 호출 가능
+  - 캐시 위치: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (구버전과 신버전이 공존할 수 있으나 활성 버전은 최신 1개)
 
 ## 스킬 목록
 
