@@ -17,8 +17,18 @@
 | 401 | `INVALID_CREDENTIALS` | 이메일 미존재 또는 비밀번호 불일치 (동일 응답으로 User Enumeration 방지) |
 | 429 | `RATE_LIMIT_EXCEEDED` | IP 기반 Rate Limit 초과 (Retry-After 헤더 포함) |
 
+**에러 응답 형식:**
+
+```json
+{
+  "code": "VALIDATION_ERROR",
+  "message": "입력값이 유효하지 않습니다.",
+  "errors": ["email: RFC 5322 형식이 아닙니다."]
+}
+```
+
 ### 3. 설명
-등록된 이메일과 비밀번호를 입력하여 인증 토큰을 발급받는다. 인증 성공 시 Access Token(30분)과 Refresh Token(7일)을 반환한다. Refresh Token은 Oracle DB에 저장하며, 사용 시 Rotation(새 토큰 발급 + 기존 폐기)을 적용한다.
+등록된 이메일과 비밀번호를 입력하여 인증 토큰을 발급받는다. 인증 성공 시 Access Token(30분)과 Refresh Token(7일)을 반환한다. Refresh Token은 DB에 저장하며, 로그인 시 해당 사용자의 기존 Refresh Token을 모두 폐기하고 새로 발급한다 (단일 디바이스 정책).
 
 ### 4. 기능 시나리오
 
@@ -27,7 +37,7 @@
 
 2. **IP 기반 Rate Limit을 검사한다** — 동일 IP에서 분당 10회 초과 시 차단
    - 예외: Rate Limit 초과 → 429 `RATE_LIMIT_EXCEEDED` + `Retry-After` 헤더 반환
-   - 엣지: Rate Limit 카운터는 분 단위로 리셋 (Sliding Window 또는 Fixed Window — 구현 시 결정)
+   - 엣지: Rate Limit 카운터는 분 단위로 리셋 (Fixed Window)
 
 3. **Request Body 유효성을 검증한다**
    - email: RFC 5322 규격, 최대 254자
@@ -37,16 +47,16 @@
 
 4. **서버가 이메일로 사용자를 조회한다** — Dapper를 사용하여 Oracle DB에서 파라미터 바인딩으로 조회
    - 예외: 사용자 미존재 → **더미 BCrypt 해시와 비교를 수행한 뒤** 401 `INVALID_CREDENTIALS` 반환 (Timing Attack 방어)
-   - 엣지: email은 대소문자 구분 없이 조회 (LOWER 비교 또는 DB 컬럼 정규화)
+   - 엣지: email은 대소문자 구분 없이 조회 (LOWER 비교)
 
 5. **비밀번호를 BCrypt로 검증한다** — BCrypt.Net-Next 라이브러리 사용
    - 예외: 비밀번호 불일치 → 401 `INVALID_CREDENTIALS`
    - 엣지: 사용자 미존재 시에도 동일한 BCrypt.Verify 호출로 응답 시간 균일화 (Step 4에서 처리)
 
 6. **검증 성공 시 Access Token(30분)과 Refresh Token(7일)을 발급한다**
-   - Access Token: JWT, Claims = `sub`(사용자 ID) + `email` + `exp` + `iat` + `jti`
-   - Refresh Token: 랜덤 문자열 (GUID 또는 crypto-secure random), Oracle DB에 저장
-   - 엣지: 기존에 해당 사용자의 유효한 Refresh Token이 있으면 폐기(Revoke)하고 새로 발급 (Rotation)
+   - Access Token: JWT, Claims = `sub`(사용자 ID) + `email` + `exp` + `iat` + `jti`, 서명 = HS256
+   - Refresh Token: 랜덤 문자열 (crypto-secure random), DB에 저장
+   - 엣지: 해당 사용자의 기존 유효 Refresh Token이 있으면 **전부 폐기(Revoke)**하고 새로 발급 (단일 디바이스 강제)
 
 7. **로그인 결과를 감사 로깅한다** — 성공/실패 모두 기록
    - 기록 항목: IP, email, timestamp, 결과(SUCCESS/FAIL), 실패 사유
@@ -59,49 +69,55 @@
 - **User Enumeration 방지**: 이메일 미존재와 비밀번호 불일치를 동일한 에러 응답(401 `INVALID_CREDENTIALS`)으로 반환
 - **Timing Attack 방어**: 사용자 미존재 시에도 더미 BCrypt 해시와 비교하여 응답 시간 균일화
 - **IP 기반 Rate Limit**: 분당 10회, 초과 시 429 + Retry-After
-- **Refresh Token DB 저장 + Rotation**: 사용 시 새 토큰 발급, 기존 폐기
+- **Refresh Token DB 저장 + 단일 디바이스 강제**: 로그인 시 기존 Refresh Token 전부 폐기 후 새로 발급
 - **SQL Injection 방지**: Dapper 파라미터 바인딩 필수
 - **감사 로깅**: 모든 로그인 시도를 IP, email, timestamp, 결과와 함께 기록
 
 ### 6. 성능 고려사항
 - BCrypt 해싱은 CPU-intensive — 비동기 처리 필요
-- Oracle DB 조회는 email 컬럼에 인덱스 필요
+- DB 조회는 email 컬럼에 인덱스 필요
 - Rate Limit 카운터는 인메모리(IMemoryCache 등)로 처리하여 DB 부하 방지
 
 ### 7. 미해결 항목
-- **JWT Secret Key 관리 방식**: 키 저장 위치(appsettings, 환경 변수, Key Vault), 알고리즘(HS256/RS256), 키 길이 — 인프라 팀과 협의 필요 (DEFERRED)
+- **JWT Secret Key 관리 방식**: 키 저장 위치(appsettings, 환경 변수, Key Vault), 키 길이 — 인프라 팀과 협의 필요 (DEFERRED). 구현 시 appsettings.json 기본값 사용.
 
 ### 8. 핵심 Q&A 기록
 
-**Q. Refresh Token을 Stateless JWT로 운용할지, DB에 저장할지?**
-A. Oracle DB에 저장하고 사용 시 Rotation 적용. 탈취 시 서버 측에서 무효화 가능하도록.
-
 **Q. Brute Force 방어 전략은?**
-A. IP 기반 Rate Limit(분당 10회, 429 + Retry-After)만 적용. 계정 잠금(Account Lockout)은 미적용.
+A. IP 기반 Rate Limit(분당 10회, 429 + Retry-After)만 적용. Account Lockout은 미적용.
 
 **Q. 이메일 미존재와 비밀번호 불일치를 구분할지?**
-A. 동일한 401 + INVALID_CREDENTIALS로 반환. User Enumeration 방지 목적.
+A. 동일한 401 + INVALID_CREDENTIALS로 반환. User Enumeration 방지 + 더미 BCrypt 해시로 Timing Attack 방어.
 
-**Q. Timing Attack은?**
-A. 사용자 미존재 시 더미 BCrypt 해시와 비교하여 응답 시간 균일화.
+**Q. Refresh Token 관리 전략은?**
+A. DB 저장 + Rotation. 로그인 시 해당 사용자의 기존 Refresh Token 전부 폐기 (단일 디바이스 강제).
 
-**Q. Refresh Token Rotation은?**
-A. 적용. 사용 시 새 토큰 발급 + 기존 토큰 폐기. (1번과 6번 모순 해소 후 확정)
+**Q. 다중 디바이스 동시 로그인 허용 여부?**
+A. 허용하지 않음. 로그인 시 기존 Refresh Token 전부 폐기로 단일 디바이스 강제.
 
-**Q. JWT Secret Key 관리는?**
-A. DEFERRED — 인프라 이슈로 분리. 구현 시 appsettings.json 기본값 사용.
+**Q. 비밀번호 해싱 알고리즘은?**
+A. BCrypt (BCrypt.Net-Next). Work Factor는 라이브러리 기본값 사용.
 
 **Q. 입력 유효성 규칙은?**
 A. email: RFC 5322, 최대 254자. password: 최소 8자 ~ 최대 128자. 위반 시 400 VALIDATION_ERROR.
 
 **Q. Access Token Claims 구성은?**
-A. sub(사용자 ID) + email + exp + iat + jti 최소 구성.
+A. sub(사용자 ID) + email + exp + iat + jti 최소 구성. 서명 알고리즘 HS256.
 
-**Q. Dapper + Oracle 패키지는?**
-A. Dapper + Oracle.ManagedDataAccess.Core 추가 필요.
+**Q. JWT Secret Key 관리는?**
+A. DEFERRED — 인프라 이슈로 분리. 구현 시 appsettings.json 기본값 사용.
 
 **Q. 감사 로깅은?**
-A. 성공/실패 모두 로깅(IP, email, timestamp, 결과).
+A. 성공/실패 모두 로깅(IP, email, timestamp, 결과, 실패 사유).
+
+**Q. expiresIn 단위는?**
+A. 초(seconds) — OAuth 2.0 표준 준수. 1800 = 30분.
+
+**Q. email 대소문자 처리?**
+A. 대소문자 구분 없음 (LOWER 비교).
+
+**Q. 데이터 접근 계층은?**
+A. 인터페이스 기반 추상화 + 구현체는 Dapper + Oracle 명시. 테스트에서는 Mock 사용.
 
 ### Refresh Token 테이블 스키마
 

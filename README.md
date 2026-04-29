@@ -9,6 +9,18 @@ Claude Code 커스텀 스킬/커맨드 모음 플러그인
 /plugin install claudecode-for-me@claudecode-for-me
 ```
 
+## 업데이트
+
+다른 프로젝트에서 이 플러그인을 이미 설치했다면, 새 커맨드/스킬은 다음으로 가져온다.
+
+```
+/plugin marketplace update claudecode-for-me
+/plugin update claudecode-for-me@claudecode-for-me
+```
+
+- `plugin.json` / `marketplace.json`의 `version` 값이 올라가야 클라이언트가 변경을 인식한다.
+- 업데이트 후 `commands/`에 추가된 슬래시 커맨드(`/claudecode-for-me:<name>`)가 곧바로 노출된다.
+
 ## 스킬 목록
 
 | 스킬 | 실행 명령 | 설명 |
@@ -19,6 +31,7 @@ Claude Code 커스텀 스킬/커맨드 모음 플러그인
 | atdd-implement | atdd-pipeline Phase 3 하위 스킬 | 테스트를 통과시키는 프로덕션 코드 구현 + 빌드/테스트 검증 (Green 단계) |
 | e2e-sequence | `/claudecode-for-me:e2e-sequence [기능명]` | 기능별 E2E 메시지 흐름을 코드 추적하여 Mermaid 시퀀스 다이어그램 생성 |
 | grill-me | `/claudecode-for-me:grill-me [주제]` | 아이디어/계획/작업을 집요한 질문으로 구체화하고 요구사항 정리 |
+| meta-prompter | `/claudecode-for-me:meta-prompter [작업 요청]` | 거친 작업 요청을 다른 AI 에이전트(Claude Code 등)가 수행 가능한 구조화된 메타 프롬프트로 정제 |
 
 > `atdd-flow` / `atdd-design` / `atdd-implement`는 `atdd-pipeline`이 Phase 1~3에서 각각 호출하는 하위 스킬이다. 개별 커맨드는 제공되지 않으며 파이프라인을 통해 실행된다.
 
@@ -98,6 +111,19 @@ Claude Code 커스텀 스킬/커맨드 모음 플러그인
 - 3~4 교환마다 진행 트래커로 영역별 완료 여부 표시
 - 세션 종료 시 Requirements Summary (영역별 정리 + Key Decisions Q&A + Open Items + Next Steps) 생성 후 확정 리뷰
 
+### meta-prompter
+
+```
+/claudecode-for-me:meta-prompter ApiGateway에 health check 엔드포인트 추가
+```
+
+- **요구사항 정제기**: 단순 포매터가 아니라 모호 표현 challenge / 가정 표면화 / 모순 지적까지 수행
+- **작업 유형 자동 분류**: 기능 개발 / 리팩토링 / 문서화 / 분석 (혼합 시 주·보조 표기)
+- **유형별 템플릿 매칭**: 베이스 12개 항목 + 유형별 추가 항목에서 근거·기본값 있는 것만 채움 (빈 자리표시자 금지)
+- **필수 항목 누락 시** 한 번에 묶어 질문 (≤3개), 그 외는 합리적 가정으로 처리하고 메타 헤더에 `추가한 가정 N개`로 카운트
+- **출력은 채팅 전용**: 마크다운 코드블록 1개로 감싸 그대로 복사 가능, 별도 `.md` 파일로 저장하지 않음
+- 개조식 종결 강제(서술형 금지), 출력 끝에 `[에이전트 행동 규칙]` 가드레일 4문구 자동 부착
+
 ## 커맨드 목록
 
 | 커맨드 | 실행 명령 | 설명 |
@@ -106,6 +132,7 @@ Claude Code 커스텀 스킬/커맨드 모음 플러그인
 | commit-analysis | `/claudecode-for-me:commit-analysis` | 변경사항 분석 후 구분자 선택하여 커밋 생성 |
 | e2e-sequence | `/claudecode-for-me:e2e-sequence [기능명]` | e2e-sequence 스킬 실행 (커맨드 래퍼) |
 | grill-me | `/claudecode-for-me:grill-me [주제]` | grill-me 스킬 실행 (커맨드 래퍼) |
+| meta-prompter | `/claudecode-for-me:meta-prompter [작업 요청]` | meta-prompter 스킬 실행 (커맨드 래퍼) |
 
 ### commit-analysis
 
@@ -136,13 +163,16 @@ Claudecode-For-Me/
 │   │   └── SKILL.md             # 구현 + 빌드/테스트 (Phase 3 하위 스킬)
 │   ├── e2e-sequence/
 │   │   └── SKILL.md             # E2E 시퀀스 다이어그램 스킬
-│   └── grill-me/
-│       └── SKILL.md             # 아이디어/계획 구체화 스킬
+│   ├── grill-me/
+│   │   └── SKILL.md             # 아이디어/계획 구체화 스킬
+│   └── meta-prompter/
+│       └── SKILL.md             # 작업 요청 → 구조화된 메타 프롬프트 정제 스킬
 ├── commands/
 │   ├── atdd-pipeline.md         # atdd-pipeline 커맨드
 │   ├── commit-analysis.md       # 커밋 분석 커맨드
 │   ├── e2e-sequence.md          # e2e-sequence 커맨드
-│   └── grill-me.md              # grill-me 커맨드
+│   ├── grill-me.md              # grill-me 커맨드
+│   └── meta-prompter.md         # meta-prompter 커맨드
 └── README.md
 ```
 
