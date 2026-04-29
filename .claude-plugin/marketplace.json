@@ -11,7 +11,7 @@
       "name": "claudecode-for-me",
       "source": "./",
       "description": "Claude Code 커스텀 스킬/커맨드 모음 플러그인",
-      "version": "1.2.1",
+      "version": "1.2.2",
       "author": {
         "name": "jc.jeong"
       }
