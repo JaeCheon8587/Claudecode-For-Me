@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# tools/hooks/pre-commit — staged 빠른 검사
+# 호출: git이 인자 없이 직접 호출
+# 발화 조건: git commit (--no-verify 시 스킵 — 정책상 금지)
+
+set -euo pipefail
+IFS=$'\n\t'
+
+if [[ "${HOOKS_DEBUG:-}" == "1" ]]; then set -x; fi
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+QDIR="tools/quality"
+
+fail() {
+    {
+        echo "FAIL: $1"
+        echo "target: $2"
+        echo "next: $3"
+    } >&2
+    exit 1
+}
+
+# ── staged 추출 (NUL 구분, 한글/공백 안전) ────────────────
+STAGED=()
+while IFS= read -r -d '' f; do
+    STAGED+=("$f")
+done < <(git diff -z --name-only --cached --diff-filter=ACMR)
+
+if [[ ${#STAGED[@]} -eq 0 ]]; then
+    echo "SKIP: pre-commit (no staged files)"
+    exit 0
+fi
+
+# ── 거대 커밋 폴백 ────────────────────────────────────────
+LARGE=0
+if [[ ${#STAGED[@]} -gt 500 ]]; then
+    echo "WARN: large commit (${#STAGED[@]} files), falling back to --all" >&2
+    LARGE=1
+fi
+
+# ── 정적 가드: 크기·BOM ──────────────────────────────────
+MAX_BYTES=$((5 * 1024 * 1024))
+for f in "${STAGED[@]}"; do
+    [[ ! -f "$f" ]] && continue
+    SIZE=$(wc -c <"$f" | tr -d ' ')
+    if [[ "$SIZE" -gt "$MAX_BYTES" ]]; then
+        fail "size" "$f (${SIZE}B > 5MB)" "git restore --staged \"$f\""
+    fi
+    # BOM 검사 (텍스트 파일 한정 — git이 binary로 표시한 파일은 제외)
+    if git check-attr binary -- "$f" 2>/dev/null | grep -q ': binary: set'; then
+        continue
+    fi
+    if [[ "$SIZE" -ge 3 ]]; then
+        FIRST3=$(head -c 3 "$f" | od -An -tx1 | tr -d ' \n')
+        if [[ "$FIRST3" == "efbbbf" ]]; then
+            fail "bom" "$f (UTF-8 BOM)" "BOM 제거 후 재커밋 (예: sed -i '1s/^\\xEF\\xBB\\xBF//' \"$f\")"
+        fi
+    fi
+done
+
+# ── secret scan (우회 절대 불가) ──────────────────────────
+"$QDIR/secret-scan.sh" --staged
+
+# ── lint ──────────────────────────────────────────────────
+if [[ "$LARGE" == "1" ]]; then
+    "$QDIR/lint.sh" --all
+else
+    "$QDIR/lint.sh" --staged
+fi
+
+exit 0
