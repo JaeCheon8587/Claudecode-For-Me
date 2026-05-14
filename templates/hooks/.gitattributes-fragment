@@ -1,5 +1,0 @@
-# harness_framework hooks - LF line endings required (Git Bash execution)
-tools/hooks/*        text eol=lf
-tools/quality/*.sh   text eol=lf
-tools/quality/*.py   text eol=lf
-tools/install-hooks.sh text eol=lf
