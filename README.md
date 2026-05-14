@@ -45,6 +45,7 @@ Claude Code 커스텀 스킬/커맨드 모음 플러그인
 | e2e-sequence | `/claudecode-for-me:e2e-sequence [기능명]` | 기능별 E2E 메시지 흐름을 코드 추적하여 Mermaid 시퀀스 다이어그램 생성 |
 | grill-me | `/claudecode-for-me:grill-me [주제]` | 아이디어/계획/작업을 집요한 질문으로 구체화하고 요구사항 정리 |
 | meta-prompter | `/claudecode-for-me:meta-prompter [작업 요청]` | 거친 작업 요청을 다른 AI 에이전트(Claude Code 등)가 수행 가능한 구조화된 메타 프롬프트로 정제 |
+| hooks-setup | `/claudecode-for-me:hooks-setup [--dry-run\|--apply\|--rollback]` | harness_framework hooks 12개를 사용자 레포에 멱등 배치 (백업+롤백 지원) |
 
 ### e2e-sequence
 
@@ -85,6 +86,50 @@ Claude Code 커스텀 스킬/커맨드 모음 플러그인
 - **필수 항목 누락 시** 한 번에 묶어 질문 (≤3개), 그 외는 합리적 가정으로 처리하고 메타 헤더에 `추가한 가정 N개`로 카운트
 - **출력은 채팅 전용**: 마크다운 코드블록 1개로 감싸 그대로 복사 가능, 별도 `.md` 파일로 저장하지 않음
 - 개조식 종결 강제(서술형 금지), 출력 끝에 `[에이전트 행동 규칙]` 가드레일 4문구 자동 부착
+
+### hooks-setup
+
+```
+/claudecode-for-me:hooks-setup --dry-run
+/claudecode-for-me:hooks-setup --apply --yes
+/claudecode-for-me:hooks-setup --rollback
+```
+
+harness_framework 의 git hooks 자산(pre-commit/pre-push + tools/quality/* 5단계 + install-hooks.sh)을 사용자 레포에 자동 배치한다.
+
+- **배치 파일 12종**: `tools/hooks/{pre-commit, pre-push}`, `tools/quality/{secret-scan, lint, dependency-check, build, test}.sh`, `tools/quality/dependency_check.py`, `tools/install-hooks.sh`, `ruff.toml`, `requirements-dev.txt`, `.gitattributes` (fragment append)
+- **git 훅 등록 방식**: `git config --local core.hooksPath tools/hooks` — 기존 `.git/hooks/` 무손상
+- **충돌 정책**: 동일 파일 존재 시 사용자 프롬프트 (`overwrite` / `skip`). `--yes` 일괄 skip, `--force` 일괄 overwrite. `.gitattributes` 는 fragment marker 감지로 중복 방지
+- **백업·롤백**: 덮어쓴 파일은 `.hooks-setup/backups/<path>.<timestamp>.bak` 로 저장, `state.json` 에 액션 기록. `--rollback` 으로 역적용
+- **OS**: Windows = Git Bash 전제 (`.sh` 본문 그대로). LF 라인엔딩 강제
+- **prerequisite**: dotnet SDK 9+, python 3.10+, gitleaks, ruff, pytest (미설치 시 첫 훅 실행에서 exit 2)
+- **post-install**: `bash tools/install-hooks.sh` 로 prerequisite 점검 + 실행권한 부여
+
+#### 사용 시나리오
+
+```bash
+# 1. 계획 미리보기 (변경 없음)
+/claudecode-for-me:hooks-setup --dry-run
+
+# 2. 배치 (충돌 항목 자동 skip)
+/claudecode-for-me:hooks-setup --apply --yes
+
+# 3. 후속 — prerequisite 점검 + chmod +x
+bash tools/install-hooks.sh
+
+# 4. 검증
+git commit --allow-empty -m test    # pre-commit 발화 확인
+git push                              # pre-push 5단계 발화 확인
+
+# 5. 제거 시
+/claudecode-for-me:hooks-setup --rollback
+```
+
+#### 한계 사항
+
+- **Windows 전용 검증**: macOS/Linux 동작은 부수적
+- **harness 본문 그대로 사용**: `.sh` 스크립트 자체는 수정 없이 미러. `Src/*.sln` 미존재 시 build/test 단계 exit 2 (의도된 동작)
+- **빈 디렉토리 잔존**: rollback 후 `tools/hooks/`, `tools/quality/` 빈 디렉토리 수동 정리 필요
 
 ## Forge Phase Runner (harness_framework 임베디드)
 
@@ -201,6 +246,7 @@ phases/
 | forge-full | `/claudecode-for-me:forge-full <phase-dir> [options]` | forge-full phase runner |
 | forge-scope | `/claudecode-for-me:forge-scope <prompt>` | forge-scope 경량 phase runner |
 | grill-me | `/claudecode-for-me:grill-me [주제]` | grill-me 스킬 실행 (커맨드 래퍼) |
+| hooks-setup | `/claudecode-for-me:hooks-setup [--dry-run\|--apply\|--rollback]` | harness_framework hooks 자동 배치 |
 | meta-prompter | `/claudecode-for-me:meta-prompter [작업 요청]` | meta-prompter 스킬 실행 (커맨드 래퍼) |
 
 ### commit-analysis
@@ -225,24 +271,31 @@ Claudecode-For-Me/
 │   ├── forge_full.py            # harness_framework full phase runner
 │   ├── forge_scope.py           # harness_framework scoped phase runner
 │   ├── forge_cancel.py          # harness_framework cancel runner
-│   └── forge_templates/         # 부트스트랩 리소스
+│   ├── hooks_setup.py           # hooks-setup 메인 실행 로직
+│   ├── test_hooks_setup.py      # pytest 11 케이스
+│   └── forge_templates/         # forge 부트스트랩 리소스
 │       ├── CLAUDE.md            # 프로젝트 가드레일 템플릿
 │       ├── PHASE_SCHEMA.md      # phase 스키마 명세
 │       ├── FORGE_SCOPE.md       # forge-scope 운영 참조
 │       └── Docs/_templates/     # 문서 템플릿 8종
+├── templates/
+│   ├── hooks_manifest.json      # hooks 배치 매핑 + post_install
+│   └── hooks/                   # harness 훅 자산 미러 (LF)
+│       ├── tools/hooks/{pre-commit, pre-push}
+│       ├── tools/quality/{secret-scan, lint, dependency-check, build, test}.sh
+│       ├── tools/quality/dependency_check.py
+│       ├── tools/install-hooks.sh
+│       ├── ruff.toml
+│       ├── requirements-dev.txt
+│       └── .gitattributes-fragment
 ├── skills/
-│   ├── e2e-sequence/
-│   │   └── SKILL.md             # E2E 시퀀스 다이어그램 스킬
-│   ├── forge-cancel/
-│   │   └── SKILL.md             # forge phase 취소 스킬
-│   ├── forge-full/
-│   │   └── SKILL.md             # forge-full phase runner 스킬
-│   ├── forge-scope/
-│   │   └── SKILL.md             # forge-scope 경량 phase runner 스킬
-│   ├── grill-me/
-│   │   └── SKILL.md             # 아이디어/계획 구체화 스킬
-│   └── meta-prompter/
-│       └── SKILL.md             # 작업 요청 → 구조화된 메타 프롬프트 정제 스킬
+│   ├── e2e-sequence/SKILL.md    # E2E 시퀀스 다이어그램 스킬
+│   ├── forge-cancel/SKILL.md    # forge phase 취소 스킬
+│   ├── forge-full/SKILL.md      # forge-full phase runner 스킬
+│   ├── forge-scope/SKILL.md     # forge-scope 경량 phase runner 스킬
+│   ├── grill-me/SKILL.md        # 아이디어/계획 구체화 스킬
+│   ├── hooks-setup/SKILL.md     # hooks 배치 스킬
+│   └── meta-prompter/SKILL.md   # 작업 요청 → 메타 프롬프트 정제 스킬
 ├── commands/
 │   ├── commit-analysis.md       # 커밋 분석 커맨드
 │   ├── e2e-sequence.md          # e2e-sequence 커맨드
@@ -250,7 +303,9 @@ Claudecode-For-Me/
 │   ├── forge-full.md            # forge-full 커맨드
 │   ├── forge-scope.md           # forge-scope 커맨드
 │   ├── grill-me.md              # grill-me 커맨드
+│   ├── hooks-setup.md           # hooks-setup 커맨드
 │   └── meta-prompter.md         # meta-prompter 커맨드
+├── .gitattributes               # templates/hooks/** LF 강제
 └── README.md
 ```
 
