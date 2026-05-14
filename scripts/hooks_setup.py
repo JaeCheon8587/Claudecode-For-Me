@@ -195,7 +195,7 @@ def invoke_claude(prompt: str, cwd: Path, timeout: int = PER_HOOK_TIMEOUT) -> tu
     cmd = ["claude", "-p"]
     if not _is_nested_under_claude():
         cmd.append("--dangerously-skip-permissions")
-    cmd += ["--output-format", "stream-json", "--max-turns", "8", "--quiet", "--yes"]
+    cmd += ["--output-format", "stream-json", "--max-turns", "8"]
 
     try:
         result = subprocess.run(
