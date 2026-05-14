@@ -19,7 +19,7 @@ Claude Code 커스텀 스킬/커맨드 모음 플러그인
 # 4. 새 세션에서 동작 검증 — 슬래시 자동완성에 노출 확인
 /claudecode-for-me:meta-prompter 작업 요청 텍스트
 /claudecode-for-me:grill-me 주제
-/claudecode-for-me:atdd-pipeline 기능명
+/claudecode-for-me:forge-scope 작업 prompt
 ```
 
 플러그인은 글로벌(`~/.claude/plugins/`)에 설치되므로 한 번 설치하면 **모든 프로젝트의 새 세션**에서 자동으로 사용 가능하다. 프로젝트별 재설치 불필요.
@@ -42,64 +42,9 @@ Claude Code 커스텀 스킬/커맨드 모음 플러그인
 
 | 스킬 | 실행 명령 | 설명 |
 |------|----------|------|
-| atdd-pipeline | `/claudecode-for-me:atdd-pipeline [기능 요구사항서 경로/내용]` | ATDD 전체 파이프라인 오케스트레이터 (FRD → 테스트 → 구현 → 완료) |
-| atdd-flow | atdd-pipeline Phase 1 하위 스킬 | 기능 요구사항서를 시니어 테크니컬 리뷰어 관점으로 검토하여 FRD 생성 |
-| atdd-design | atdd-pipeline Phase 2 하위 스킬 | FRD 기반 테스트 코드 작성 + FRD↔테스트 자기 검증 (Red 단계) |
-| atdd-implement | atdd-pipeline Phase 3 하위 스킬 | 테스트를 통과시키는 프로덕션 코드 구현 + 빌드/테스트 검증 (Green 단계) |
 | e2e-sequence | `/claudecode-for-me:e2e-sequence [기능명]` | 기능별 E2E 메시지 흐름을 코드 추적하여 Mermaid 시퀀스 다이어그램 생성 |
 | grill-me | `/claudecode-for-me:grill-me [주제]` | 아이디어/계획/작업을 집요한 질문으로 구체화하고 요구사항 정리 |
 | meta-prompter | `/claudecode-for-me:meta-prompter [작업 요청]` | 거친 작업 요청을 다른 AI 에이전트(Claude Code 등)가 수행 가능한 구조화된 메타 프롬프트로 정제 |
-
-> `atdd-flow` / `atdd-design` / `atdd-implement`는 `atdd-pipeline`이 Phase 1~3에서 각각 호출하는 하위 스킬이다. 개별 커맨드는 제공되지 않으며 파이프라인을 통해 실행된다.
-
-### atdd-pipeline
-
-```
-/claudecode-for-me:atdd-pipeline 로그인 기능
-```
-
-- **4단계 파이프라인**: Phase 1 FRD 생성 → Phase 2 테스트 코드 작성 + 자기 검증 → Phase 3 구현 + 빌드/테스트 → Phase 4 완료 보고
-- **파일 기반 계약**: Phase 간 데이터 전달은 `.atdd/` 폴더 파일과 소스 코드로만 이루어지며, 컨텍스트 변수에 의존하지 않는다
-- **재개 가능**: 산출물(`frd_{기능명}.md`, 테스트 코드, `impl_{기능명}.md`)의 존재 여부로 완료된 Phase를 판별하여 중단된 지점부터 재개한다
-- **에이전트 분담**: Phase 1은 메인 에이전트(Opus, 유저 대화 필요) / Phase 2·3은 서브 에이전트(Sonnet, Red→Green 순서를 구조적으로 강제)
-- **산출물**: `.atdd/frd_{기능명}.md`, 테스트 코드, 프로덕션 코드, `.atdd/impl_{기능명}.md`
-
-### atdd-flow
-
-```
-(atdd-pipeline Phase 1에서 호출됨)
-```
-
-- **시니어 테크니컬 리뷰어 페르소나** 기반 — 수동적 기록자가 아니라 허점을 찾아 지적
-- 압박 수준 조절 가능: **약**(사용자 편의성·기본 예외) / **중**(비즈니스 로직·시스템 에러) / **강**(동시성·보안·아키텍처 결함, 전문 용어 사용)
-- **4가지 분석 관점**: 논리적 모순 / 엣지 케이스 누락 / 구현 가능성 / 보안·성능
-- **일괄 질문 방식**: 발견된 이슈를 Critical → Major → Minor 순으로 정렬하여 한 번에 제시 (각 질문에 Recommended 선택지 포함)
-- 후속 질문은 최대 2라운드, 미해결 항목은 FRD "미해결 항목" 섹션에 기록
-- 산출물: `.atdd/frd_{기능명}.md` (기능명, API 스펙, 설명, 시나리오, 보안/성능 고려사항, 미해결 항목, 핵심 Q&A)
-
-### atdd-design
-
-```
-(atdd-pipeline Phase 2에서 Sonnet 서브 에이전트로 호출됨)
-```
-
-- **ATDD Red 단계**: 컴파일 실패 상태의 테스트 코드를 작성하고 프로덕션 코드는 작성하지 않는다
-- FRD의 시나리오·예외·엣지·보안/성능 고려사항에서 테스트 케이스를 도출
-- **세 종류의 검증 도출**: 응답 검증 / 상태 검증 / 행동 검증
-- **FRD↔테스트 자기 검증 루프** (최대 3회): FRD 시나리오 항목을 한 줄씩 나열하고 각 항목에 매칭되는 테스트 메서드를 찾아 누락을 보완
-- 완료 시 `[ATDD-DESIGN COMPLETE]` 또는 `[ATDD-DESIGN COMPLETE: GAPS_REMAIN]` 신호 출력
-
-### atdd-implement
-
-```
-(atdd-pipeline Phase 3에서 Sonnet 서브 에이전트로 호출됨)
-```
-
-- **ATDD Green 단계**: 이미 존재하는 테스트를 통과시키는 프로덕션 코드를 작성 — 테스트 코드는 수정하지 않는다
-- **Phase 분리**: 분석(Phase 1) → 구현 코드 작성(Phase 2) → 빌드&테스트(Phase 3) → 완료 보고(Phase 4)
-- **빌드&테스트 3회 반복**: 빌드 실패/테스트 실패 시 프로덕션 코드만 수정하여 재시도
-- 완료 시 `[ATDD-IMPLEMENT COMPLETE]` 또는 `[ATDD-IMPLEMENT COMPLETE: BUILD_TEST_FAILED]` 신호 출력
-- 산출물: 프로덕션 코드 + `.atdd/impl_{기능명}.md` (생성/수정 파일, 빌드·테스트 결과, DEFERRED 항목)
 
 ### e2e-sequence
 
@@ -242,7 +187,6 @@ FRD 파일(`docs/FRD/` 하위)이면 자동으로 `--preset=frd-implementation -
 ```gitignore
 # forge 산출물 — 팀 정책에 따라 추적 여부 결정
 phases/
-.atdd/
 ```
 
 ---
@@ -251,7 +195,6 @@ phases/
 
 | 커맨드 | 실행 명령 | 설명 |
 |--------|----------|------|
-| atdd-pipeline | `/claudecode-for-me:atdd-pipeline [기능 요구사항서]` | atdd-pipeline 스킬 실행 (ATDD 전체 파이프라인) |
 | commit-analysis | `/claudecode-for-me:commit-analysis` | 변경사항 분석 후 구분자 선택하여 커밋 생성 |
 | e2e-sequence | `/claudecode-for-me:e2e-sequence [기능명]` | e2e-sequence 스킬 실행 (커맨드 래퍼) |
 | forge-cancel | `/claudecode-for-me:forge-cancel <phase-dir>` | forge phase 취소 및 정리 |
@@ -288,14 +231,6 @@ Claudecode-For-Me/
 │       ├── FORGE_SCOPE.md       # forge-scope 운영 참조
 │       └── docs/_templates/     # 문서 템플릿 8종
 ├── skills/
-│   ├── atdd-pipeline/
-│   │   └── SKILL.md             # ATDD 전체 파이프라인 오케스트레이터
-│   ├── atdd-flow/
-│   │   └── SKILL.md             # FRD 생성 (Phase 1 하위 스킬)
-│   ├── atdd-design/
-│   │   └── SKILL.md             # 테스트 코드 작성 + 자기 검증 (Phase 2 하위 스킬)
-│   ├── atdd-implement/
-│   │   └── SKILL.md             # 구현 + 빌드/테스트 (Phase 3 하위 스킬)
 │   ├── e2e-sequence/
 │   │   └── SKILL.md             # E2E 시퀀스 다이어그램 스킬
 │   ├── forge-cancel/
@@ -309,7 +244,6 @@ Claudecode-For-Me/
 │   └── meta-prompter/
 │       └── SKILL.md             # 작업 요청 → 구조화된 메타 프롬프트 정제 스킬
 ├── commands/
-│   ├── atdd-pipeline.md         # atdd-pipeline 커맨드
 │   ├── commit-analysis.md       # 커밋 분석 커맨드
 │   ├── e2e-sequence.md          # e2e-sequence 커맨드
 │   ├── forge-cancel.md          # forge-cancel 커맨드

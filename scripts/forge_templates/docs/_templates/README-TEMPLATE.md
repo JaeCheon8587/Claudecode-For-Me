@@ -57,7 +57,7 @@
 
 ## 기여
 
-{기여 정책. 예: 신규 기능은 PRD → FC → FRD 갱신 후 ATDD로 구현. 상세는 docs/DOCUMENT_GUIDE.md §7.}
+{기여 정책. 예: 신규 기능은 PRD → FC → FRD 갱신 후 테스트 → 구현. 상세는 docs/DOCUMENT_GUIDE.md §7.}
 
 - 커밋 메시지: {conventional commits 형식 — `feat:`, `fix:`, `docs:`, `refactor:` 등}
 - PR 전 체크리스트: [`docs/DOCUMENT_GUIDE.md` §9](docs/DOCUMENT_GUIDE.md) 검증 항목 통과.

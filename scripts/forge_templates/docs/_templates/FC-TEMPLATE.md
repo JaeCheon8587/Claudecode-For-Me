@@ -37,7 +37,7 @@
 - **API Spec**: {각 FRD의 §14에 인라인 / OpenAPI 별도 / 미작성}
 - **UI Spec**: {UI_GUIDE.md로 대체 / 별도 / 미작성}
 - **Data Spec**: {PRD 부록 D·E로 대체 / 별도 / 미작성}
-- **Test Case**: {ATDD 단계에서 별도 작성 / 미작성}
+- **Test Case**: {테스트 단계에서 별도 작성 / 미작성}
 
 ---
 
