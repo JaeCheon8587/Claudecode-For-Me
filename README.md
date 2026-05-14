@@ -42,9 +42,32 @@ Claude Code 커스텀 스킬/커맨드 모음 플러그인
 
 | 스킬 | 실행 명령 | 설명 |
 |------|----------|------|
+| branch-review | `/claudecode-for-me:branch-review [ref]` | HEAD ↔ 고정점 diff을 Standards/Spec 2축으로 병렬 검토 (심각도 등급, 충돌 감지, 다언어 지원) |
 | e2e-sequence | `/claudecode-for-me:e2e-sequence [기능명]` | 기능별 E2E 메시지 흐름을 코드 추적하여 Mermaid 시퀀스 다이어그램 생성 |
 | grill-me | `/claudecode-for-me:grill-me [주제]` | 아이디어/계획/작업을 집요한 질문으로 구체화하고 요구사항 정리 |
 | meta-prompter | `/claudecode-for-me:meta-prompter [작업 요청]` | 거친 작업 요청을 다른 AI 에이전트(Claude Code 등)가 수행 가능한 구조화된 메타 프롬프트로 정제 |
+
+### branch-review
+
+```
+/claudecode-for-me:branch-review main
+/claudecode-for-me:branch-review v1.4.0
+/claudecode-for-me:branch-review        # ref 미지정 시 merge-base 자동 추정
+```
+
+- **2축 병렬 검토**: Standards 축(레포 컨벤션 준수) + Spec 축(원 요구사항 충족)을 독립 서브에이전트로 동시 평가 → 한 축이 다른 축을 가리는 masking 방지
+- **3-dot diff** (`<ref>...HEAD`) — merge-base 이후 내 변경만, ref 쪽 진행분 노이즈 제거
+- **심각도 4단**: CRITICAL / MAJOR / MINOR / NIT — NIT 기본 억제 (요청 시 펼침)
+- **TYPE 분리**: Standards = VIOLATION / JUDGMENT, Spec = MISSING / PARTIAL / SCOPE-CREEP / FLAW
+- **Diff 크기 자동 분기**: ≤50 라인 인라인 모드, 51~2000 라인 표준 병렬, 초과 시 디렉토리 단위 청크 분할
+- **Spec 5층 fallback**: 이슈 본문 → docs/specs → PR description → 커밋 메시지 합성 → 부재 — 신뢰도 HIGH/MEDIUM/LOW/FALLBACK/NONE에 따라 보고 강도 조절
+- **다언어 컨벤션**: TS/JS, Python, Go, Rust, Java/Kotlin, C#/.NET, Ruby, Swift 마커 자동 감지 + 멀티스택 합집합
+- **충돌 감지**: 축간 모순 finding을 별도 "Conflicts" 섹션 분리, 메인이 해결 시도하지 않음
+- **Dedup**: 라인 ±3, 동일 심볼명, 헝크 식별자 3중 매칭
+- **Recommendation 한 줄**: SHIP / FIX-MINOR-THEN-SHIP / FIX-CRITICAL-FIRST / BLOCK-SPEC-MISMATCH / RESOLVE-CONFLICTS / RECONFIRM-INTENT
+- **Intent 추출**: 커밋 메시지로부터 의도 블록 추출 → 두 축 모두에 전달, mismatch 라벨 별도 보고
+- **출력 옵션**: 기본 / compact (1줄) / verbose (NIT 포함)
+- **비범위**: 심층 보안 리뷰는 `/security-review` 위임, 자동 fix·CI 통합 안 함
 
 ### e2e-sequence
 
