@@ -1,0 +1,6 @@
+# harness_framework hooks templates — Git Bash 실행 위해 LF 강제
+templates/hooks/**           text eol=lf
+templates/hooks_manifest.json text eol=lf
+
+# Python scripts — cross-platform LF
+scripts/*.py                 text eol=lf
