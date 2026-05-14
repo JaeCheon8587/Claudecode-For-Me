@@ -117,7 +117,7 @@ next: <copy-pasteable command>
 | `python-version-pin` | `python -m pip install -r requirements-dev.txt` |
 | `python-pip-check` | `python -m pip check` 후 충돌 패키지 해소 (가상환경/사용자 사이트 권장) |
 | `python-requirements-resolve` | `python -m pip install -r requirements-dev.txt` |
-| `layer-dependency` | `docs/ARCHITECTURE.md §6.1` (필요 시 §3.2/§4.4/§7.1 carve-out 포함) 참조 방향에 맞게 ProjectReference 제거 또는 의존 방향 수정 |
+| `layer-dependency` | `Docs/ARCHITECTURE.md §6.1` (필요 시 §3.2/§4.4/§7.1 carve-out 포함) 참조 방향에 맞게 ProjectReference 제거 또는 의존 방향 수정 |
 | `csproj-parse` | csproj XML 구문 확인 — `dotnet build` 출력 참조 |
 | `dependency_check.py` | `tools/quality/dependency_check.py` 실행 로그 확인 |
 

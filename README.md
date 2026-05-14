@@ -127,7 +127,7 @@ harness_framework의 phase runner 3종이 플러그인에 내장되어 있다.
 ./CLAUDE.md
 ./PHASE_SCHEMA.md
 ./FORGE_SCOPE.md
-./docs/_templates/  (8개 템플릿 파일)
+./Docs/_templates/  (8개 템플릿 파일)
 ```
 
 복사된 파일과 skip된 파일 목록을 한 번 출력한다.
@@ -136,7 +136,7 @@ harness_framework의 phase runner 3종이 플러그인에 내장되어 있다.
 
 ```bash
 # FRD 단건 구현 (권장 — splitter 우회, 토큰 절감)
-/claudecode-for-me:forge-scope /docs/FRD/FRD-F003.md FRD-F003 주문 상태 API 구현
+/claudecode-for-me:forge-scope /Docs/FRD/FRD-F003.md FRD-F003 주문 상태 API 구현
 
 # 자유 텍스트 prompt (phase-dir 자동 도출, 확인 1회)
 /claudecode-for-me:forge-scope 로그인 기능에 소셜 로그인 옵션 추가
@@ -145,7 +145,7 @@ harness_framework의 phase runner 3종이 플러그인에 내장되어 있다.
 /claudecode-for-me:forge-full mvp-v2 --prompt="MVP v2 전체 구현" --docs-mode=recursive --trust
 
 # plan 미리보기 (파일/브랜치 생성 없음)
-/claudecode-for-me:forge-full order-flow --plan-only --prompt="주문 흐름 구현" --doc=docs/FRD/FRD-F009.md --trust
+/claudecode-for-me:forge-full order-flow --plan-only --prompt="주문 흐름 구현" --doc=Docs/FRD/FRD-F009.md --trust
 
 # 취소 (dry-run으로 대상 먼저 확인)
 /claudecode-for-me:forge-cancel login-feature --dry-run
@@ -157,9 +157,9 @@ harness_framework의 phase runner 3종이 플러그인에 내장되어 있다.
 `$ARGUMENTS`를 두 모드로 해석한다:
 
 - **Mode 1 (prompt-only)**: 일반 텍스트 → phase-dir 자동 도출 후 확인 1회
-- **Mode 2 (doc + prompt)**: 첫 토큰이 `docs/...md` 또는 `/docs/...md` → `--doc` 로 분리
+- **Mode 2 (doc + prompt)**: 첫 토큰이 `Docs/...md` 또는 `/Docs/...md` (대소문자 무시) → `--doc` 로 분리
 
-FRD 파일(`docs/FRD/` 하위)이면 자동으로 `--preset=frd-implementation --compact-docs` 적용.
+FRD 파일(`Docs/FRD/` 하위)이면 자동으로 `--preset=frd-implementation --compact-docs` 적용.
 일반 문서이면 `--single-step --compact-docs` 적용.
 
 ### forge-full 주요 옵션
@@ -167,7 +167,7 @@ FRD 파일(`docs/FRD/` 하위)이면 자동으로 `--preset=frd-implementation -
 | 옵션 | 설명 |
 |---|---|
 | `--prompt` | plan 생성 입력 (반복 가능) |
-| `--doc` | guardrail 문서 (`docs/` 하위 `.md`). 반복 가능 |
+| `--doc` | guardrail 문서 (`Docs/` 하위 `.md`). 반복 가능 |
 | `--docs-mode=root\|recursive\|explicit` | 문서 인입 정책. `explicit` 이면 `--doc` 만 사용 |
 | `--trust` | child claude 권한 부여 (`FORGE_TRUST=1` 과 동일) |
 | `--yes` | plan 자동 승인 |
@@ -229,7 +229,7 @@ Claudecode-For-Me/
 │       ├── CLAUDE.md            # 프로젝트 가드레일 템플릿
 │       ├── PHASE_SCHEMA.md      # phase 스키마 명세
 │       ├── FORGE_SCOPE.md       # forge-scope 운영 참조
-│       └── docs/_templates/     # 문서 템플릿 8종
+│       └── Docs/_templates/     # 문서 템플릿 8종
 ├── skills/
 │   ├── e2e-sequence/
 │   │   └── SKILL.md             # E2E 시퀀스 다이어그램 스킬

@@ -15,10 +15,10 @@ phases/
 │       ├── step{N}.md
 │       ├── step0-output.json # 자동 생성 — Claude의 stdout/stderr/exitCode
 │       └── step{N}-output.json
-└── scoped/                   # forge_scope 전용 (특정 docs_scope 파일만 주입)
+└── scoped/                   # forge_scope 전용 (특정 Docs_scope 파일만 주입)
     ├── index.json            # (선택) top-level — 여러 phase 추적
     └── <phase-dir>/          # phase 디렉토리
-        ├── index.json        # 필수 — step 목록·상태 + docs_scope 필드(주입 대상 파일)
+        ├── index.json        # 필수 — step 목록·상태 + Docs_scope 필드(주입 대상 파일)
         ├── step0.md          # 필수 — step별 지시
         ├── step1.md
         ├── step{N}.md
@@ -51,7 +51,7 @@ phases/
   "phase": "mvp",
   "guardrails": {
     "mode": "explicit",
-    "docs": ["docs/PRD.md", "docs/FRD/FRD-F009.md"]
+    "Docs": ["Docs/PRD.md", "Docs/FRD/FRD-F009.md"]
   },
   "created_at": "2026-05-01T10:00:00+0900",
   "completed_at": "2026-05-01T11:30:00+0900",
@@ -79,30 +79,30 @@ phases/
 |-----|------|------|
 | `project` | str | 프로젝트 이름. Claude prompt에 삽입됨. |
 | `phase` | str | Phase 이름. branch 명(`feat-<phase>`) + commit 메시지 prefix에 사용. |
-| `guardrails` | object | 선택. `forge_full` 문서 주입 정책. 없으면 기존 호환을 위해 `{"mode":"root","docs":[]}`로 해석. |
+| `guardrails` | object | 선택. `forge_full` 문서 주입 정책. 없으면 기존 호환을 위해 `{"mode":"root","Docs":[]}`로 해석. |
 | `created_at` | str (ISO+09:00) | Forge가 첫 실행 시 자동 추가. |
 | `completed_at` | str (ISO+09:00) | 모든 step 완료 시 자동 추가. |
 | `steps` | array | step 객체 목록. |
 
 ### `forge_full` guardrails 필드
 
-`guardrails`는 `forge_full` 전용 선택 필드다. `forge_scope`의 `docs_scope`와 공유하지 않는다.
+`guardrails`는 `forge_full` 전용 선택 필드다. `forge_scope`의 `Docs_scope`와 공유하지 않는다.
 
 ```json
 {
   "guardrails": {
     "mode": "root",
-    "docs": []
+    "Docs": []
   }
 }
 ```
 
 | 필드 | 값 | 의미 |
 |-----|----|------|
-| `mode` | `root` | `CLAUDE.md` + `docs/*.md`만 주입. 기존 full phase 호환 기본값. |
-| `mode` | `recursive` | `CLAUDE.md` + `docs/**/*.md` 주입. `docs/_templates/**` 제외. |
-| `mode` | `explicit` | `CLAUDE.md` + `docs` 배열에 명시된 문서만 주입. |
-| `docs` | string[] | `docs/` 하위 `.md` 경로만 허용. absolute path, `..`, backslash 금지. |
+| `mode` | `root` | `CLAUDE.md` + `Docs/*.md`만 주입. 기존 full phase 호환 기본값. |
+| `mode` | `recursive` | `CLAUDE.md` + `Docs/**/*.md` 주입. `Docs/_templates/**` 제외. |
+| `mode` | `explicit` | `CLAUDE.md` + `Docs` 배열에 명시된 문서만 주입. |
+| `Docs` | string[] | `Docs/` 하위 `.md` 경로만 허용. absolute path, `..`, backslash 금지. |
 
 신규 `forge_full` plan 생성은 `--doc`이 있으면 `explicit`, 없으면 `recursive`를 기본으로 사용한다.
 기존 phase 실행에서 `guardrails`가 없으면 `root`로 해석하므로 과거 phase와 호환된다.

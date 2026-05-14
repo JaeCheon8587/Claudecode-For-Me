@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""레이어 의존성 검사기 — Src/**/*.csproj 그래프가 docs/ARCHITECTURE.md 의
+"""레이어 의존성 검사기 — Src/**/*.csproj 그래프가 Docs/ARCHITECTURE.md 의
 §3.2 / §4.4 / §6 / §6.1 / §7.1 을 준수하는지 검사한다.
 
-Rule SSOT: docs/ARCHITECTURE.md §3.2 §4.4 §6.1 §7.1.
+Rule SSOT: Docs/ARCHITECTURE.md §3.2 §4.4 §6.1 §7.1.
 위 섹션이 갱신되면 본 파일의 FOLDER_TO_LAYER / FORBIDDEN_MATRIX /
 DOMAIN_CARVEOUT_SUBKINDS / SERVICE_HOST_* / OPS_LAYERS_FOR_TESTS_BAN 도
 같은 PR 에서 갱신할 것.
@@ -238,7 +238,7 @@ def main() -> int:
     print("FAIL: layer-dependency", file=sys.stderr)
     print(f"target: {first[0]} -> {first[1]}", file=sys.stderr)
     next_msg = (
-        "docs/ARCHITECTURE.md §6.1 (필요 시 §3.2/§4.4/§7.1) 참조 방향에 맞게 ProjectReference 제거 또는 의존 방향 수정"
+        "Docs/ARCHITECTURE.md §6.1 (필요 시 §3.2/§4.4/§7.1) 참조 방향에 맞게 ProjectReference 제거 또는 의존 방향 수정"
     )
     print(f"next: {next_msg}", file=sys.stderr)
     return 1

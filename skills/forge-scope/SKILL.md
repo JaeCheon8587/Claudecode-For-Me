@@ -1,6 +1,6 @@
 ---
 name: forge-scope
-description: harness_framework forge-scope 경량 phase runner를 사용자 프로젝트에서 실행한다. 첫 호출 시 scripts/forge_*.py、CLAUDE.md、PHASE_SCHEMA.md、FORGE_SCOPE.md、docs/_templates/ 를 자동 부트스트랩한 뒤 forge_scope.py를 실행한다. /claudecode-for-me:forge-scope 로 실행.
+description: harness_framework forge-scope 경량 phase runner를 사용자 프로젝트에서 실행한다. 첫 호출 시 scripts/forge_*.py、CLAUDE.md、PHASE_SCHEMA.md、FORGE_SCOPE.md、Docs/_templates/ 를 자동 부트스트랩한 뒤 forge_scope.py를 실행한다. /claudecode-for-me:forge-scope 로 실행.
 argument-hint: "<prompt> 또는 <doc-path> <prompt> 또는 <phase-dir> [options]"
 input: 자유 텍스트 prompt 또는 doc-path + prompt + 선택적 CLI 옵션
 output: phases/scoped/<phase-dir>/index.json + step{N}.md 산출물
@@ -57,9 +57,9 @@ python --version 2>&1 || py -3 --version 2>&1
 | `scripts/forge_templates/CLAUDE.md` | `./CLAUDE.md` |
 | `scripts/forge_templates/PHASE_SCHEMA.md` | `./PHASE_SCHEMA.md` |
 | `scripts/forge_templates/FORGE_SCOPE.md` | `./FORGE_SCOPE.md` |
-| `scripts/forge_templates/docs/_templates/*` | `./docs/_templates/` (각 파일) |
+| `scripts/forge_templates/Docs/_templates/*` | `./Docs/_templates/` (각 파일) |
 
-`./scripts/`, `./docs/_templates/` 디렉토리가 없으면 먼저 생성한다.
+`./scripts/`, `./Docs/_templates/` 디렉토리가 없으면 먼저 생성한다.
 
 부트스트랩 완료 후 복사된 파일 목록과 skip된 파일 목록을 사용자에게 한 번 출력한다.
 
@@ -87,7 +87,7 @@ forge_scope.py의 브랜치 자동 생성(feat-<phase>) 및 커밋 기능이 실
 `$ARGUMENTS`를 두 모드 중 하나로 해석한다.
 
 ### Mode 1 — prompt-only
-`$ARGUMENTS`가 일반 텍스트로 시작하면 (`/docs/`·`docs/` 형식이 아님):
+`$ARGUMENTS`가 일반 텍스트로 시작하면 (`/Docs/`·`Docs/` 형식이 아님, 대소문자 무시):
 
 1. `<phase-dir>`을 prompt 핵심 의도 1~3단어 kebab-case로 도출한다 (예: `login-feature`).
 2. 사용자에게 phase-dir slug를 한 번 확인한다. 다른 이름을 원하면 그대로 따른다.
@@ -98,12 +98,12 @@ forge_scope.py의 브랜치 자동 생성(feat-<phase>) 및 커밋 기능이 실
    ```
 
 ### Mode 2 — doc + prompt
-`$ARGUMENTS`의 첫 토큰이 `/docs/...md` 또는 `docs/...md` 형식이면:
+`$ARGUMENTS`의 첫 토큰이 `/Docs/...md` 또는 `Docs/...md` 형식이면 (대소문자 무시):
 
-- 첫 토큰의 앞 `/`를 제거해 ROOT 상대 경로로 정규화 (예: `/docs/FRD/FRD-F003.md` → `docs/FRD/FRD-F003.md`).
+- 첫 토큰의 앞 `/`를 제거하고, 경로 prefix를 `Docs/`로 정규화 (예: `/Docs/FRD/FRD-F003.md` → `Docs/FRD/FRD-F003.md`).
 - 나머지 텍스트를 `--prompt` 값으로 사용한다.
 
-FRD 파일이면 (`docs/FRD/` 하위):
+FRD 파일이면 (`Docs/FRD/` 하위):
 ```bash
 python ./scripts/forge_scope.py <phase-dir> --trust --yes --quiet \
   --preset=frd-implementation --compact-docs \

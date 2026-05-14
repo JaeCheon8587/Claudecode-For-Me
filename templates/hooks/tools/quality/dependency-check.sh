@@ -6,7 +6,7 @@
 # 정책:
 #   - HOOKS_SKIP_TESTS=1 은 본 스크립트를 스킵하지 않는다 (test 단계에만 적용).
 #   - 레이어 규칙 SSOT: tools/quality/dependency_check.py
-#     (그 안에서 docs/ARCHITECTURE.md §3.2 §4.4 §6.1 §7.1 박제).
+#     (그 안에서 Docs/ARCHITECTURE.md §3.2 §4.4 §6.1 §7.1 박제).
 
 set -euo pipefail
 IFS=$'\n\t'

@@ -3,7 +3,7 @@
 Forge Scope Executor — 사용자 prompt 또는 단일 doc 입력으로 step을 자동 분할하고 순차 실행한다.
 
 forge_full.py의 경량(scoped) 변종. 차이점 두 가지:
-1. 가드레일은 CLAUDE.md + index.json의 `docs_scope` 화이트리스트만 결합 (docs/*.md 전체 자동 인입 X).
+1. 가드레일은 CLAUDE.md + index.json의 `Docs_scope` 화이트리스트만 결합 (Docs/*.md 전체 자동 인입 X).
 2. 첫 실행 시 사용자 prompt/doc → 단일 Claude 호출로 step 분할 plan 생성 → 사용자 승인 후 파일 일괄 기록.
 
 Usage:
@@ -47,7 +47,7 @@ log = logging.getLogger("forge_scope")
 PHASE_NAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 STEP_NAME_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 STEP_FILE_RE = re.compile(r"^step\d+\.md$")
-DOC_REL_RE = re.compile(r"^docs/[A-Za-z0-9._/-]+\.md$")
+DOC_REL_RE = re.compile(r"^Docs/[A-Za-z0-9._/-]+\.md$")
 ALLOWED_STATUS = frozenset({"pending", "completed", "error", "blocked", "interrupted"})
 PROMPT_ARGV_LIMIT = 8_000 if os.name == "nt" else 100_000
 PLACEHOLDER_RE = re.compile(r"\{[^}\n]+\}")
@@ -273,13 +273,13 @@ class PhaseConfig:
 # DocsScopeValidator — docs_scope 항목 path-traversal 검증
 # ============================================================================
 class DocsScopeValidator:
-    """docs_scope 항목을 검증한다. ROOT/docs/ 외부를 가리키면 거부한다."""
+    """docs_scope 항목을 검증한다. ROOT/Docs/ 외부를 가리키면 거부한다."""
 
     def __init__(self, root: Optional[Path] = None):
         if root is None:
             root = ROOT
         self._root = root.resolve()
-        self._docs_root = (root / "docs").resolve()
+        self._docs_root = (root / "Docs").resolve()
 
     def validate_many(self, entries: Iterable[str]) -> list[Path]:
         """모든 항목을 검증하여 절대 경로 리스트를 반환한다. 첫 위반 시 ValueError."""
@@ -298,10 +298,10 @@ class DocsScopeValidator:
         if any(seg in ("", ".", "..") for seg in parts):
             raise ValueError(f"경로 traversal 금지 (빈/. /.. 세그먼트): {rel}")
         if not DOC_REL_RE.match(rel):
-            raise ValueError(f"docs/ 하위 .md 파일만 허용됩니다: {rel}")
+            raise ValueError(f"Docs/ 하위 .md 파일만 허용됩니다: {rel}")
         candidate = (self._root / rel).resolve()
         if self._docs_root not in candidate.parents and candidate != self._docs_root:
-            raise ValueError(f"docs/ 디렉토리 외부를 가리킵니다: {candidate}")
+            raise ValueError(f"Docs/ 디렉토리 외부를 가리킵니다: {candidate}")
         if not candidate.is_file():
             raise FileNotFoundError(f"docs_scope 파일 없음: {rel}")
         return candidate
@@ -311,7 +311,7 @@ class DocsScopeValidator:
 # GuardrailLoader — CLAUDE.md + 화이트리스트만 결합
 # ============================================================================
 class GuardrailLoader:
-    """CLAUDE.md와 docs_scope에 명시된 파일만 결합한다. docs/*.md 전체를 인입하지 않는다."""
+    """CLAUDE.md와 docs_scope에 명시된 파일만 결합한다. Docs/*.md 전체를 인입하지 않는다."""
 
     def __init__(self, root: Path, validator: DocsScopeValidator, *, strict: bool = False, compact_docs: bool = False):
         self._root = root
@@ -636,17 +636,17 @@ class IndexStore:
             if s["step"] in seen:
                 _err(f"step 번호 중복: {s['step']}")
             seen.add(s["step"])
-        scope = idx.get("docs_scope")
+        scope = idx.get("Docs_scope")
         if scope is not None:
             if not isinstance(scope, list):
-                _err("'docs_scope'는 배열이어야 합니다.")
+                _err("'Docs_scope'는 배열이어야 합니다.")
             for i, e in enumerate(scope):
                 if not isinstance(e, str):
-                    _err(f"docs_scope[{i}]는 문자열이어야 합니다.")
+                    _err(f"Docs_scope[{i}]는 문자열이어야 합니다.")
 
     def get_docs_scope(self) -> list[str]:
         idx = self.load()
-        return list(idx.get("docs_scope") or [])
+        return list(idx.get("Docs_scope") or [])
 
     def get_total(self) -> int:
         return len(self.load().get("steps", []))
@@ -928,7 +928,7 @@ class StepSplitter:
             "{\n"
             f'  "phase": "{self._cfg.phase_dir_name}",\n'
             '  "project": "<프로젝트명>",\n'
-            '  "docs_scope": ["docs/<file>.md", ...],\n'
+            '  "Docs_scope": ["Docs/<file>.md", ...],\n'
             '  "steps": [\n'
             "    {\n"
             '      "step": 0,\n'
@@ -946,7 +946,7 @@ class StepSplitter:
             "   ## 검증 절차\n"
             "   ## 금지사항\n"
             "4. body 내부의 AC는 실제로 실행 가능한 셸 명령으로 작성한다.\n"
-            "5. docs_scope에는 step body가 실제로 참조하는 파일만 포함한다 (전체 docs/ 덤프 금지).\n"
+            "5. Docs_scope에는 step body가 실제로 참조하는 파일만 포함한다 (전체 Docs/ 덤프 금지).\n"
             f"6. step 번호는 0부터 시작하며 연속해야 한다. step 수는 1~{self._max_steps}개.\n"
             "7. 사용자 요구사항이 비어 있거나 거부 사유에 해당하면, 다음 객체를 그대로 반환한다:\n"
             f'   {{"phase":"{self._cfg.phase_dir_name}","refusal":"<사유>"}}\n\n'
@@ -1080,7 +1080,7 @@ class StepSplitter:
         def _err(msg: str):
             raise ValueError(msg)
 
-        for key in ("phase", "project", "docs_scope", "steps"):
+        for key in ("phase", "project", "Docs_scope", "steps"):
             if key not in plan:
                 _err(f"plan에 '{key}' 키 없음.")
         if plan["phase"] != self._cfg.phase_dir_name:
@@ -1092,12 +1092,12 @@ class StepSplitter:
         if len(plan["project"]) > 80:
             _err("plan.project가 80자를 초과합니다.")
 
-        if not isinstance(plan["docs_scope"], list):
-            _err("plan.docs_scope는 배열이어야 합니다.")
+        if not isinstance(plan["Docs_scope"], list):
+            _err("plan.Docs_scope는 배열이어야 합니다.")
         try:
-            self._validator.validate_many(plan["docs_scope"])
+            self._validator.validate_many(plan["Docs_scope"])
         except (ValueError, FileNotFoundError) as e:
-            _err(f"docs_scope 검증 실패: {e}")
+            _err(f"Docs_scope 검증 실패: {e}")
 
         steps = plan["steps"]
         if not isinstance(steps, list):
@@ -1153,12 +1153,12 @@ class StepSplitter:
         _qprint("\n" + "=" * 60)
         _qprint(f"  Plan: {plan['phase']} (project: {plan['project']})")
         _qprint("=" * 60)
-        if plan["docs_scope"]:
-            _qprint(f"  docs_scope ({len(plan['docs_scope'])}개):")
-            for d in plan["docs_scope"]:
+        if plan["Docs_scope"]:
+            _qprint(f"  Docs_scope ({len(plan['Docs_scope'])}개):")
+            for d in plan["Docs_scope"]:
                 _qprint(f"    - {d}")
         else:
-            _qprint("  docs_scope: (없음 — CLAUDE.md만 가드레일로 주입됨)")
+            _qprint("  Docs_scope: (없음 — CLAUDE.md만 가드레일로 주입됨)")
         _qprint(f"  steps ({len(plan['steps'])}개):")
         for s in plan["steps"]:
             _qprint(f"    [{s['step']}] {s['name']}: {s['brief']}")
@@ -1189,7 +1189,7 @@ class StepSplitter:
         index = {
             "project": plan["project"],
             "phase": plan["phase"],
-            "docs_scope": list(plan["docs_scope"]),
+            "Docs_scope": list(plan["Docs_scope"]),
             "steps": [
                 {"step": s["step"], "name": s["name"], "status": "pending"}
                 for s in sorted(plan["steps"], key=lambda x: x["step"])
@@ -1269,7 +1269,7 @@ class DeterministicPlanBuilder:
         return {
             "project": self._project_name(),
             "phase": self._cfg.phase_dir_name,
-            "docs_scope": docs_scope,
+            "Docs_scope": docs_scope,
             "steps": [
                 {
                     "step": 0,
@@ -1287,7 +1287,7 @@ class DeterministicPlanBuilder:
         return {
             "project": self._project_name(),
             "phase": self._cfg.phase_dir_name,
-            "docs_scope": docs_scope,
+            "Docs_scope": docs_scope,
             "steps": [
                 {
                     "step": 0,
@@ -1390,7 +1390,7 @@ class DeterministicPlanBuilder:
             "3. 성공 시 `summary`는 생성/수정한 핵심 파일과 검증 결과만 200자 "
             "이내로 적는다.\n\n"
             "## 금지사항\n\n"
-            "- `docs/**`, `CLAUDE.md`, `PHASE_SCHEMA.md`, `.claude/commands/**`, "
+            "- `Docs/**`, `CLAUDE.md`, `PHASE_SCHEMA.md`, `.claude/commands/**`, "
             "`scripts/forge_full.py`를 수정하지 마라. 이유: 이번 step은 구현 전용이다.\n"
             "- FRD/prompt 밖 기능을 추가하지 마라. 이유: 토큰 테스트와 구현 범위를 "
             "오염시킨다.\n"
@@ -1424,7 +1424,7 @@ class DeterministicPlanBuilder:
     @staticmethod
     def _prompt_lines(user_prompts: list[str]) -> list[str]:
         lines = [f"- {p.strip()}" for p in user_prompts if p and p.strip()]
-        return lines or ["- docs_scope 문서 요구사항을 따른다."]
+        return lines or ["- Docs_scope 문서 요구사항을 따른다."]
 
     @staticmethod
     def _doc_lines(docs_scope: list[str]) -> list[str]:
@@ -1493,7 +1493,7 @@ class DeterministicPlanBuilder:
             f'- `blocked` 처리 절차: `{index_rel}` 의 step 0 `status`를 `"blocked"` 로 '
             "`blocked_reason` 에 (a) 부재 필드 목록, (b) 어느 FRD 규칙이 그 필드를 요구하는지, "
             "(c) FRD §19 결정 요청 — 세 항목을 한 줄로 기록한 뒤 즉시 종료한다. "
-            "이후는 사용자가 docs/PRD/FRD를 갱신하고 retry한다.\n\n"
+            "이후는 사용자가 Docs/PRD/FRD를 갱신하고 retry한다.\n\n"
             "## Acceptance Criteria\n\n"
             "```bash\n"
             "git diff --stat HEAD\n"
@@ -1518,7 +1518,7 @@ class DeterministicPlanBuilder:
             "- 조건문/반복문 기반 처리 로직 작성 금지. 이유: 계약 표면만 만든다.\n"
             "- 저장소 I/O 구현 금지. 이유: step2 책임이다.\n"
             "- 테스트를 통과시킬 수 있는 실제 구현 금지. 이유: step1이 의도한 이유로 실패해야 한다.\n"
-            "- `docs/**`, `CLAUDE.md`, `PHASE_SCHEMA.md`, `.claude/commands/**`, "
+            "- `Docs/**`, `CLAUDE.md`, `PHASE_SCHEMA.md`, `.claude/commands/**`, "
             "`scripts/forge_full.py` 수정 금지. 이유: 본 step 범위 밖이다.\n"
             "- 범위 밖 리팩터링 금지. 이유: 외과적 수정 원칙.\n"
         )
@@ -1933,7 +1933,7 @@ class ForgeScope:
             guardrails = self._guardrail_loader.load(store.get_docs_scope())
         except (ValueError, FileNotFoundError) as e:
             print(
-                f"ERROR: 가드레일 로딩 실패 — index.json의 docs_scope를 확인하세요: {e}",
+                f"ERROR: 가드레일 로딩 실패 — index.json의 Docs_scope를 확인하세요: {e}",
                 file=sys.stderr,
             )
             sys.exit(EXIT_ERR)
@@ -2146,7 +2146,7 @@ class ForgeScope:
             "\n  Claude Code parent agent: .claude/commands/forge-scope.md\n"
             "  의 §F (FRD 미결 항목 복구 흐름) 절차를 따라 처리하라.\n"
             "  요지: (1) 사용자에게 결정 옵션을 물어 1회 답을 받고,\n"
-            "        (2) 답에 따라 docs/PRD·FRD·ADR + Src/** 코드를 적절히 갱신하고,\n"
+            "        (2) 답에 따라 Docs/PRD·FRD·ADR + Src/** 코드를 적절히 갱신하고,\n"
             "        (3) 동일 forge-scope 명령을 재실행하라(가드는 이번에 통과해야 함).\n"
             "\n  옵트아웃: --force 로 본 가드 우회 가능 (cascade 위험).\n",
             file=sys.stderr,
@@ -2291,7 +2291,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--doc",
         action="append",
         default=None,
-        help="첨부 문서 경로 (docs/ 하위 .md, 반복 지정 가능).",
+        help="첨부 문서 경로 (Docs/ 하위 .md, 반복 지정 가능).",
     )
     parser.add_argument(
         "--push",
@@ -2341,7 +2341,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--compact-docs",
         action="store_true",
-        help="docs_scope 문서를 핵심 섹션만 압축해 splitter/step guardrail에 주입.",
+        help="Docs_scope 문서를 핵심 섹션만 압축해 splitter/step guardrail에 주입.",
     )
     parser.add_argument(
         "--step-model",

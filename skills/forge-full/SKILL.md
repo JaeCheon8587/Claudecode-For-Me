@@ -1,6 +1,6 @@
 ---
 name: forge-full
-description: harness_framework forge-full phase runner를 사용자 프로젝트에서 실행한다. 첫 호출 시 scripts/forge_*.py、CLAUDE.md、PHASE_SCHEMA.md、FORGE_SCOPE.md、docs/_templates/ 를 자동 부트스트랩한 뒤 forge_full.py를 실행한다. /claudecode-for-me:forge-full 로 실행.
+description: harness_framework forge-full phase runner를 사용자 프로젝트에서 실행한다. 첫 호출 시 scripts/forge_*.py、CLAUDE.md、PHASE_SCHEMA.md、FORGE_SCOPE.md、Docs/_templates/ 를 자동 부트스트랩한 뒤 forge_full.py를 실행한다. /claudecode-for-me:forge-full 로 실행.
 argument-hint: "<phase-dir> [options]"
 input: phase-dir (kebab-case) + CLI 옵션 (--prompt, --doc, --docs-mode, --trust, --yes, --quiet, --plan-only, --preset 등)
 output: phases/full/<phase-dir>/index.json + step{N}.md 산출물
@@ -56,9 +56,9 @@ python --version 2>&1 || py -3 --version 2>&1
 | `scripts/forge_templates/CLAUDE.md` | `./CLAUDE.md` |
 | `scripts/forge_templates/PHASE_SCHEMA.md` | `./PHASE_SCHEMA.md` |
 | `scripts/forge_templates/FORGE_SCOPE.md` | `./FORGE_SCOPE.md` |
-| `scripts/forge_templates/docs/_templates/*` | `./docs/_templates/` (각 파일) |
+| `scripts/forge_templates/Docs/_templates/*` | `./Docs/_templates/` (각 파일) |
 
-`./scripts/`, `./docs/_templates/` 디렉토리가 없으면 먼저 생성한다.
+`./scripts/`, `./Docs/_templates/` 디렉토리가 없으면 먼저 생성한다.
 
 부트스트랩 완료 후 복사된 파일 목록과 skip된 파일 목록을 사용자에게 한 번 출력한다.
 

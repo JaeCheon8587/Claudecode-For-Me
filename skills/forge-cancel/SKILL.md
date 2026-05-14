@@ -43,7 +43,7 @@ python --version 2>&1 || py -3 --version 2>&1
 - `${CLAUDE_PLUGIN_ROOT}/scripts/forge_cancel.py` → `./scripts/forge_cancel.py`
 - `${CLAUDE_PLUGIN_ROOT}/scripts/forge_full.py` → `./scripts/forge_full.py`
 - `${CLAUDE_PLUGIN_ROOT}/scripts/forge_scope.py` → `./scripts/forge_scope.py`
-- `${CLAUDE_PLUGIN_ROOT}/scripts/forge_templates/*` → `./CLAUDE.md`, `./PHASE_SCHEMA.md`, `./FORGE_SCOPE.md`, `./docs/_templates/*`
+- `${CLAUDE_PLUGIN_ROOT}/scripts/forge_templates/*` → `./CLAUDE.md`, `./PHASE_SCHEMA.md`, `./FORGE_SCOPE.md`, `./Docs/_templates/*`
 
 `./scripts/` 디렉토리가 없으면 먼저 생성한다.
 
@@ -120,4 +120,4 @@ python ./scripts/forge_cancel.py <phase-dir> --kind <full|scoped> --dry-run
 - remote branch 삭제는 수행하지 않는다 — 원격 삭제가 필요하면 별도 사용자 확인 후 수동 진행
 - `feat-<phase-dir>` 외 브랜치를 삭제하지 않는다
 - `phases/full`·`phases/scoped` 양쪽에 같은 이름이 있으면 추측하지 않는다
-- `docs/**`, `scripts/forge_full.py`, `scripts/forge_scope.py` 는 수정하지 않는다
+- `Docs/**`, `scripts/forge_full.py`, `scripts/forge_scope.py` 는 수정하지 않는다

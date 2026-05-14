@@ -6,7 +6,7 @@
 
 ## 1. 개요
 
-`forge_scope.py`는 **scoped phase runner**다. 사용자가 제시한 짧은 prompt 또는 단일 문서를 입력으로 받아 작은 단위 기능을 빠르게 처리한다. `forge_full.py`(전 docs 자동 인입)의 경량 변종으로, `index.json`의 `docs_scope` 화이트리스트에 명시된 문서만 가드레일로 결합한다.
+`forge_scope.py`는 **scoped phase runner**다. 사용자가 제시한 짧은 prompt 또는 단일 문서를 입력으로 받아 작은 단위 기능을 빠르게 처리한다. `forge_full.py`(전 docs 자동 인입)의 경량 변종으로, `index.json`의 `Docs_scope` 화이트리스트에 명시된 문서만 가드레일로 결합한다.
 
 작업은 **phase**(=하나의 작업 단위) 단위로 진행된다. 한 phase는 N개의 **step**으로 쪼개지며, 각 step은 Claude를 1회 호출해 코드 작성·테스트·커밋까지 자율 수행한다. 첫 실행 시에는 step 분해(plan)부터 결정하고, 두 번째 실행부터는 기존 plan을 이어서 돈다.
 
@@ -25,7 +25,7 @@
 
 매 step 호출 시 prompt 컨텍스트:
 - `CLAUDE.md` (항상)
-- `docs_scope`에 명시된 문서만 (whitelist)
+- `Docs_scope`에 명시된 문서만 (whitelist)
 - `--compact-docs` 사용 시 FRD류 문서는 핵심 H2 섹션(§1·§4·§5·§7·§8·§9·§12·§14·§17)만 추출
 - 이전 step의 `summary` (있으면) — 직렬 컨텍스트 누적
 - 첫 호출에서만 작업 규칙·재시도 규약 전체 주입(이후는 동일 세션 `-r`로 cache_read 적중)
@@ -62,7 +62,7 @@ python scripts/forge_scope.py <phase_dir> [options]
 | 플래그 | 타입 | 기본값 | 설명 |
 |---|---|---|---|
 | `--prompt` | str (반복) | `None` | 자유 텍스트 요구사항. 반복 지정 가능. 첫 실행 시 `--doc`과 함께 사용. 기존 plan이 있으면 무시되고 경고. |
-| `--doc` | str (반복) | `None` | 첨부 문서 경로. `docs/` 하위 `.md` 만 허용. 반복 지정 가능. leading slash(`/docs/...`)는 자동 정규화. 중복 자동 dedupe. `--preset=frd-implementation`/`contract-tdd`는 정확히 1개 강제. |
+| `--doc` | str (반복) | `None` | 첨부 문서 경로. `Docs/` 하위 `.md` 만 허용. 반복 지정 가능. leading slash(`/Docs/...`)는 자동 정규화. 중복 자동 dedupe. `--preset=frd-implementation`/`contract-tdd`는 정확히 1개 강제. |
 
 ### 2.3 plan 생성 모드
 
@@ -70,7 +70,7 @@ python scripts/forge_scope.py <phase_dir> [options]
 |---|---|---|---|
 | `--preset` | choice | `auto` | 초기 step 생성 방식. 값: `auto` / `frd-implementation` / `contract-tdd`. 자세한 의미는 §3. |
 | `--single-step` | bool | `false` | splitter 호출 없이 고정 단일 step plan 생성. `--preset=auto`와 함께 쓰면 deterministic single-step. `contract-tdd`와 함께 쓰면 의미 라벨로만 작용(실제 dispatch는 contract-tdd 우선, 4-step 생성). |
-| `--compact-docs` | bool | `false` | `docs_scope` 문서를 핵심 H2 섹션만 압축해 가드레일에 주입. `--preset=frd-implementation`/`contract-tdd`/`--single-step` 사용 시 자동 활성화. |
+| `--compact-docs` | bool | `false` | `Docs_scope` 문서를 핵심 H2 섹션만 압축해 가드레일에 주입. `--preset=frd-implementation`/`contract-tdd`/`--single-step` 사용 시 자동 활성화. |
 
 ### 2.4 비대화 / 자동화
 
@@ -116,7 +116,7 @@ python scripts/forge_scope.py <phase_dir> [options]
 ### 3.2 `--preset=frd-implementation`
 
 - splitter 호출 **없이** deterministic single-step plan 생성.
-- `--doc=docs/FRD/<FRD-ID>.md` **정확히 1개** 강제. 0개·2개 이상이면 EXIT_ERR.
+- `--doc=Docs/FRD/<FRD-ID>.md` **정확히 1개** 강제. 0개·2개 이상이면 EXIT_ERR.
 - step 1개. body는 5개 H2를 갖춘 기본 구현 지시문(범위 밖 리팩터링 금지, FRD/prompt 밖 기능 추가 금지 등).
 - `--compact-docs` 자동 활성화.
 - 사용처: FRD 1개 구현 토큰 테스트, scope가 명확한 단일 기능 구현.
@@ -124,7 +124,7 @@ python scripts/forge_scope.py <phase_dir> [options]
 ### 3.3 `--preset=contract-tdd`
 
 - splitter 호출 **없이** deterministic 4-step plan 생성.
-- `--doc=docs/FRD/<FRD-ID>.md` **정확히 1개** 강제. 0개·2개 이상이면 EXIT_ERR.
+- `--doc=Docs/FRD/<FRD-ID>.md` **정확히 1개** 강제. 0개·2개 이상이면 EXIT_ERR.
 - step 구조:
 
 | step | name | 역할 |
@@ -169,7 +169,7 @@ python scripts/forge_scope.py <phase_dir> [options]
 ```bash
 python scripts/forge_scope.py <phase-dir> \
   --preset=frd-implementation \
-  --doc=docs/FRD/<FRD-ID>.md \
+  --doc=Docs/FRD/<FRD-ID>.md \
   --prompt="<FRD 구현만 수행. 범위 밖 리팩터링/문서 수정 금지>" \
   --compact-docs --quiet --yes --trust
 ```
@@ -179,7 +179,7 @@ python scripts/forge_scope.py <phase-dir> \
 ```bash
 python scripts/forge_scope.py <phase-dir> \
   --preset=contract-tdd \
-  --doc=docs/FRD/<FRD-ID>.md \
+  --doc=Docs/FRD/<FRD-ID>.md \
   --prompt="<FRD 구현. 본 개발 1 step + TDD wrap 3 step>" \
   --single-step \
   --compact-docs --quiet --yes --trust
@@ -194,7 +194,7 @@ python scripts/forge_scope.py <phase-dir> \
 ```bash
 python scripts/forge_scope.py <phase-dir> \
   --single-step --compact-docs \
-  [--doc=docs/<...>.md] \
+  [--doc=Docs/<...>.md] \
   --prompt="<작업 범위>" \
   --quiet --yes --trust
 ```
@@ -205,7 +205,7 @@ python scripts/forge_scope.py <phase-dir> \
 python scripts/forge_scope.py <phase-dir> \
   --compact-docs \
   --prompt="<사용자 prompt>" \
-  [--doc=docs/<...>.md] \
+  [--doc=Docs/<...>.md] \
   --quiet --yes --trust
 ```
 
@@ -232,7 +232,7 @@ splitter를 다시 돌리고 싶으면 `phases/scoped/<phase-dir>/`를 통째로
 
 `forge_scope.py` 실행 중 다음은 수정·삭제하지 않는다.
 
-- `docs/**` (사용자가 명시적으로 doc 편집을 지시한 경우 제외)
+- `Docs/**` (사용자가 명시적으로 doc 편집을 지시한 경우 제외)
 - `CLAUDE.md`, `MEMORY.md`
 - `scripts/forge_full.py`, `.claude/commands/forge-full.md`
 - `phases/full/**` (full 흐름 산출물 — `forge-scope`는 절대 읽지·쓰지 않음)
