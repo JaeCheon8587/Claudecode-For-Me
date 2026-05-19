@@ -1,147 +1,171 @@
 # Claudecode-For-Me
 
-Claude Code 커스텀 스킬/커맨드 모음 플러그인
+> **Claude Code Plugin** · v1.10.0 · 커스텀 스킬 8종 + 슬래시 커맨드 10종 모음
 
-## 설치 (다른 프로젝트에서 처음 사용할 때)
+`/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 브랜치 리뷰 → 커밋)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
-다른 작업 디렉터리(예: 사내 프로젝트, 새 레포 등)에서 Claude Code를 켜고 다음을 순서대로 실행한다.
+---
 
-```
-# 1. 마켓플레이스 등록
+## 1. 플러그인 개요
+
+| 항목 | 값 |
+|---|---|
+| 이름 | `claudecode-for-me` |
+| 버전 | `1.10.0` |
+| 매니페스트 | `.claude-plugin/plugin.json` |
+| 마켓플레이스 | `.claude-plugin/marketplace.json` |
+| 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
+| 네임스페이스 | `/claudecode-for-me:<name>` |
+| 구성요소 | Skill 8 · Command 10 · Python runner 5 (`scripts/`) |
+
+플러그인은 **글로벌 캐시**에 설치되므로 한 번 설치 후 모든 프로젝트의 **새 세션**에서 자동 노출된다. 프로젝트별 재설치 불필요.
+
+---
+
+## 2. 설치
+
+타깃 프로젝트에서 Claude Code 세션 열고:
+
+```text
+# 1) 마켓플레이스 등록
 /plugin marketplace add JaeCheon8587/Claudecode-For-Me
 
-# 2. 플러그인 설치 (글로벌 캐시 ~/.claude/plugins/cache/ 에 다운로드됨)
+# 2) 플러그인 설치
 /plugin install claudecode-for-me@claudecode-for-me
 
-# 3. ★ 반드시 Claude Code 세션을 종료하고 다시 시작 ★
-# (세션 시작 시점에 plugin manifest를 한 번만 로드하므로 install 직후 같은 세션에서는 호출 안 됨)
+# 3) ★ Claude Code 세션 종료 후 재시작 ★
+#    매니페스트는 세션 시작 시점에만 로드된다 (hot-reload 없음).
 
-# 4. 새 세션에서 동작 검증 — 슬래시 자동완성에 노출 확인
-/claudecode-for-me:meta-prompter 작업 요청 텍스트
-/claudecode-for-me:grill-me 주제
-/claudecode-for-me:forge-scope 작업 prompt
+# 4) 새 세션에서 슬래시 자동완성 확인
+/claudecode-for-me:meta-prompter ...
+/claudecode-for-me:forge-scope ...
+/claudecode-for-me:branch-review
 ```
 
-플러그인은 글로벌(`~/.claude/plugins/`)에 설치되므로 한 번 설치하면 **모든 프로젝트의 새 세션**에서 자동으로 사용 가능하다. 프로젝트별 재설치 불필요.
+## 3. 업데이트
 
-## 업데이트
-
-다른 프로젝트에서 이 플러그인을 이미 설치했다면, 새 커맨드/스킬은 다음으로 가져온다.
-
-```
+```text
 /plugin marketplace update claudecode-for-me
 /plugin update claudecode-for-me@claudecode-for-me
 ```
 
-- `plugin.json` / `marketplace.json`의 `version` 값이 올라가야 클라이언트가 변경을 인식한다.
-- **업데이트 후 Claude Code 세션 재시작 필수**: Claude Code는 세션 시작 시점에 플러그인 매니페스트를 한 번만 로드하며 런타임 hot-reload를 하지 않는다. 업데이트만 하고 같은 세션을 유지하면 새로 추가된 스킬/커맨드가 보이지 않는다.
-  - 현재 세션 종료 → 새 세션 시작 → `/claudecode-for-me:<name>` 호출 가능
-  - 캐시 위치: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (구버전과 신버전이 공존할 수 있으나 활성 버전은 최신 1개)
+- `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
+- **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
+- 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
 
-## 스킬 목록
+## 4. 제거
 
-| 스킬 | 실행 명령 | 설명 |
-|------|----------|------|
-| branch-review | `/claudecode-for-me:branch-review [ref]` | HEAD ↔ 고정점 diff을 Standards/Spec 2축으로 병렬 검토 (심각도 등급, 충돌 감지, 다언어 지원) |
-| e2e-sequence | `/claudecode-for-me:e2e-sequence [기능명]` | 기능별 E2E 메시지 흐름을 코드 추적하여 Mermaid 시퀀스 다이어그램 생성 |
-| grill-me | `/claudecode-for-me:grill-me [주제]` | 아이디어/계획/작업을 집요한 질문으로 구체화하고 요구사항 정리 |
-| meta-prompter | `/claudecode-for-me:meta-prompter [작업 요청]` | 거친 작업 요청을 다른 AI 에이전트(Claude Code 등)가 수행 가능한 구조화된 메타 프롬프트로 정제 |
+```text
+/plugin uninstall claudecode-for-me@claudecode-for-me
+/plugin marketplace remove claudecode-for-me
+```
 
-### branch-review
+---
+
+## 5. 플러그인 구성요소
+
+### Skill 8종
+
+| Skill | 슬래시 커맨드 | 역할 |
+|---|---|---|
+| `branch-review` | `/claudecode-for-me:branch-review [ref]` | HEAD↔ref diff을 Standards/Spec 2축 병렬 검토 |
+| `docs-harness` | `/claudecode-for-me:docs-check`, `/claudecode-for-me:docs-add-feature` | 서비스-단위 PRD/FC/FRD 문서 SSOT 검사·확장 |
+| `e2e-sequence` | `/claudecode-for-me:e2e-sequence [기능]` | E2E 메시지 흐름 → Mermaid 시퀀스 다이어그램 |
+| `forge-cancel` | `/claudecode-for-me:forge-cancel <phase>` | forge phase 브랜치·산출물 정리 |
+| `forge-full` | `/claudecode-for-me:forge-full <phase>` | 문서 기반 전체 프로젝트 구현 phase runner |
+| `forge-scope` | `/claudecode-for-me:forge-scope <prompt>` | 단일 FRD·기능·버그픽스용 경량 phase runner |
+| `grill-me` | `/claudecode-for-me:grill-me [주제]` | 1문 1답으로 요구사항 모호점 추적 |
+| `meta-prompter` | `/claudecode-for-me:meta-prompter [요청]` | 거친 요청 → 구조화된 메타 프롬프트 |
+
+### Command 10종 (Skill 래퍼 + 단독 커맨드)
+
+| Command | 설명 |
+|---|---|
+| `branch-review` | branch-review skill 진입 |
+| `commit-analysis` | 변경 분석 후 `[ADD]`/`[MOD]`/`[FIX]` 자동 판단 한글 커밋 생성 |
+| `docs-add-feature` | docs-harness preview-only 신규 FRD 추가 |
+| `docs-check` | docs-harness PASS/WARN/FAIL 검사 |
+| `e2e-sequence` | e2e-sequence skill 진입 |
+| `forge-cancel` | forge-cancel skill 진입 |
+| `forge-full` | forge-full skill 진입 |
+| `forge-scope` | forge-scope skill 진입 |
+| `grill-me` | grill-me skill 진입 |
+| `meta-prompter` | meta-prompter skill 진입 |
+
+---
+
+## 6. Skill 상세
+
+### 6.1 branch-review
 
 ```
 /claudecode-for-me:branch-review main
 /claudecode-for-me:branch-review v1.4.0
-/claudecode-for-me:branch-review        # ref 미지정 시 merge-base 자동 추정
+/claudecode-for-me:branch-review          # ref 생략 시 merge-base 자동
 ```
 
-- **2축 병렬 검토**: Standards 축(레포 컨벤션 준수) + Spec 축(원 요구사항 충족)을 독립 서브에이전트로 동시 평가 → 한 축이 다른 축을 가리는 masking 방지
-- **3-dot diff** (`<ref>...HEAD`) — merge-base 이후 내 변경만, ref 쪽 진행분 노이즈 제거
-- **심각도 4단**: CRITICAL / MAJOR / MINOR / NIT — NIT 기본 억제 (요청 시 펼침)
-- **TYPE 분리**: Standards = VIOLATION / JUDGMENT, Spec = MISSING / PARTIAL / SCOPE-CREEP / FLAW
-- **Diff 크기 자동 분기**: ≤50 라인 인라인 모드, 51~2000 라인 표준 병렬, 초과 시 디렉토리 단위 청크 분할
-- **Spec 5층 fallback**: 이슈 본문 → docs/specs → PR description → 커밋 메시지 합성 → 부재 — 신뢰도 HIGH/MEDIUM/LOW/FALLBACK/NONE에 따라 보고 강도 조절
-- **다언어 컨벤션**: TS/JS, Python, Go, Rust, Java/Kotlin, C#/.NET, Ruby, Swift 마커 자동 감지 + 멀티스택 합집합
-- **충돌 감지**: 축간 모순 finding을 별도 "Conflicts" 섹션 분리, 메인이 해결 시도하지 않음
-- **Dedup**: 라인 ±3, 동일 심볼명, 헝크 식별자 3중 매칭
-- **Recommendation 한 줄**: SHIP / FIX-MINOR-THEN-SHIP / FIX-CRITICAL-FIRST / BLOCK-SPEC-MISMATCH / RESOLVE-CONFLICTS / RECONFIRM-INTENT
-- **Intent 추출**: 커밋 메시지로부터 의도 블록 추출 → 두 축 모두에 전달, mismatch 라벨 별도 보고
-- **출력 옵션**: 기본 / compact (1줄) / verbose (NIT 포함)
-- **비범위**: 심층 보안 리뷰는 `/security-review` 위임, 자동 fix·CI 통합 안 함
+- **2축 병렬**: Standards(컨벤션 준수) + Spec(요구사항 충족) 독립 서브에이전트 → masking 방지
+- **3-dot diff** (`<ref>...HEAD`) — 내 변경만, ref 진행분 노이즈 제거
+- **심각도 4단**: CRITICAL / MAJOR / MINOR / NIT (NIT 기본 억제)
+- **TYPE**: Standards = VIOLATION/JUDGMENT, Spec = MISSING/PARTIAL/SCOPE-CREEP/FLAW
+- **Diff 분기**: ≤50라인 인라인, 51~2000 표준, 초과 시 디렉토리 청크 분할
+- **Spec 5층 fallback**: 이슈본문 → docs/specs → PR description → 커밋 메시지 → 부재 (HIGH/MEDIUM/LOW/FALLBACK/NONE)
+- **다언어**: TS/JS · Python · Go · Rust · Java/Kotlin · C#/.NET · Ruby · Swift
+- **충돌**: 축간 모순 finding을 별도 "Conflicts" 섹션
+- **Recommendation**: SHIP / FIX-MINOR-THEN-SHIP / FIX-CRITICAL-FIRST / BLOCK-SPEC-MISMATCH / RESOLVE-CONFLICTS / RECONFIRM-INTENT
+- **비범위**: 심층 보안 리뷰는 `/security-review` 위임, 자동 fix·CI 통합 없음
 
-### e2e-sequence
+### 6.2 docs-harness (`/docs-check`, `/docs-add-feature`)
+
+```
+/claudecode-for-me:docs-check
+/claudecode-for-me:docs-add-feature
+```
+
+- **Preview-only**: source repo 절대 무수정. `--preview-dir`(repo 바깥)에만 기록
+- **Config 강제**: `.claude/docs-harness.config.json` 부재 시 `FAIL CONFIG`
+- **서비스 N개** 지원: 각 service = `<docs_dir>/PRD-<CODE>-001.md`, `FC-<CODE>-001.md`, `FRD/FRD-<CODE>-F<NNN>.md`
+- **FRD 19 section 고정** (`## 1. 기능 개요` ~ `## 19. 미확인 사항`)
+- **자기 검증**: preview 생성 후 `docs_check.run_checks` 즉시 호출
+- **Exit code**: 0 통과 / 1 CHECK FAIL · CONFLICT / 2 ARGS·FEATURE·REPO·PREVIEW·CONFIG FAIL
+- Python CLI 병행 사용: `python scripts/docs_check.py`, `python scripts/docs_add_feature.py`
+
+### 6.3 e2e-sequence
 
 ```
 /claudecode-for-me:e2e-sequence 로그인
 ```
 
-- **2단계 파이프라인**: Explore 에이전트가 코드 추적 → 메인 에이전트가 Mermaid 다이어그램 생성
-- 서비스 간 통신 흐름을 시각화 (HTTP, WebSocket, 메시지 큐 등)
-- **참여자 통합 규칙**: 같은 프로세스 내 레이어(ViewModel, UseCase, Service 등)는 하나의 participant로 묶고, 내부 처리는 `Note over`로 표현
-- **alt/deactivate 충돌 방지**: `alt`/`else` 블록 내부에서 `deactivate` 금지 — 블록 바깥 또는 `else` 분기 끝에서만 비활성화
-- **외부 시스템 부재 가시화**: DB/메시지 큐/WebSocket/캐시/외부 HTTP를 모두 기재, 미사용도 X로 명시
+- **2단계 파이프라인**: Explore 에이전트 코드 추적 → 메인 Mermaid 생성
+- 서비스 간 통신 (HTTP·WebSocket·메시지 큐 등) 시각화
+- **참여자 통합**: 같은 프로세스 레이어(ViewModel/UseCase/Service)는 단일 participant, 내부 처리는 `Note over`
+- **alt/deactivate 충돌 방지**: `alt`/`else` 블록 내부 `deactivate` 금지
+- **외부 시스템 부재 가시화**: DB·MQ·WS·캐시·외부 HTTP 모두 기재(미사용도 X로 명시)
 - MCP Mermaid Chart 도구로 렌더링 검증
 - 출력: `Docs/E2E-Sequence/{기능명}_Sequence.md`
 
-### grill-me
+### 6.4 forge-full / forge-scope / forge-cancel (harness_framework 임베디드)
 
-```
-/claudecode-for-me:grill-me 알림 시스템 설계
-```
+#### 전제 조건
 
-- **1문 1답 방식** (`AskUserQuestion` 도구 사용)으로 아이디어/계획의 모호한 부분을 파고듦
-- 각 질문은 추천 선택지 2개(`(Recommended)` 표기) + "Other" 자동 옵션
-- 탐색 영역: Purpose / Scope / Success Criteria / Assumptions / Key Decisions / Constraints / Dependencies / Stakeholders / Failure Modes / Alternatives / Priorities / Execution
-- **논리적 모순 발견 시 명시적으로 지적**하고 해소될 때까지 해당 가지에 머무름
-- 3~4 교환마다 진행 트래커로 영역별 완료 여부 표시
-- 세션 종료 시 Requirements Summary (영역별 정리 + Key Decisions Q&A + Open Items + Next Steps) 생성 후 확정 리뷰
-
-### meta-prompter
-
-```
-/claudecode-for-me:meta-prompter ApiGateway에 health check 엔드포인트 추가
-```
-
-- **요구사항 정제기**: 단순 포매터가 아니라 모호 표현 challenge / 가정 표면화 / 모순 지적까지 수행
-- **작업 유형 자동 분류**: 기능 개발 / 리팩토링 / 문서화 / 분석 (혼합 시 주·보조 표기)
-- **유형별 템플릿 매칭**: 베이스 12개 항목 + 유형별 추가 항목에서 근거·기본값 있는 것만 채움 (빈 자리표시자 금지)
-- **필수 항목 누락 시** 한 번에 묶어 질문 (≤3개), 그 외는 합리적 가정으로 처리하고 메타 헤더에 `추가한 가정 N개`로 카운트
-- **출력은 채팅 전용**: 마크다운 코드블록 1개로 감싸 그대로 복사 가능, 별도 `.md` 파일로 저장하지 않음
-- 개조식 종결 강제(서술형 금지), 출력 끝에 `[에이전트 행동 규칙]` 가드레일 4문구 자동 부착
-
-## Forge Phase Runner (harness_framework 임베디드)
-
-harness_framework의 phase runner 3종이 플러그인에 내장되어 있다.
-**첫 호출 시 사용자 프로젝트에 필요한 파일을 자동으로 부트스트랩**한다.
-
-### 전제 조건
-
-| 조건 | 필수 여부 | 비고 |
+| 조건 | 필수 | 비고 |
 |---|---|---|
-| Python 3.10+ (`python` 또는 `py -3`) | **필수** | 없으면 명령 실행 즉시 가이드 메시지 출력 후 중단 |
-| `claude` CLI PATH 등록 | **필수** | child claude spawn에 사용 |
-| git repository | 권장 | 없으면 경고만 출력, 브랜치/커밋 자동화 실패 가능 |
-| `FORGE_TRUST=1` 환경변수 또는 `--trust` | **필수** | 미설정 시 child claude 즉시 종료 |
+| Python 3.10+ (`python` 또는 `py -3`) | **필수** | 미설치 시 즉시 가이드 출력 후 중단 |
+| `claude` CLI PATH | **필수** | child claude spawn |
+| git repository | 권장 | 없으면 경고, 브랜치 자동화 실패 가능 |
+| `FORGE_TRUST=1` 또는 `--trust` | **필수** | 미설정 시 child claude 즉시 종료 |
 
-### 환경변수
+#### 환경변수
 
 | 변수 | 설명 |
 |---|---|
-| `FORGE_TRUST` | `1` / `true` / `yes` — `--trust` 와 동일. child claude 권한 부여 |
-| `FORGE_CLAUDE_TIMEOUT` | step 실행 최대 시간(초). 기본 1800 |
-| `ANTHROPIC_API_KEY` | API 키. `--bare` child 모드 사용 시 필수 |
+| `FORGE_TRUST` | `1`/`true`/`yes` — `--trust` 동일 |
+| `FORGE_CLAUDE_TIMEOUT` | step 최대 시간(초). 기본 1800 |
+| `ANTHROPIC_API_KEY` | `--bare` child 모드 사용 시 필수 |
 
-### 명령
+#### 첫 호출 시 자동 부트스트랩
 
-| 커맨드 | 실행 명령 | 설명 |
-|---|---|---|
-| forge-scope | `/claudecode-for-me:forge-scope <prompt>` | 경량 scoped phase. 단일 FRD·기능·버그픽스. `.worktrees/<phase>/` 격리 실행. **일반 사용 권장** |
-| forge-full | `/claudecode-for-me:forge-full <phase-dir> [options]` | 문서 기반 full phase. 전체 프로젝트 구현 |
-| forge-cancel | `/claudecode-for-me:forge-cancel <phase-dir> [--kind full\|scoped]` | 진행 중인 phase 취소 및 정리 |
-
-### 첫 호출 시 자동 부트스트랩
-
-사용자 프로젝트 cwd에 아래 파일을 **없는 것만** 복사한다 (기존 파일 덮어쓰기 없음):
+사용자 프로젝트 cwd에 **없는 것만** 복사(덮어쓰기 없음):
 
 ```
 ./scripts/forge_full.py
@@ -150,12 +174,10 @@ harness_framework의 phase runner 3종이 플러그인에 내장되어 있다.
 ./CLAUDE.md
 ./PHASE_SCHEMA.md
 ./FORGE_SCOPE.md
-./Docs/_templates/  (8개 템플릿 파일)
+./Docs/_templates/   (8 템플릿)
 ```
 
-복사된 파일과 skip된 파일 목록을 한 번 출력한다.
-
-### 사용 예시
+#### 사용 예시
 
 ```bash
 # FRD 단건 구현 (권장 — splitter 우회, 토큰 절감)
@@ -164,114 +186,147 @@ harness_framework의 phase runner 3종이 플러그인에 내장되어 있다.
 # 자유 텍스트 prompt (phase-dir 자동 도출, 확인 1회)
 /claudecode-for-me:forge-scope 로그인 기능에 소셜 로그인 옵션 추가
 
-# full phase (전체 프로젝트 구현)
+# 전체 프로젝트 구현
 /claudecode-for-me:forge-full mvp-v2 --prompt="MVP v2 전체 구현" --docs-mode=recursive --trust
 
-# plan 미리보기 (파일/브랜치 생성 없음)
-/claudecode-for-me:forge-full order-flow --plan-only --prompt="주문 흐름 구현" --doc=Docs/FRD/FRD-F009.md --trust
+# plan 미리보기 (파일·브랜치 생성 없음)
+/claudecode-for-me:forge-full order-flow --plan-only --prompt="주문 흐름" --doc=Docs/FRD/FRD-F009.md --trust
 
-# 취소 (dry-run으로 대상 먼저 확인)
+# 취소
 /claudecode-for-me:forge-cancel login-feature --dry-run
 /claudecode-for-me:forge-cancel login-feature --kind scoped
 ```
 
-### forge-scope 인자 상세
+#### forge-scope 인자 모드
 
-`$ARGUMENTS`를 두 모드로 해석한다:
+- **Mode 1 (prompt-only)**: 일반 텍스트 → phase-dir 자동 도출 + 확인 1회
+- **Mode 2 (doc + prompt)**: 첫 토큰이 `Docs/...md` / `/Docs/...md`(대소문자 무시) → `--doc` 분리
+- FRD(`Docs/FRD/` 하위) → `--preset=frd-implementation --compact-docs` 자동
+- 일반 문서 → `--single-step --compact-docs` 자동
 
-- **Mode 1 (prompt-only)**: 일반 텍스트 → phase-dir 자동 도출 후 확인 1회
-- **Mode 2 (doc + prompt)**: 첫 토큰이 `Docs/...md` 또는 `/Docs/...md` (대소문자 무시) → `--doc` 로 분리
-
-FRD 파일(`Docs/FRD/` 하위)이면 자동으로 `--preset=frd-implementation --compact-docs` 적용.
-일반 문서이면 `--single-step --compact-docs` 적용.
-
-### forge-full 주요 옵션
+#### forge-full 주요 옵션
 
 | 옵션 | 설명 |
 |---|---|
 | `--prompt` | plan 생성 입력 (반복 가능) |
-| `--doc` | guardrail 문서 (`Docs/` 하위 `.md`). 반복 가능 |
-| `--docs-mode=root\|recursive\|explicit` | 문서 인입 정책. `explicit` 이면 `--doc` 만 사용 |
-| `--trust` | child claude 권한 부여 (`FORGE_TRUST=1` 과 동일) |
+| `--doc` | guardrail 문서 (`Docs/` 하위 `.md`, 반복 가능) |
+| `--docs-mode=root\|recursive\|explicit` | 문서 인입 정책 |
+| `--trust` | child claude 권한 (`FORGE_TRUST=1` 동일) |
 | `--yes` | plan 자동 승인 |
-| `--quiet` | 진행 표시기 억제 (Claude Code spawn 시 권장) |
-| `--plan-only` | plan 생성·출력만 수행. 파일·브랜치·커밋 없음 |
-| `--preset=auto\|contract-tdd` | 기본: 문서 기반 splitter. `contract-tdd`: OMS 샘플 전용 |
-| `--compact-docs` | guardrail 문서를 핵심 섹션만 압축 주입 |
+| `--quiet` | 진행 표시기 억제 (Claude Code spawn 권장) |
+| `--plan-only` | plan 생성·출력만 |
+| `--preset=auto\|contract-tdd` | 기본 splitter / OMS 샘플 전용 |
+| `--compact-docs` | guardrail 문서 핵심 섹션 압축 주입 |
 
-### 한계 사항
+#### 한계
 
-- **`--preset=contract-tdd`는 OMS 샘플 전용**: `Src/OrderManagingSystem.sln` 경로가 AC에 하드코딩되어 있다. 일반 프로젝트에서는 `auto` / `frd-implementation` / `--single-step` 을 사용하라.
-- **타임존 KST 고정**: step timestamp가 KST(UTC+9) 기준으로 기록된다.
-- **step.md 헤딩 한국어 고정**: `## 읽어야 할 파일` 등 5개 헤딩이 강제된다 (harness_framework 원본 동작).
+- `--preset=contract-tdd`는 **OMS 샘플 전용** (`Src/OrderManagingSystem.sln` 하드코딩). 일반 프로젝트는 `auto`/`frd-implementation`/`--single-step`.
+- step timestamp **KST(UTC+9) 고정**.
+- step.md 5개 헤딩 **한국어 고정** (`## 읽어야 할 파일` 등, harness_framework 원본 동작).
 
-### .gitignore 권장 항목
+#### .gitignore 권장
 
 ```gitignore
-# forge 산출물 — 팀 정책에 따라 추적 여부 결정
 phases/
 ```
 
----
+### 6.5 grill-me
 
-## 커맨드 목록
+```
+/claudecode-for-me:grill-me 알림 시스템 설계
+```
 
-| 커맨드 | 실행 명령 | 설명 |
-|--------|----------|------|
-| commit-analysis | `/claudecode-for-me:commit-analysis` | 변경사항 분석 후 구분자 선택하여 커밋 생성 |
-| e2e-sequence | `/claudecode-for-me:e2e-sequence [기능명]` | e2e-sequence 스킬 실행 (커맨드 래퍼) |
-| forge-cancel | `/claudecode-for-me:forge-cancel <phase-dir>` | forge phase 취소 및 정리 |
-| forge-full | `/claudecode-for-me:forge-full <phase-dir> [options]` | forge-full phase runner |
-| forge-scope | `/claudecode-for-me:forge-scope <prompt>` | forge-scope 경량 phase runner |
-| grill-me | `/claudecode-for-me:grill-me [주제]` | grill-me 스킬 실행 (커맨드 래퍼) |
-| meta-prompter | `/claudecode-for-me:meta-prompter [작업 요청]` | meta-prompter 스킬 실행 (커맨드 래퍼) |
+- **1문 1답** (`AskUserQuestion`)으로 모호점 추적
+- 각 질문 = 추천 2개(`(Recommended)`) + auto-`Other`
+- 탐색 영역: Purpose / Scope / Success Criteria / Assumptions / Key Decisions / Constraints / Dependencies / Stakeholders / Failure Modes / Alternatives / Priorities / Execution
+- **논리 모순 시 명시 지적**, 해소될 때까지 해당 가지 잔류
+- 3~4 교환마다 영역별 완료 트래커
+- 종료 시 Requirements Summary (영역별 + Key Decisions Q&A + Open Items + Next Steps) 후 확정 리뷰
 
-### commit-analysis
+### 6.6 meta-prompter
+
+```
+/claudecode-for-me:meta-prompter ApiGateway에 health check 엔드포인트 추가
+```
+
+- **정제기**: 단순 포매터 X — 모호 표현 challenge / 가정 표면화 / 모순 지적
+- **작업 유형 자동 분류**: 기능 개발 / 리팩토링 / 문서화 / 분석 (혼합 시 주·보조 표기)
+- **유형별 템플릿**: 베이스 12 항목 + 유형별 추가, 근거 있는 것만 채움 (빈 placeholder 금지)
+- **필수 누락 시** 한 번에 묶어 질문(≤3개), 그 외는 합리 가정 + 메타 헤더 `추가한 가정 N개` 카운트
+- **채팅 출력 전용**: 마크다운 코드블록 1개로 wrap, `.md` 저장 안 함
+- 개조식 종결 강제, 출력 끝 `[에이전트 행동 규칙]` 4문구 자동 부착
+
+### 6.7 commit-analysis
 
 ```
 /claudecode-for-me:commit-analysis
 ```
 
-- 구분자 자동 판단: `[ADD]` 추가 / `[MOD]` 수정 / `[FIX]` 버그 수정
-- `.md` 파일 자동 제외 (`git add --all` 후 `git reset -- "*.md"`)
-- Co-Authored-By/"Generated with Claude Code" 등의 문구 제외
-- 변경 내용 기반 한글 커밋 메시지 작성
+- 구분자 자동: `[ADD]` 추가 / `[MOD]` 수정 / `[FIX]` 버그
+- `.md` 자동 제외 (`git add --all` 후 `git reset -- "*.md"`)
+- Co-Authored-By / "Generated with Claude Code" 문구 제외
+- 한글 커밋 메시지
 
-## 프로젝트 구조
+---
+
+## 7. 프로젝트 구조
 
 ```
 Claudecode-For-Me/
 ├── .claude-plugin/
-│   ├── plugin.json              # 플러그인 매니페스트
-│   └── marketplace.json         # 마켓플레이스 설정
-├── scripts/
-│   ├── forge_full.py            # harness_framework full phase runner
-│   ├── forge_scope.py           # harness_framework scoped phase runner
-│   ├── forge_cancel.py          # harness_framework cancel runner
-│   └── forge_templates/         # forge 부트스트랩 리소스
-│       ├── CLAUDE.md            # 프로젝트 가드레일 템플릿
-│       ├── PHASE_SCHEMA.md      # phase 스키마 명세
-│       ├── FORGE_SCOPE.md       # forge-scope 운영 참조
-│       └── Docs/_templates/     # 문서 템플릿 8종
+│   ├── plugin.json              # 매니페스트 (name·version·author)
+│   └── marketplace.json         # 마켓플레이스 등록 정보
 ├── skills/
-│   ├── e2e-sequence/SKILL.md    # E2E 시퀀스 다이어그램 스킬
-│   ├── forge-cancel/SKILL.md    # forge phase 취소 스킬
-│   ├── forge-full/SKILL.md      # forge-full phase runner 스킬
-│   ├── forge-scope/SKILL.md     # forge-scope 경량 phase runner 스킬
-│   ├── grill-me/SKILL.md        # 아이디어/계획 구체화 스킬
-│   └── meta-prompter/SKILL.md   # 작업 요청 → 메타 프롬프트 정제 스킬
+│   ├── branch-review/           # 2축 diff 리뷰
+│   ├── docs-harness/            # PRD/FC/FRD SSOT 검사·확장
+│   ├── e2e-sequence/            # Mermaid 시퀀스 생성
+│   ├── forge-cancel/            # phase 취소
+│   ├── forge-full/              # full phase runner
+│   ├── forge-scope/             # scoped phase runner
+│   ├── grill-me/                # 요구사항 추적
+│   └── meta-prompter/           # 메타 프롬프트 정제
 ├── commands/
-│   ├── commit-analysis.md       # 커밋 분석 커맨드
-│   ├── e2e-sequence.md          # e2e-sequence 커맨드
-│   ├── forge-cancel.md          # forge-cancel 커맨드
-│   ├── forge-full.md            # forge-full 커맨드
-│   ├── forge-scope.md           # forge-scope 커맨드
-│   ├── grill-me.md              # grill-me 커맨드
-│   └── meta-prompter.md         # meta-prompter 커맨드
+│   ├── branch-review.md
+│   ├── commit-analysis.md
+│   ├── docs-add-feature.md
+│   ├── docs-check.md
+│   ├── e2e-sequence.md
+│   ├── forge-cancel.md
+│   ├── forge-full.md
+│   ├── forge-scope.md
+│   ├── grill-me.md
+│   └── meta-prompter.md
+├── scripts/
+│   ├── docs_check.py            # docs-harness 검사 CLI
+│   ├── docs_add_feature.py      # docs-harness preview CLI
+│   ├── forge_full.py            # harness_framework full
+│   ├── forge_scope.py           # harness_framework scoped
+│   ├── forge_cancel.py          # harness_framework cancel
+│   ├── docs-add-feature.example.json
+│   ├── docs-harness.config.example.json
+│   └── forge_templates/         # forge 부트스트랩 리소스
+│       ├── CLAUDE.md
+│       ├── PHASE_SCHEMA.md
+│       ├── FORGE_SCOPE.md
+│       └── Docs/_templates/     # 문서 템플릿 8종
 ├── .gitattributes               # scripts/*.py LF 강제
 └── README.md
 ```
 
-## 라이선스
+---
+
+## 8. 트러블슈팅
+
+| 증상 | 원인 | 조치 |
+|---|---|---|
+| install 직후 슬래시 자동완성에 안 보임 | 매니페스트는 세션 시작 시 1회 로드 | 세션 종료 → 재시작 |
+| update 후 신규 스킬 호출 불가 | 동일 — 캐시는 갱신됐으나 세션은 구버전 보유 | 세션 재시작 |
+| `/claudecode-for-me:forge-*` 실행 즉시 종료 | `FORGE_TRUST` 미설정 | `FORGE_TRUST=1` 또는 `--trust` |
+| `docs-check` `FAIL CONFIG` | `.claude/docs-harness.config.json` 부재 | `scripts/docs-harness.config.example.json` 참조해 생성 |
+| `forge-scope` phase-dir 자동 도출 실패 | prompt 너무 모호 | 명시적 phase-dir 지정 또는 `Docs/...md` 경로 선행 |
+
+---
+
+## 9. 라이선스
 
 MIT
