@@ -1,0 +1,40 @@
+{
+  "name": "주문 검색",
+  "summary": "주문 목록을 조건으로 검색한다.",
+  "actor": "운영자",
+  "preconditions": [
+    "주문 데이터가 존재한다.",
+    "운영자가 콘솔 또는 API에 접근 가능하다."
+  ],
+  "main_flow": [
+    "운영자가 검색 조건(상태, 생성일 범위)을 입력한다.",
+    "시스템이 조건에 맞는 주문 목록을 생성일 내림차순으로 반환한다.",
+    "운영자가 응답 목록을 확인한다."
+  ],
+  "alternative_flow": [
+    "검색 조건이 비어 있으면 전체 주문 목록을 반환한다."
+  ],
+  "exception_flow": [
+    "조건에 맞는 주문이 없으면 빈 목록과 함께 200 응답을 반환한다.",
+    "잘못된 status 값이면 400과 errorCode INVALID_STATUS 를 반환한다."
+  ],
+  "acceptance_criteria": [
+    "검색 결과는 생성일(createdAt) 내림차순으로 정렬된다.",
+    "status 필터는 정확히 일치(equality) 비교로 동작한다."
+  ],
+  "data_entities": [
+    "Order",
+    "Product"
+  ],
+  "ui_surfaces": [
+    "운영자 콘솔 — 주문 검색 화면"
+  ],
+  "api_paths": [
+    "GET /orders?status={status}",
+    "GET /orders?createdFrom={from}&createdTo={to}"
+  ],
+  "notes": [
+    "정렬 보조 키(생성일 동률 시 tie-breaker)는 후속 결정으로 보류한다.",
+    "페이지네이션 도입 시 ADR 별도 등재."
+  ]
+}
