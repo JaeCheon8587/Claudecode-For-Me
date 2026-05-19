@@ -17,7 +17,7 @@
    - `frd-implementation`/`contract-tdd` preset 또는 `--single-step` → splitter 호출 없이 **deterministic plan**을 로컬에서 생성(토큰 0).
 2. **plan 검증** — 5개 H2 헤딩 강제(`## 읽어야 할 파일`, `## 작업`, `## Acceptance Criteria`, `## 검증 절차`, `## 금지사항`), kebab-case name, step 인덱스 0..N-1 연속 등.
 3. **파일 emit** — `phases/scoped/<phase-dir>/index.json` + `step{N}.md` 일괄 기록.
-4. **브랜치 준비** — `feat-<phase-dir>` 자동 checkout(필요 시 생성).
+4. **워크트리 준비** — `.worktrees/<phase-dir>/`에 git worktree를 생성하고 `feat-<phase-dir>` 브랜치에 attach. 메인 repo 작업 트리는 영향 없음. 이미 등록된 워크트리는 그대로 재사용. 정리는 사용자가 `forge_cancel.py` 또는 `git worktree remove`로 명시적 수행.
 5. **step 순회 실행** — 각 step에 대해 Claude를 호출, 최대 3회 재시도, status 전이(pending → completed | error | blocked), 2단계 커밋(`feat(<phase>): step N — <name>` + `chore(<phase>): step N output`).
 6. **finalize** — 전체 step 완료 시 `chore(<phase>): mark phase completed` 커밋, 옵션 시 `git push -u origin feat-<phase>`.
 
@@ -92,7 +92,7 @@ python scripts/forge_scope.py <phase_dir> [options]
 | 플래그 | 타입 | 기본값 | 설명 |
 |---|---|---|---|
 | `--push` | bool | `false` | phase 완료 후 `git push -u origin feat-<phase>` 자동 실행. |
-| `--force` | bool | `false` | 브랜치 checkout 시 dirty tree(commit 안 된 변경) 검사 우회. 작업 손실 위험이 있으므로 신중히. |
+| `--force` | bool | `false` | 워크트리 dirty tree(commit 안 된 변경) 검사 우회. 재실행 시 워크트리 내 수동 변경을 step commit이 흡수하도록 허용. 작업 손실 위험이 있으므로 신중히. |
 
 ### 2.7 운영/디버깅
 

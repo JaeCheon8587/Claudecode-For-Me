@@ -512,42 +512,116 @@ class ClaudeInvoker:
 
 
 # ============================================================================
-# GitOperations — 브랜치 + 2단계 commit
+# WorktreeManager — phase별 .worktrees/<phase>/ 격리 작업 트리 보장
+# ============================================================================
+class WorktreeManager:
+    """phase 시작 시 `.worktrees/<phase>/`에 git worktree를 생성/attach 한다.
+
+    워크트리는 메인 repo와 독립된 working tree를 갖고, branch `feat-<phase>`에
+    바인딩된다. phase의 모든 산출물(phases/scoped/, step 코드, commit)은 이
+    워크트리 안에서만 발생하고, 메인 repo의 작업 트리는 영향을 받지 않는다.
+
+    완료 후 정리는 사용자가 명시적으로 수행한다 (`git worktree remove` 또는
+    forge_cancel.py).
+    """
+
+    def __init__(self, main_root: Path, phase_name: str, *, force: bool):
+        self._main_root = main_root
+        self._phase = phase_name
+        self._force = force
+        self._worktree_path = main_root / ".worktrees" / phase_name
+        self._branch = f"feat-{phase_name}"
+
+    @property
+    def worktree_path(self) -> Path:
+        return self._worktree_path
+
+    @property
+    def branch(self) -> str:
+        return self._branch
+
+    def ensure(self) -> Path:
+        """워크트리를 보장하고 워크트리 root path를 반환한다."""
+        registered = self._registered_worktree_path()
+        if registered is not None:
+            if registered.resolve() != self._worktree_path.resolve():
+                print(
+                    f"  ERROR: branch '{self._branch}'가 이미 다른 워크트리에 attach되어 있습니다: {registered}\n"
+                    "  Hint: 기존 워크트리를 정리하거나 다른 phase 이름을 사용하세요.",
+                    file=sys.stderr,
+                )
+                sys.exit(EXIT_ERR)
+            if not registered.exists():
+                print(
+                    f"  ERROR: 워크트리가 등록되어 있으나 디렉토리가 없습니다 (stale): {registered}\n"
+                    "  Hint: 메인 repo에서 `git worktree prune` 후 재실행하세요.",
+                    file=sys.stderr,
+                )
+                sys.exit(EXIT_ERR)
+            _qprint(f"  Worktree: {self._worktree_path} (재사용)")
+            return self._worktree_path
+
+        if self._worktree_path.exists():
+            print(
+                f"  ERROR: 디렉토리는 존재하지만 워크트리로 등록되지 않았습니다: {self._worktree_path}\n"
+                "  Hint: 수동으로 디렉토리를 삭제하거나 `git worktree prune` 후 재시도하세요.",
+                file=sys.stderr,
+            )
+            sys.exit(EXIT_ERR)
+
+        self._worktree_path.parent.mkdir(parents=True, exist_ok=True)
+
+        if self._branch_exists():
+            r = self._git("worktree", "add", str(self._worktree_path), self._branch)
+        else:
+            r = self._git("worktree", "add", "-b", self._branch, str(self._worktree_path))
+        if r.returncode != 0:
+            print(
+                f"  ERROR: 워크트리 생성 실패 ({self._worktree_path}).\n"
+                f"  {r.stderr.strip()}",
+                file=sys.stderr,
+            )
+            sys.exit(EXIT_ERR)
+        _qprint(f"  Worktree: {self._worktree_path} (생성, branch={self._branch})")
+        return self._worktree_path
+
+    def _branch_exists(self) -> bool:
+        return self._git("rev-parse", "--verify", "--quiet", self._branch).returncode == 0
+
+    def _registered_worktree_path(self) -> Optional[Path]:
+        r = self._git("worktree", "list", "--porcelain")
+        if r.returncode != 0:
+            return None
+        current_path: Optional[Path] = None
+        target_ref = f"refs/heads/{self._branch}"
+        for line in r.stdout.splitlines():
+            if line.startswith("worktree "):
+                current_path = Path(line[len("worktree ") :])
+            elif line.startswith("branch ") and current_path is not None:
+                if line[len("branch ") :].strip() == target_ref:
+                    return current_path
+        return None
+
+    def _git(self, *args) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            ["git"] + list(args),
+            cwd=self._main_root,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+
+
+# ============================================================================
+# GitOperations — 2단계 commit (워크트리 컨텍스트에서 동작)
 # ============================================================================
 class GitOperations:
-    """git 작업의 단일 boundary. branch checkout, dirty-tree 검사, two-step commit."""
+    """git 작업의 단일 boundary. dirty-tree 검사, two-step commit. cwd는 워크트리 root."""
 
     def __init__(self, cwd: Path, *, force: bool):
         self._cwd = cwd
         self._force = force
-
-    def ensure_branch(self, branch: str) -> None:
-        r = self._run("rev-parse", "--abbrev-ref", "HEAD")
-        if r.returncode != 0:
-            print("  ERROR: git을 사용할 수 없거나 git repo가 아닙니다.")
-            print(f"  {r.stderr.strip()}")
-            sys.exit(EXIT_ERR)
-        if r.stdout.strip() == branch:
-            return
-        verify = self._run("rev-parse", "--verify", branch)
-        if verify.returncode == 0:
-            status = self._run("status", "--porcelain")
-            if status.returncode == 0 and status.stdout.strip() and not self._force:
-                print(
-                    "  ERROR: 작업 트리에 변경사항이 있습니다.\n"
-                    "  git stash 하거나 commit한 후 다시 시도하세요. 또는 --force로 우회할 수 있습니다.",
-                    file=sys.stderr,
-                )
-                sys.exit(EXIT_ERR)
-            r = self._run("checkout", branch)
-        else:
-            r = self._run("checkout", "-b", branch)
-        if r.returncode != 0:
-            print(f"  ERROR: 브랜치 '{branch}' checkout 실패.")
-            print(f"  {r.stderr.strip()}")
-            print("  Hint: 변경사항을 stash하거나 commit한 후 다시 시도하세요.")
-            sys.exit(EXIT_ERR)
-        _qprint(f"  Branch: {branch}")
 
     def two_step_commit(self, *, feat_msg: str, chore_msg: str, reset_paths: list[str]) -> None:
         self._run("add", "-A")
@@ -1880,14 +1954,21 @@ class ForgeScope:
 
     def __init__(self, args: argparse.Namespace):
         self._args = args
-        self._cfg = PhaseConfig(args.phase_dir)
-        self._validator = DocsScopeValidator(self._cfg.root)
+        # phase 시작 시 .worktrees/<phase>/ 격리 워크트리를 보장한다. 이후 모든
+        # 컴포넌트(PhaseConfig·GitOperations·GuardrailLoader·ClaudeInvoker)는
+        # 메인 repo가 아닌 워크트리 root를 기준으로 동작한다.
+        self._wt = WorktreeManager(ROOT, args.phase_dir, force=args.force)
+        worktree_root = self._wt.ensure()
+        self._verify_worktree_bootstrap(worktree_root, args.phase_dir)
+        self._cfg = PhaseConfig(args.phase_dir, root=worktree_root)
+        self._validator = DocsScopeValidator(worktree_root)
         trust = _is_trusted(args.trust)
         # invoker 2종 분리:
         # - splitter_invoker: 일회성 strict-JSON 호출. 세션 미공유.
         # - step_invoker: phase 단위 UUID로 세션 공유. step 0 첫 호출 시 가드레일이
         #   conversation에 캐시되고, step 1+에서 -r로 이어 받아 cache_read 적중.
-        self._splitter_invoker = ClaudeInvoker(trust=trust, use_bare=True)
+        # cwd=worktree_root 명시로 자식 claude가 워크트리에서 파일 I/O 수행.
+        self._splitter_invoker = ClaudeInvoker(trust=trust, use_bare=True, cwd=worktree_root)
         self._phase_session_id = str(uuid.uuid4())
         # step 실행은 명세된 step.md를 따라 코드 작성하는 작업이라 Sonnet 4.6으로 충분.
         # Opus 대비 약 1/5 단가. splitter는 전체 설계 정확성이 필요하므로 Opus 유지.
@@ -1898,6 +1979,7 @@ class ForgeScope:
             use_session=True,
             use_bare=True,
             model=step_model,
+            cwd=worktree_root,
         )
         compact_docs = (
             bool(getattr(args, "compact_docs", False))
@@ -1913,6 +1995,34 @@ class ForgeScope:
         self._git = GitOperations(self._cfg.root, force=args.force)
         self._splitter: Optional[StepSplitter] = None  # lazy
 
+    @staticmethod
+    def _verify_worktree_bootstrap(worktree_root: Path, phase_dir: str) -> None:
+        """워크트리에 필수 부트스트랩 파일이 commit돼 있는지 확인.
+
+        메인 repo에서 부트스트랩 파일을 commit하지 않고 forge-scope를 호출하면
+        워크트리는 생성되지만 CLAUDE.md/Docs/_templates가 워크트리에 없어
+        가드레일이 비어버린다. fail-fast로 사용자에게 commit 단계를 강제한다.
+        """
+        required = ["CLAUDE.md"]
+        missing = [rel for rel in required if not (worktree_root / rel).exists()]
+        if not missing:
+            return
+        print(
+            "ERROR: 워크트리에 필수 부트스트랩 파일이 없습니다.\n"
+            "       메인 repo에서 부트스트랩 산출물을 commit하지 않은 채 워크트리를 생성한 것으로 보입니다.\n"
+            f"  워크트리: {worktree_root}\n"
+            f"  누락:    {', '.join(missing)}\n"
+            "\n"
+            "  복구 절차 (메인 repo에서 실행):\n"
+            f"    python scripts/forge_cancel.py {phase_dir} --yes\n"
+            "    git add scripts/forge_full.py scripts/forge_scope.py scripts/forge_cancel.py \\\n"
+            "            CLAUDE.md PHASE_SCHEMA.md FORGE_SCOPE.md Docs/_templates/ .gitignore\n"
+            "    git commit -m 'chore: bootstrap forge-scope'\n"
+            "    # 이후 forge-scope 재실행",
+            file=sys.stderr,
+        )
+        sys.exit(EXIT_ERR)
+
     def run(self) -> int:
         self._check_external_dirty()
         self._check_frd_consistency()
@@ -1927,7 +2037,7 @@ class ForgeScope:
 
         self._print_header(phase_name, total)
         self._check_blockers(store)
-        self._git.ensure_branch(f"feat-{phase_name}")
+        # 브랜치/작업 트리는 ForgeScope.__init__의 WorktreeManager가 이미 보장함.
         self._warmup_dotnet()
         try:
             guardrails = self._guardrail_loader.load(store.get_docs_scope())
@@ -2065,11 +2175,11 @@ class ForgeScope:
         _qprint(f"{'=' * 60}")
 
     def _check_external_dirty(self) -> None:
-        """Phase 시작 전 작업 트리에 무관 변경이 있으면 중단.
+        """Phase 시작 전 워크트리에 무관 변경이 있으면 중단.
 
-        step commit이 무관 WIP 파일을 흡수해 phase 산출물에 섞이는 사고를 차단한다.
-        --force가 설정되면 우회. 같은 forge_scope.py invocation 내에서 emit이 만든
-        phase 파일은 본 가드 이후에 생성되므로 영향이 없다.
+        워크트리 재실행 시 사용자가 수동으로 변경한 미커밋 파일이 step commit에
+        흡수되어 phase 산출물에 섞이는 사고를 차단한다. 메인 repo의 dirty는
+        영향 없음(워크트리는 독립 working tree). --force로 우회 가능.
         """
         if self._args.force:
             return
@@ -2084,10 +2194,11 @@ class ForgeScope:
         if result.returncode != 0 or not result.stdout.strip():
             return
         print(
-            "ERROR: 작업 트리에 commit되지 않은 변경이 있습니다.\n"
+            "ERROR: 워크트리에 commit되지 않은 변경이 있습니다.\n"
             "       step commit이 이를 흡수해 phase 산출물에 무관 파일이 섞일 수 있습니다.\n"
+            f"       워크트리: {self._cfg.root}\n"
             "       다음 중 하나를 선택하세요:\n"
-            "         1) git stash 또는 commit 후 재실행\n"
+            "         1) 워크트리에서 git stash 또는 commit 후 재실행\n"
             "         2) --force 로 우회 (의도된 흡수 — 권장하지 않음)\n"
             "       현재 dirty 파일:",
             file=sys.stderr,

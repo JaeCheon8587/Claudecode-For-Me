@@ -135,7 +135,7 @@ harness_framework의 phase runner 3종이 플러그인에 내장되어 있다.
 
 | 커맨드 | 실행 명령 | 설명 |
 |---|---|---|
-| forge-scope | `/claudecode-for-me:forge-scope <prompt>` | 경량 scoped phase. 단일 FRD·기능·버그픽스. **일반 사용 권장** |
+| forge-scope | `/claudecode-for-me:forge-scope <prompt>` | 경량 scoped phase. 단일 FRD·기능·버그픽스. `.worktrees/<phase>/` 격리 실행. **일반 사용 권장** |
 | forge-full | `/claudecode-for-me:forge-full <phase-dir> [options]` | 문서 기반 full phase. 전체 프로젝트 구현 |
 | forge-cancel | `/claudecode-for-me:forge-cancel <phase-dir> [--kind full\|scoped]` | 진행 중인 phase 취소 및 정리 |
 

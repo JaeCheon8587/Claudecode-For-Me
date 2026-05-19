@@ -63,9 +63,22 @@ python --version 2>&1 || py -3 --version 2>&1
 
 부트스트랩 완료 후 복사된 파일 목록과 skip된 파일 목록을 사용자에게 한 번 출력한다.
 
+### 단계 2b — 부트스트랩 산출물 commit (필수)
+
+부트스트랩으로 신규 파일이 복사되었다면 **워크트리 생성 전에 메인 repo에 commit**한다.
+워크트리는 현재 HEAD 기준으로 생성되므로 untracked 상태의 부트스트랩 파일은 워크트리에 존재하지 않아 step 실행이 실패한다.
+
+```bash
+git add scripts/forge_full.py scripts/forge_scope.py scripts/forge_cancel.py \
+        CLAUDE.md PHASE_SCHEMA.md FORGE_SCOPE.md Docs/_templates/ .gitignore
+git commit -m "chore: bootstrap forge-scope"
+```
+
+복사된 파일이 0개(이미 모두 존재)면 이 단계는 생략한다.
+
 ---
 
-## 단계 3 — Git repo 확인
+## 단계 3 — Git repo 확인 + 워크트리 동작 안내
 
 ```bash
 git rev-parse --is-inside-work-tree 2>/dev/null
@@ -75,9 +88,27 @@ git rev-parse --is-inside-work-tree 2>/dev/null
 
 ```
 [forge-scope] 현재 디렉토리가 git repository가 아닙니다.
-forge_scope.py의 브랜치 자동 생성(feat-<phase>) 및 커밋 기능이 실패할 수 있습니다.
-계속 진행하려면 먼저 'git init && git commit -m "init"' 을 실행하세요.
+forge_scope.py는 git worktree 기반으로 동작하므로 git repo 없이는 실행 불가능합니다.
+'git init && git commit -m "init"' 으로 git을 초기화한 뒤 다시 시도하세요.
 (경고만이며 스크립트는 계속 진행합니다)
+```
+
+### 워크트리 동작 요약
+
+`forge_scope.py`는 phase 시작 시 메인 repo 안 `.worktrees/<phase-dir>/` 경로에 git worktree를 생성하고 branch `feat-<phase-dir>`에 attach한다. 다음이 모두 워크트리 안에서 발생한다:
+
+- `phases/scoped/<phase-dir>/index.json` 및 `step{N}.md`
+- step 실행으로 작성·수정되는 코드
+- 모든 `git commit`
+
+**메인 repo의 작업 트리는 영향을 받지 않는다.** 부모 Claude Code 세션은 메인 repo에 머문다. 완료 후 결과 확인·머지는 워크트리(`.worktrees/<phase-dir>/`)로 이동하거나, 메인에서 `git diff feat-<phase-dir>` / `git merge feat-<phase-dir>`로 수행한다.
+
+워크트리는 phase 완료 후에도 유지된다. 정리는 사용자가 명시적으로 수행한다:
+
+```bash
+python scripts/forge_cancel.py <phase-dir> --yes   # 워크트리 + 브랜치 동시 제거
+# 또는
+git worktree remove .worktrees/<phase-dir> && git branch -D feat-<phase-dir>
 ```
 
 ---
@@ -134,7 +165,13 @@ python ./scripts/forge_scope.py <phase-dir> --trust --yes --quiet \
 ### 실행 패턴
 
 `forge-scope`는 수 분~수십 분이 소요될 수 있으므로 **`run_in_background=true`** 로 호출하고 즉시 turn을 종료한다.
-완료 알림이 도착하면 `phases/scoped/<phase-dir>/index.json` 을 1회 read하여 최종 상태를 사용자에게 보고한다.
+완료 알림이 도착하면 `.worktrees/<phase-dir>/phases/scoped/<phase-dir>/index.json` 을 1회 read하여 최종 상태를 사용자에게 보고한다. (메인 repo의 `phases/scoped/` 에는 산출물이 존재하지 않는다 — 워크트리 안에만 있다.)
+
+완료 보고 시 다음 경로를 사용자에게 명시한다:
+
+- 워크트리: `.worktrees/<phase-dir>/`
+- 브랜치: `feat-<phase-dir>`
+- index: `.worktrees/<phase-dir>/phases/scoped/<phase-dir>/index.json`
 
 **필수 금지** (부모 세션 토큰 절감):
 - `Monitor` 사용 금지
@@ -161,7 +198,7 @@ python ./scripts/forge_scope.py <phase-dir> --trust --yes --quiet \
 | `--compact-docs` | 가드레일 문서를 핵심 섹션만 압축 주입. |
 | `--yes` | plan 자동 승인. Claude Code spawn 시 항상 포함. |
 | `--quiet` | 진행 표시기 억제. Claude Code spawn 시 항상 포함. |
-| `--force` | dirty worktree 검사 우회. |
+| `--force` | 워크트리 dirty 검사 우회 (재실행 시 워크트리 안 수동 변경 흡수 허용). |
 | `--push` | 실행 후 원격 push. |
 | `--strict` | placeholder 패턴 발견 시 실패. |
 | `--step-model` | step 실행 모델. 기본 `claude-sonnet-4-6`. |
