@@ -149,7 +149,7 @@ App 코드 후보는 [`/CLAUDE.md` Backend Services Overview](../CLAUDE.md) 표�
 | Presentation | **금지** | **허용** | **허용** | **허용** | **허용** |
 | Shared/Cross-Cutting | **금지** | **금지** | **금지** | **금지** | **허용** |
 
-> 도메인이 특정 Cross-Cutting 모듈(예: UI 추상화·통신 추상화)에 의존하지 않아야 한다면 본 절에 예외를 명시하고 **반드시** 영향 App 의 ARD (`Docs/{App}/ARD/{App}-ARD-{NNN}.md`) 를 인용한다. ARD 미존재 시 신규 ARD 등재 후 본 절에 인용. 카탈로그 갱신은 `Docs/{App}/{App}-ARD-CATALOG.md`.
+> 도메인이 특정 Cross-Cutting 모듈(예: UI 추상화·통신 추상화)에 의존하지 않아야 한다면 본 절에 예외를 명시하고 **반드시** 영향 App 의 ADR (`Docs/{App}/ADR/{App}-ADR-{NNN}.md`) 를 인용한다. ADR 미존재 시 신규 ADR 등재 후 본 절에 인용. 카탈로그 갱신은 `Docs/{App}/{App}-ADR-CATALOG.md`.
 
 ## 7. 프로젝트 매핑 규칙
 

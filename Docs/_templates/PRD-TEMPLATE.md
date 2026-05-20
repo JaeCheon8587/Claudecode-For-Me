@@ -96,7 +96,7 @@
 
 ## 10. 제약사항 (솔루션 공통)
 > 코드/레이어 제약은 [`DDD_ARCHITECTURE_RULES.md`](DDD_ARCHITECTURE_RULES.md) / [`OBJECT_ORIENTED_DESIGN_RULES.md`](OBJECT_ORIENTED_DESIGN_RULES.md) SSOT 인용. 본 절은 product/도메인 제약 + 룰 파일 인용만.
-> 솔루션 level architecture 결정은 App ARD 가 SSOT — cross-app 영향 ARD 는 영향 App 중 하나의 [`Docs/{App}/ARD/{App}-ARD-{NNN}.md`]({App}/ARD/{App}-ARD-{NNN}.md) 본문 인용.
+> 솔루션 level architecture 결정은 App ADR 가 SSOT — cross-app 영향 ADR 는 영향 App 중 하나의 [`Docs/{App}/ADR/{App}-ADR-{NNN}.md`]({App}/ADR/{App}-ADR-{NNN}.md) 본문 인용.
 
 - {도메인 제약 1 — cross-app 적용}
 - {기술 제약 — DDD/레이어 룰 인용}
@@ -147,7 +147,7 @@ stateDiagram-v2
 ### {Entity1} 엔티티
 | 속성 | 타입 | 제약 | 출처 |
 |---|---|---|---|
-| `{prop}` | {type} | {제약} | {요구사항 §X 또는 [{App}-ARD-{NNN}]({App}/ARD/{App}-ARD-{NNN}.md)} |
+| `{prop}` | {type} | {제약} | {요구사항 §X 또는 [{App}-ADR-{NNN}]({App}/ADR/{App}-ADR-{NNN}.md)} |
 
 > **불변식**: {도메인 규칙 한 줄씩}
 

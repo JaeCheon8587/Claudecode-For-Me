@@ -9,7 +9,7 @@
 | 문서 ID | {App}-FC |
 | 버전 | {예: 0.1 (Draft)} |
 | 작성 가정 | {본 카탈로그 작성 시 깔린 가정} |
-| 관련 문서 | [{App}-PRD]({App}-PRD.md) · [{App}-ARCHITECTURE]({App}-ARCHITECTURE.md) · [{App}-ARD-CATALOG]({App}-ARD-CATALOG.md) · [FRD 폴더](FRD/) · [솔루션 PRD](../PRD.md) (있을 시) · [/CLAUDE.md](../../CLAUDE.md) |
+| 관련 문서 | [{App}-PRD]({App}-PRD.md) · [{App}-ARCHITECTURE]({App}-ARCHITECTURE.md) · [{App}-ADR-CATALOG]({App}-ADR-CATALOG.md) · [FRD 폴더](FRD/) · [솔루션 PRD](../PRD.md) (있을 시) · [/CLAUDE.md](../../CLAUDE.md) |
 
 ## 변경 이력
 | 버전 | 일자 | 변경 요약 | 작성자 |
@@ -63,7 +63,7 @@
 
 | 기능 ID | 작업 유형 | 사용자 영향 | 문서 영향 | 완료 기준 |
 |---|---|---|---|---|
-| F001 | 신규 / 변경 / 버그수정 / 리팩터링 | {사용자에게 보이는 변화 또는 없음} | FC / FRD / ARD / ARD-CATALOG | [{App}-FRD-001 §17](FRD/{App}-FRD-001.md#17-수용-기준) |
+| F001 | 신규 / 변경 / 버그수정 / 리팩터링 | {사용자에게 보이는 변화 또는 없음} | FC / FRD / ADR / ADR-CATALOG | [{App}-FRD-001 §17](FRD/{App}-FRD-001.md#17-수용-기준) |
 
 ### 타 App 협력 흐름
 > 본 App 의 기능이 타 App 기능과 협력할 때 등재. cross-cutting 시나리오(예: Client F001 로그인 → APIGW F003 라우팅 → MASTER F005 토큰 발급) 추적용. 협력이 없으면 "본 App 은 외부 App 과의 직접 협력이 없다" 한 줄로 마감.

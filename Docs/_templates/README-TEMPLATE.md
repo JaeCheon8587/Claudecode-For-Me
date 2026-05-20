@@ -51,7 +51,7 @@
 | App 기능 레지스트리 | [`Docs/{SYSTEM_CODE}/{SYSTEM_CODE}-FC.md`](Docs/{SYSTEM_CODE}/{SYSTEM_CODE}-FC.md) |
 | App 기능별 상세 | [`Docs/{SYSTEM_CODE}/FRD/`](Docs/{SYSTEM_CODE}/FRD/) |
 | App AI 실행용 작업 지시서 (휘발성) | [`Docs/{SYSTEM_CODE}/TASK/`](Docs/{SYSTEM_CODE}/TASK/) |
-| App 결정 이력 | [`Docs/{SYSTEM_CODE}/{SYSTEM_CODE}-ARD-CATALOG.md`](Docs/{SYSTEM_CODE}/{SYSTEM_CODE}-ARD-CATALOG.md) |
+| App 결정 이력 | [`Docs/{SYSTEM_CODE}/{SYSTEM_CODE}-ADR-CATALOG.md`](Docs/{SYSTEM_CODE}/{SYSTEM_CODE}-ADR-CATALOG.md) |
 | 코드 레이어 규칙 | [`Docs/ARCHITECTURE.md`](Docs/ARCHITECTURE.md) |
 
 > AI 에이전트(Claude Code 등)로 작업 시: 레포 루트 [`CLAUDE.md`](CLAUDE.md)를 참조한다.

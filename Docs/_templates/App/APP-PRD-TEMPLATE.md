@@ -9,7 +9,7 @@
 | 문서 ID | {App}-PRD |
 | 버전 | {예: 0.1 (Draft)} |
 | 작성 가정 | {본 App 의 솔루션 내 도입 사유 / 본 문서 작성 시 깔린 가정} |
-| 관련 문서 | [솔루션 PRD](../PRD.md) (있을 시) · [{App}-FC]({App}-FC.md) · [{App}-ARCHITECTURE]({App}-ARCHITECTURE.md) · [{App}-ARD-CATALOG]({App}-ARD-CATALOG.md) · [/CLAUDE.md](../../CLAUDE.md) |
+| 관련 문서 | [솔루션 PRD](../PRD.md) (있을 시) · [{App}-FC]({App}-FC.md) · [{App}-ARCHITECTURE]({App}-ARCHITECTURE.md) · [{App}-ADR-CATALOG]({App}-ADR-CATALOG.md) · [/CLAUDE.md](../../CLAUDE.md) |
 
 ## 변경 이력
 | 버전 | 일자 | 변경 요약 | 작성자 |
@@ -76,10 +76,10 @@
 | {App 특화 분류} | {본 App 한정 요구사항} |
 
 ## 9. 제약사항 (App 특화)
-> 솔루션 공통 제약은 [`../PRD.md` §10](../PRD.md#10-제약사항-솔루션-공통) 인용 (있을 시). 본 절은 본 App 특화 제약만. ARD 결정은 [`{App}-ARD-CATALOG`]({App}-ARD-CATALOG.md) 본문 인용.
+> 솔루션 공통 제약은 [`../PRD.md` §10](../PRD.md#10-제약사항-솔루션-공통) 인용 (있을 시). 본 절은 본 App 특화 제약만. ADR 결정은 [`{App}-ADR-CATALOG`]({App}-ADR-CATALOG.md) 본문 인용.
 
 - {본 App 한정 도메인 제약}
-- {ARD 결정 인용 — [`{App}-ARD-{NNN}`](ARD/{App}-ARD-{NNN}.md)}
+- {ADR 결정 인용 — [`{App}-ADR-{NNN}`](ADR/{App}-ADR-{NNN}.md)}
 
 ## 10. Feature Catalog / FRD 진입점
 > 본 App 의 FC + 주요 FRD 진입점. 전체 FRD 인덱스는 [`{App}-FC.md` § 문서 연결]({App}-FC.md) SSOT.

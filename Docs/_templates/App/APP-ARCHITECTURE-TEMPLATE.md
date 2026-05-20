@@ -9,7 +9,7 @@
 | 버전 | {예: 0.1 (Draft)} |
 | App 코드 | {App} |
 | 작성 가정 | 솔루션 공통 룰 ([../ARCHITECTURE.md](../ARCHITECTURE.md)) 준수. 본 문서는 App 호스트 특이 사항만 |
-| 관련 문서 | [솔루션 ARCHITECTURE](../ARCHITECTURE.md) · [{App}-PRD]({App}-PRD.md) · [{App}-FC]({App}-FC.md) · [{App}-ARD-CATALOG]({App}-ARD-CATALOG.md) · [FRD 폴더](FRD/) · [/CLAUDE.md](../../CLAUDE.md) |
+| 관련 문서 | [솔루션 ARCHITECTURE](../ARCHITECTURE.md) · [{App}-PRD]({App}-PRD.md) · [{App}-FC]({App}-FC.md) · [{App}-ADR-CATALOG]({App}-ADR-CATALOG.md) · [FRD 폴더](FRD/) · [/CLAUDE.md](../../CLAUDE.md) |
 
 ## 변경 이력
 | 버전 | 일자 | 변경 요약 | 작성자 |

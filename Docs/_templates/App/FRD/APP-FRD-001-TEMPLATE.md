@@ -12,7 +12,7 @@
 | 기능 ID | F{NNN} |
 | 상태 | Draft / Ready / In Progress / Done / Dropped |
 | 작성 가정 | {본 기능 정의 시 깔린 가정} |
-| 관련 문서 | [{App}-PRD](../{App}-PRD.md) · [{App}-FC](../{App}-FC.md) · [{App}-ARCHITECTURE](../{App}-ARCHITECTURE.md) · [{App}-ARD-CATALOG](../{App}-ARD-CATALOG.md) |
+| 관련 문서 | [{App}-PRD](../{App}-PRD.md) · [{App}-FC](../{App}-FC.md) · [{App}-ARCHITECTURE](../{App}-ARCHITECTURE.md) · [{App}-ADR-CATALOG](../{App}-ADR-CATALOG.md) |
 
 ## 변경 이력
 | 버전 | 일자 | 변경 요약 | 작성자 |
@@ -105,12 +105,12 @@
 | 외부 연계 | 없음 또는 {외부 시스템·타 App 협력의 의미} |
 | 운영 | 없음 또는 {운영자가 확인해야 하는 상태·절차} |
 
-## 16. FC / ARD-CATALOG / ARD 반영 여부
+## 16. FC / ADR-CATALOG / ADR 반영 여부
 | 문서 | 반영 여부 | 반영 내용 | 비고 |
 |---|---|---|---|
 | FC | 필요 / 불필요 | {기능 설명·상태·추적 정보 변경 여부} | 없음 또는 {비고} |
-| ARD | 필요 / 불필요 | {신규 결정 또는 기존 결정 수정 여부} | 없음 또는 {비고} |
-| ARD-CATALOG | 필요 / 불필요 | {ARD 상태·영향 범위·반영 문서 갱신 여부} | 없음 또는 {비고} |
+| ADR | 필요 / 불필요 | {신규 결정 또는 기존 결정 수정 여부} | 없음 또는 {비고} |
+| ADR-CATALOG | 필요 / 불필요 | {ADR 상태·영향 범위·반영 문서 갱신 여부} | 없음 또는 {비고} |
 
 ## 17. 수용 기준
 | ID | 기준 | 확인 방법 |
@@ -125,9 +125,9 @@
 ## 19. 요구 근거
 - [{App}-FC F{NNN} 행](../{App}-FC.md)
 - [{App}-PRD](../{App}-PRD.md)
-- 없음 또는 {요구사항 원본 / 회의 결정 / 운영 요청 / 관련 ARD}
+- 없음 또는 {요구사항 원본 / 회의 결정 / 운영 요청 / 관련 ADR}
 
 ## 20. 미확인 사항
 | ID | 항목 | 영향 | 결정 필요자 | 결정 기한 | 상태 |
 |---|---|---|---|---|---|
-| Q-F{NNN}-001 | 없음 또는 {결정 보류 항목. 결정되면 ARD로 등재 후 본 절에 인용} | {기능 영향} | {담당자 / PO / 개발 리드} | YYYY-MM-DD | Open / Resolved |
+| Q-F{NNN}-001 | 없음 또는 {결정 보류 항목. 결정되면 ADR로 등재 후 본 절에 인용} | {기능 영향} | {담당자 / PO / 개발 리드} | YYYY-MM-DD | Open / Resolved |
