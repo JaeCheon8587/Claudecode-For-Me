@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v1.14.0 · 커스텀 스킬 8종 + 슬래시 커맨드 10종 모음
+> **Claude Code Plugin** · v1.14.0 · 커스텀 스킬 9종 + 슬래시 커맨드 10종 모음
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 브랜치 리뷰 → 커밋)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -16,7 +16,7 @@
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
 | 네임스페이스 | `/claudecode-for-me:<name>` |
-| 구성요소 | Skill 8 · Command 10 · Python runner 4 (`scripts/`) |
+| 구성요소 | Skill 9 · Command 10 · Python runner 4 (`scripts/`) |
 
 플러그인은 **글로벌 캐시**에 설치되므로 한 번 설치 후 모든 프로젝트의 **새 세션**에서 자동 노출된다. 프로젝트별 재설치 불필요.
 
@@ -64,7 +64,7 @@
 
 ## 5. 플러그인 구성요소
 
-### Skill 8종
+### Skill 9종
 
 | Skill | 슬래시 커맨드 | 역할 |
 |---|---|---|
