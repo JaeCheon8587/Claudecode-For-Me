@@ -61,6 +61,59 @@ TZ = timezone(timedelta(hours=9))
 EXIT_OK, EXIT_ERR, EXIT_BLOCKED, EXIT_KBI = 0, 1, 2, 130
 VALID_PRESETS = frozenset({"auto", "frd-implementation", "contract-tdd"})
 
+
+class SlnResolveError(RuntimeError):
+    """sln 경로 해석 실패 (다수/부재 등)."""
+
+
+def resolve_sln_path(
+    arg_sln: str | None,
+    root: Path,
+    *,
+    strict: bool,
+) -> Path | None:
+    """contract-tdd 등에서 사용할 sln 경로 결정.
+
+    우선순위:
+    1. arg_sln 명시 → root 기준 해당 경로 (존재 검증, 없으면 SlnResolveError)
+    2. 미지정 → Src/*.sln (1단계) glob. 없으면 Src/*/*.sln (2단계).
+       - 1개 = 자동 채택
+       - 0개 = None (strict=False) 또는 SlnResolveError (strict=True)
+       - 다수 = 후보 목록과 함께 SlnResolveError (strict 무관: 다수는 항상 명시 강제)
+    """
+    if arg_sln:
+        p = (root / arg_sln).resolve()
+        if not p.is_file():
+            raise SlnResolveError(f"--sln 경로 없음: {arg_sln}")
+        try:
+            p.relative_to(root.resolve())
+        except ValueError as e:
+            raise SlnResolveError(
+                f"--sln 은 repo root({root}) 하위여야 합니다: {arg_sln}"
+            ) from e
+        return p
+    src_dir = root / "Src"
+    if not src_dir.is_dir():
+        if strict:
+            raise SlnResolveError("Src/ 디렉터리 부재. --sln 명시 필요.")
+        return None
+    candidates: list[Path] = sorted(src_dir.glob("*.sln"))
+    if not candidates:
+        candidates = sorted(src_dir.glob("*/*.sln"))
+    if len(candidates) == 1:
+        return candidates[0]
+    if len(candidates) == 0:
+        if strict:
+            raise SlnResolveError(
+                "Src/*.sln / Src/*/*.sln 모두 부재. --sln 명시 필요."
+            )
+        return None
+    rels = [c.relative_to(root).as_posix() for c in candidates]
+    raise SlnResolveError(
+        "Src/ 하위 다수 sln 발견 — --sln 명시 필요.\n  후보:\n"
+        + "\n".join(f"    - {r}" for r in rels)
+    )
+
 COMPACT_DOC_HEADINGS = (
     "## 1. 기능 개요",
     "## 4. 기본 흐름",
@@ -1326,9 +1379,10 @@ class DeterministicPlanBuilder:
     호출을 완전히 제거한다.
     """
 
-    def __init__(self, cfg: PhaseConfig, *, preset: str):
+    def __init__(self, cfg: PhaseConfig, *, preset: str, sln_path: Path | None = None):
         self._cfg = cfg
         self._preset = preset
+        self._sln_path = sln_path
 
     def build(self, user_prompts: list[str], doc_paths: list[Path]) -> dict:
         if self._preset == "contract-tdd":
@@ -1504,11 +1558,17 @@ class DeterministicPlanBuilder:
     def _doc_lines(docs_scope: list[str]) -> list[str]:
         return [f"- `{d}`" for d in docs_scope]
 
-    _SOLUTION_PATH = "Src/OrderManagingSystem.sln"
+    def _solution_path_rel(self) -> str:
+        """contract-tdd 가 사용할 sln 경로 (repo root 기준 posix)."""
+        if self._sln_path is None:
+            raise RuntimeError(
+                "contract-tdd preset 는 sln 이 필요합니다. "
+                "--sln=<path> 명시 또는 Src/ 에 단일 sln 배치 필요."
+            )
+        return self._sln_path.relative_to(self._cfg.root).as_posix()
 
-    @staticmethod
-    def _solution_build_command() -> str:
-        return f"dotnet build {DeterministicPlanBuilder._SOLUTION_PATH} --no-restore"
+    def _solution_build_command(self) -> str:
+        return f"dotnet build {self._solution_path_rel()} --no-restore"
 
     def _test_target(self) -> str:
         """테스트 빌드 타깃: 가장 작은 유효 범위를 자동 선택.
@@ -1520,12 +1580,12 @@ class DeterministicPlanBuilder:
         test_projects = sorted(self._cfg.root.glob("Src/Tests/**/*.csproj"))
         if len(test_projects) == 1:
             return test_projects[0].relative_to(self._cfg.root).as_posix()
-        return self._SOLUTION_PATH
+        return self._solution_path_rel()
 
     def _solution_test_command(self, *, with_filter: bool) -> str:
         # filter 있는 step(1, 2)은 좁은 테스트 타깃으로 빌드 스코프 축소.
         # filter 없는 step(3, 회귀)은 전체 sln 강제 — 미참조 프로젝트 회귀까지 잡는다.
-        target = self._test_target() if with_filter else self._SOLUTION_PATH
+        target = self._test_target() if with_filter else self._solution_path_rel()
         base = f"dotnet test {target} --no-restore"
         if with_filter:
             return base + ' --filter "<feature-specific-filter>"'
@@ -2107,9 +2167,21 @@ class ForgeScope:
             sys.exit(EXIT_ERR)
         if self._uses_deterministic_plan():
             preset = getattr(self._args, "preset", "auto")
+            sln_path: Path | None = None
+            if preset == "contract-tdd":
+                try:
+                    sln_path = resolve_sln_path(
+                        getattr(self._args, "sln", None),
+                        self._cfg.root,
+                        strict=True,
+                    )
+                except SlnResolveError as e:
+                    print(f"ERROR: {e}", file=sys.stderr)
+                    sys.exit(EXIT_ERR)
             builder = DeterministicPlanBuilder(
                 self._cfg,
                 preset=preset if preset != "auto" else "single-step",
+                sln_path=sln_path,
             )
             plan = builder.build(prompts, doc_paths)
             splitter._validate_plan(plan)
@@ -2268,12 +2340,20 @@ class ForgeScope:
         """첫 step의 NuGet restore + Roslyn warmup 비용을 사전에 한 번에 끝낸다.
 
         contract-tdd 4-step에서 step 0가 cold start로 14분 이상 걸리는 회귀 사례 차단.
-        sln이 없으면 silent skip(다른 프로젝트 호환). restore 실패는 fatal 아님.
+        sln이 없거나 다수면 silent skip(다른 프로젝트 호환). restore 실패는 fatal 아님.
         """
-        sln = self._cfg.root / "Src" / "OrderManagingSystem.sln"
-        if not sln.exists():
+        try:
+            sln = resolve_sln_path(
+                getattr(self._args, "sln", None),
+                self._cfg.root,
+                strict=False,
+            )
+        except SlnResolveError:
             return
-        _qprint("  Warmup: dotnet restore Src/OrderManagingSystem.sln")
+        if sln is None:
+            return
+        rel = sln.relative_to(self._cfg.root).as_posix()
+        _qprint(f"  Warmup: dotnet restore {rel}")
         try:
             result = subprocess.run(
                 ["dotnet", "restore", str(sln)],
@@ -2442,6 +2522,15 @@ def _build_parser() -> argparse.ArgumentParser:
             "초기 step 생성 방식. auto=Claude splitter 사용, "
             "frd-implementation=문서 1개로 splitter 없이 단일 구현 step 생성, "
             "contract-tdd=문서 1개로 contract/red/green/regression 4-step 생성."
+        ),
+    )
+    parser.add_argument(
+        "--sln",
+        default=None,
+        help=(
+            "contract-tdd 가 사용할 .sln 경로 (repo root 기준). "
+            "미지정 시 Src/*.sln (1단계) 또는 Src/*/*.sln (2단계) auto-detect. "
+            "다수 발견 시 명시 필요."
         ),
     )
     parser.add_argument(
