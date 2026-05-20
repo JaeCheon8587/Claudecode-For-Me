@@ -193,7 +193,8 @@ python ./scripts/forge_scope.py <phase-dir> --trust --yes --quiet \
 |---|---|
 | `--preset=frd-implementation` | FRD 단건 구현. splitter 없이 single step. 기본 권장. |
 | `--preset=auto` | auto-splitter. 여러 레이어 분해가 필요할 때만 사용. |
-| `--preset=contract-tdd` | **OMS 샘플 전용** — `Src/OrderManagingSystem.sln` 하드코딩. 일반 프로젝트 사용 불가. |
+| `--preset=contract-tdd` | 문서 1개로 contract/red/green/regression 4-step 생성. `--sln` 명시 또는 `Src/*.sln` auto-detect 필요 (다수 발견 시 명시 강제). |
+| `--sln=<path>` | contract-tdd 가 사용할 .sln 경로 (repo root 기준). 미지정 시 `Src/*.sln` (1단계) → `Src/*/*.sln` (2단계) auto-detect. 다수 시 에러 + 후보 목록 출력. |
 | `--single-step` | FRD 아닌 일반 단일 작업. |
 | `--compact-docs` | 가드레일 문서를 핵심 섹션만 압축 주입. |
 | `--yes` | plan 자동 승인. Claude Code spawn 시 항상 포함. |

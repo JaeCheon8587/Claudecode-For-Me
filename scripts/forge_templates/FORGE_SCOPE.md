@@ -134,7 +134,7 @@ python scripts/forge_scope.py <phase_dir> [options]
 | 2 | `green-implementation` | step1 테스트를 통과시키는 최소 제품 코드. 테스트 삭제/완화/skip/ignore 금지. |
 | 3 | `refactor-and-regression` | 정리 + 전체 회귀(`dotnet test ... --no-restore` filter 없음) + `git diff --check`. |
 
-- AC는 솔루션 경로 `Src/OrderManagingSystem.sln` 하드코딩. red/green step의 test 명령에는 placeholder `<feature-specific-filter>`가 박혀 있으며, 구현 에이전트가 step 실행 시 채운다.
+- AC 의 솔루션 경로는 `--sln=<path>` 명시 또는 `Src/*.sln` (1단계) / `Src/*/*.sln` (2단계) auto-detect 로 결정. 다수 sln 발견 시 `--sln` 명시 강제 (후보 목록 출력). red/green step 의 test 명령에는 placeholder `<feature-specific-filter>`가 박혀 있으며, 구현 에이전트가 step 실행 시 채운다.
 - `--compact-docs` 자동 활성화.
 - `--single-step`과 함께 써도 충돌 없음(의미상 "본 개발 1 step + TDD wrap 3 step"으로 해석, 실제 dispatch는 contract-tdd 우선 → 4-step).
 - 사용처: 계약 → 실패 테스트 → 구현 → 회귀 순서를 하네스 차원에서 강제하고 싶은 모든 FRD/API 작업.

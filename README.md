@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v1.10.0 · 커스텀 스킬 8종 + 슬래시 커맨드 10종 모음
+> **Claude Code Plugin** · v1.14.0 · 커스텀 스킬 8종 + 슬래시 커맨드 10종 모음
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 브랜치 리뷰 → 커밋)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,12 +11,12 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `1.10.0` |
+| 버전 | `1.14.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
 | 네임스페이스 | `/claudecode-for-me:<name>` |
-| 구성요소 | Skill 8 · Command 10 · Python runner 5 (`scripts/`) |
+| 구성요소 | Skill 8 · Command 10 · Python runner 4 (`scripts/`) |
 
 플러그인은 **글로벌 캐시**에 설치되므로 한 번 설치 후 모든 프로젝트의 **새 세션**에서 자동 노출된다. 프로젝트별 재설치 불필요.
 
@@ -69,7 +69,8 @@
 | Skill | 슬래시 커맨드 | 역할 |
 |---|---|---|
 | `branch-review` | `/claudecode-for-me:branch-review [ref]` | HEAD↔ref diff을 Standards/Spec 2축 병렬 검토 |
-| `docs-harness` | `/claudecode-for-me:docs-check`, `/claudecode-for-me:docs-add-feature` | 서비스-단위 PRD/FC/FRD 문서 SSOT 검사·확장 |
+| `docs-add-frd` | `/claudecode-for-me:docs-add-frd [요청]` | v0.7 per-App 신규 기능 FRD + ARD 생성, PRD/FC/ARD-CATALOG 갱신 |
+| `docs-add-task` | `/claudecode-for-me:docs-add-task [요청]` | v0.7 per-App 기존 기능 수정 TASK + ARD 생성, FC/영향 FRD/ARD-CATALOG 갱신 |
 | `e2e-sequence` | `/claudecode-for-me:e2e-sequence [기능]` | E2E 메시지 흐름 → Mermaid 시퀀스 다이어그램 |
 | `forge-cancel` | `/claudecode-for-me:forge-cancel <phase>` | forge phase 브랜치·산출물 정리 |
 | `forge-full` | `/claudecode-for-me:forge-full <phase>` | 문서 기반 전체 프로젝트 구현 phase runner |
@@ -83,8 +84,8 @@
 |---|---|
 | `branch-review` | branch-review skill 진입 |
 | `commit-analysis` | 변경 분석 후 `[ADD]`/`[MOD]`/`[FIX]` 자동 판단 한글 커밋 생성 |
-| `docs-add-feature` | docs-harness preview-only 신규 FRD 추가 |
-| `docs-check` | docs-harness PASS/WARN/FAIL 검사 |
+| `docs-add-frd` | docs-add-frd skill 진입 (신규 기능 FRD + ARD) |
+| `docs-add-task` | docs-add-task skill 진입 (기존 기능 수정 TASK + ARD) |
 | `e2e-sequence` | e2e-sequence skill 진입 |
 | `forge-cancel` | forge-cancel skill 진입 |
 | `forge-full` | forge-full skill 진입 |
@@ -115,20 +116,22 @@
 - **Recommendation**: SHIP / FIX-MINOR-THEN-SHIP / FIX-CRITICAL-FIRST / BLOCK-SPEC-MISMATCH / RESOLVE-CONFLICTS / RECONFIRM-INTENT
 - **비범위**: 심층 보안 리뷰는 `/security-review` 위임, 자동 fix·CI 통합 없음
 
-### 6.2 docs-harness (`/docs-check`, `/docs-add-feature`)
+### 6.2 docs-add-frd / docs-add-task (v0.7 per-App SSOT)
 
 ```
-/claudecode-for-me:docs-check
-/claudecode-for-me:docs-add-feature
+/claudecode-for-me:docs-add-frd 주문 검색 기능 추가
+/claudecode-for-me:docs-add-task 주문 검색에 cursor 페이지네이션 추가
 ```
 
-- **Preview-only**: source repo 절대 무수정. `--preview-dir`(repo 바깥)에만 기록
-- **Config 강제**: `.claude/docs-harness.config.json` 부재 시 `FAIL CONFIG`
-- **서비스 N개** 지원: 각 service = `<docs_dir>/PRD-<CODE>-001.md`, `FC-<CODE>-001.md`, `FRD/FRD-<CODE>-F<NNN>.md`
-- **FRD 19 section 고정** (`## 1. 기능 개요` ~ `## 19. 미확인 사항`)
-- **자기 검증**: preview 생성 후 `docs_check.run_checks` 즉시 호출
-- **Exit code**: 0 통과 / 1 CHECK FAIL · CONFLICT / 2 ARGS·FEATURE·REPO·PREVIEW·CONFIG FAIL
-- Python CLI 병행 사용: `python scripts/docs_check.py`, `python scripts/docs_add_feature.py`
+- **v0.7 per-App 전용** — `Docs/_templates/App/` 양식 (20 section FRD, 5 표 FC, ARD/ARD-CATALOG/TASK)
+- **In-place 수정** — source repo 직접 쓰기. preview 없음.
+- **ARD 항상 강제** — FRD 또는 TASK 1개 = ARD 1개 동반 (결정 없으면 placeholder 자동)
+- **/docs-add-frd**: 신규 기능 — FRD + ARD 생성, App-PRD §3.1·§7 갱신, FC 5표 행 추가, ARD-CATALOG Proposed +1
+- **/docs-add-task**: 기존 기능 수정/refactor — TASK + ARD 생성, AI 가 FC 보고 영향 FRD 다수 자동 식별, 영향 FRD 변경 이력 + section 갱신, FC 상태 갱신, ARD-CATALOG Proposed +1
+- **TASK 양방향 인용 금지** (v0.7) — TASK 본문 ↔ 영구 SSOT 마크다운 링크 X
+- **자기 검증** — 쓰기 후 `python scripts/docs_helpers.py check --repo .` 자동
+- **사전 확정** — 모든 변경 사전 요약 → `AskUserQuestion` 확정 → 쓰기
+- Python helper (read-only): `python scripts/docs_helpers.py {list-apps|next-id|parse-fc|parse-frd|git-user|check}`
 
 ### 6.3 e2e-sequence
 
@@ -215,12 +218,13 @@
 | `--yes` | plan 자동 승인 |
 | `--quiet` | 진행 표시기 억제 (Claude Code spawn 권장) |
 | `--plan-only` | plan 생성·출력만 |
-| `--preset=auto\|contract-tdd` | 기본 splitter / OMS 샘플 전용 |
+| `--preset=auto\|contract-tdd` | 기본 splitter / contract→red→green→regression 4-step |
+| `--sln=<path>` | contract-tdd 가 사용할 .sln 경로. 미지정 시 `Src/*.sln` auto-detect (다수 시 에러) |
 | `--compact-docs` | guardrail 문서 핵심 섹션 압축 주입 |
 
 #### 한계
 
-- `--preset=contract-tdd`는 **OMS 샘플 전용** (`Src/OrderManagingSystem.sln` 하드코딩). 일반 프로젝트는 `auto`/`frd-implementation`/`--single-step`.
+- `--preset=contract-tdd`는 .sln 필요. `--sln=<path>` 명시 또는 `Src/*.sln` / `Src/*/*.sln` 단일 자동 감지. 다수 sln 있으면 명시 강제.
 - step timestamp **KST(UTC+9) 고정**.
 - step.md 5개 헤딩 **한국어 고정** (`## 읽어야 할 파일` 등, harness_framework 원본 동작).
 
@@ -278,7 +282,8 @@ Claudecode-For-Me/
 │   └── marketplace.json         # 마켓플레이스 등록 정보
 ├── skills/
 │   ├── branch-review/           # 2축 diff 리뷰
-│   ├── docs-harness/            # PRD/FC/FRD SSOT 검사·확장
+│   ├── docs-add-frd/            # v0.7 신규 기능 FRD + ARD
+│   ├── docs-add-task/           # v0.7 기존 기능 TASK + ARD
 │   ├── e2e-sequence/            # Mermaid 시퀀스 생성
 │   ├── forge-cancel/            # phase 취소
 │   ├── forge-full/              # full phase runner
@@ -288,8 +293,8 @@ Claudecode-For-Me/
 ├── commands/
 │   ├── branch-review.md
 │   ├── commit-analysis.md
-│   ├── docs-add-feature.md
-│   ├── docs-check.md
+│   ├── docs-add-frd.md
+│   ├── docs-add-task.md
 │   ├── e2e-sequence.md
 │   ├── forge-cancel.md
 │   ├── forge-full.md
@@ -297,13 +302,10 @@ Claudecode-For-Me/
 │   ├── grill-me.md
 │   └── meta-prompter.md
 ├── scripts/
-│   ├── docs_check.py            # docs-harness 검사 CLI
-│   ├── docs_add_feature.py      # docs-harness preview CLI
+│   ├── docs_helpers.py          # v0.7 read-only inspection (list-apps/next-id/parse-fc/parse-frd/git-user/check)
 │   ├── forge_full.py            # harness_framework full
 │   ├── forge_scope.py           # harness_framework scoped
 │   ├── forge_cancel.py          # harness_framework cancel
-│   ├── docs-add-feature.example.json
-│   ├── docs-harness.config.example.json
 │   └── forge_templates/         # forge 부트스트랩 리소스
 │       ├── CLAUDE.md
 │       ├── PHASE_SCHEMA.md
@@ -322,7 +324,9 @@ Claudecode-For-Me/
 | install 직후 슬래시 자동완성에 안 보임 | 매니페스트는 세션 시작 시 1회 로드 | 세션 종료 → 재시작 |
 | update 후 신규 스킬 호출 불가 | 동일 — 캐시는 갱신됐으나 세션은 구버전 보유 | 세션 재시작 |
 | `/claudecode-for-me:forge-*` 실행 즉시 종료 | `FORGE_TRUST` 미설정 | `FORGE_TRUST=1` 또는 `--trust` |
-| `docs-check` `FAIL CONFIG` | `.claude/docs-harness.config.json` 부재 | `scripts/docs-harness.config.example.json` 참조해 생성 |
+| `docs-add-frd` / `docs-add-task` "App 0건" | `/CLAUDE.md` Backend Services Overview 표 + `Docs/<App>/` 부재 | App 행 추가 + 폴더 부트스트랩 (`_templates/App/` 양식 복사) 후 재시도 |
+| `docs-add-task` "영향 FRD 0건" + feature/변경/버그수정 | 신규 기능에 해당 | `/docs-add-frd` 사용 권장 |
+| `docs_helpers.py` next-id `FAIL LIMIT` | FRD active F099 / TASK · ARD 999 도달 | 사용자 수동 결정 (구식 FRD 정리 또는 Backlog 이전) |
 | `forge-scope` phase-dir 자동 도출 실패 | prompt 너무 모호 | 명시적 phase-dir 지정 또는 `Docs/...md` 경로 선행 |
 
 ---
