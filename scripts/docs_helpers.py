@@ -2,7 +2,7 @@
 
 Subcommands:
     list-apps   /CLAUDE.md Backend Services Overview 표 + Docs/<App>/ 폴더 교차검증
-    next-id     기존 NNN 최대값 + 1 산출 (frd/task/ard, active 또는 backlog)
+    next-id     기존 NNN 최대값 + 1 산출 (frd/task/adr, active 또는 backlog)
     parse-fc    Docs/<App>/<App>-FC.md 5 표 파싱
     parse-frd   Docs/<App>/FRD/<App>-FRD-<NNN>.md 파싱
     git-user    git config user.name
@@ -31,7 +31,7 @@ APP_CODE_PATTERN = re.compile(r"^[A-Z][A-Z0-9]*$")
 
 FRD_FILENAME_PATTERN = lambda app: re.compile(rf"^{re.escape(app)}-FRD-(\d{{3}})\.md$")
 TASK_FILENAME_PATTERN = lambda app: re.compile(rf"^{re.escape(app)}-TASK-(\d{{3}})\.md$")
-ARD_FILENAME_PATTERN = lambda app: re.compile(rf"^{re.escape(app)}-ARD-(\d{{3}})\.md$")
+ADR_FILENAME_PATTERN = lambda app: re.compile(rf"^{re.escape(app)}-ADR-(\d{{3}})\.md$")
 
 FRD_V07_SECTION_TITLES = (
     (1, "기능 요약"),
@@ -49,7 +49,7 @@ FRD_V07_SECTION_TITLES = (
     (13, "비기능 요구사항"),
     (14, "로그 / 알림 / 이력 정책"),
     (15, "UI / 외부 연계 영향"),
-    (16, "FC / ARD-CATALOG / ARD 반영 여부"),
+    (16, "FC / ADR-CATALOG / ADR 반영 여부"),
     (17, "수용 기준"),
     (18, "테스트 관점"),
     (19, "요구 근거"),
@@ -202,8 +202,8 @@ def _scan_nnn(folder: Path, pattern: re.Pattern[str]) -> list[int]:
 
 
 def cmd_next_id(repo: Path, app: str, kind: str, backlog: bool) -> int:
-    if kind not in {"frd", "task", "ard"}:
-        print(f"FAIL ARGS --kind must be frd|task|ard: {kind}", file=sys.stderr)
+    if kind not in {"frd", "task", "adr"}:
+        print(f"FAIL ARGS --kind must be frd|task|adr: {kind}", file=sys.stderr)
         return 2
     if backlog and kind != "frd":
         print("FAIL ARGS --backlog only valid with --kind frd", file=sys.stderr)
@@ -221,8 +221,8 @@ def cmd_next_id(repo: Path, app: str, kind: str, backlog: bool) -> int:
         folder = docs_dir / "TASK"
         pat = TASK_FILENAME_PATTERN(app)
     else:
-        folder = docs_dir / "ARD"
-        pat = ARD_FILENAME_PATTERN(app)
+        folder = docs_dir / "ADR"
+        pat = ADR_FILENAME_PATTERN(app)
 
     used = _scan_nnn(folder, pat)
     if kind == "frd":
@@ -510,7 +510,7 @@ def _check_app(repo: Path, app: str) -> list[CheckResult]:
         f"{app}-PRD.md",
         f"{app}-FC.md",
         f"{app}-ARCHITECTURE.md",
-        f"{app}-ARD-CATALOG.md",
+        f"{app}-ADR-CATALOG.md",
     ]
     for rel in required_files:
         p = docs_dir / rel
@@ -519,7 +519,7 @@ def _check_app(repo: Path, app: str) -> list[CheckResult]:
         else:
             results.append(CheckResult("FAIL", "APP_FILE", "missing", p))
 
-    required_dirs = ["FRD", "ARD", "TASK"]
+    required_dirs = ["FRD", "ADR", "TASK"]
     for rel in required_dirs:
         d = docs_dir / rel
         if d.is_dir():
@@ -568,26 +568,26 @@ def _check_app(repo: Path, app: str) -> list[CheckResult]:
             else:
                 results.append(CheckResult("PASS", "TASK_NAME", "valid", f))
 
-    ard_dir = docs_dir / "ARD"
-    if ard_dir.is_dir():
-        pat = ARD_FILENAME_PATTERN(app)
-        ard_files: list[Path] = []
-        for f in sorted(ard_dir.glob("*.md")):
+    adr_dir = docs_dir / "ADR"
+    if adr_dir.is_dir():
+        pat = ADR_FILENAME_PATTERN(app)
+        adr_files: list[Path] = []
+        for f in sorted(adr_dir.glob("*.md")):
             if not pat.match(f.name):
-                results.append(CheckResult("FAIL", "ARD_NAME", "invalid filename", f))
+                results.append(CheckResult("FAIL", "ADR_NAME", "invalid filename", f))
             else:
-                results.append(CheckResult("PASS", "ARD_NAME", "valid", f))
-                ard_files.append(f)
-        catalog_path = docs_dir / f"{app}-ARD-CATALOG.md"
+                results.append(CheckResult("PASS", "ADR_NAME", "valid", f))
+                adr_files.append(f)
+        catalog_path = docs_dir / f"{app}-ADR-CATALOG.md"
         catalog_text = _read_text(catalog_path) or ""
-        for f in ard_files:
+        for f in adr_files:
             stem = f.stem
             if stem not in catalog_text:
                 results.append(CheckResult(
-                    "FAIL", "ARD_CATALOG", f"{stem} not referenced in ARD-CATALOG", catalog_path,
+                    "FAIL", "ADR_CATALOG", f"{stem} not referenced in ADR-CATALOG", catalog_path,
                 ))
             else:
-                results.append(CheckResult("PASS", "ARD_CATALOG", f"{stem} referenced", catalog_path))
+                results.append(CheckResult("PASS", "ADR_CATALOG", f"{stem} referenced", catalog_path))
 
     return results
 
@@ -635,7 +635,7 @@ def main(argv: list[str] | None = None) -> int:
     sp_next = sub.add_parser("next-id")
     sp_next.add_argument("--repo", required=True)
     sp_next.add_argument("--app", required=True)
-    sp_next.add_argument("--kind", required=True, choices=("frd", "task", "ard"))
+    sp_next.add_argument("--kind", required=True, choices=("frd", "task", "adr"))
     sp_next.add_argument("--backlog", action="store_true")
 
     sp_pfc = sub.add_parser("parse-fc")
