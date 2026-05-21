@@ -59,7 +59,8 @@ def test_fts_injection_no_crash(conn):
     assert isinstance(results, list)
 
 
-def test_stale_excluded(conn):
+def test_stale_with_description_still_searchable(conn):
+    """stale entries with non-empty description remain searchable, flagged via 'stale' key."""
     entry = {
         "file": "/fake/Stale.cs",
         "class_name": "StaleClass",
@@ -76,7 +77,30 @@ def test_stale_excluded(conn):
     }
     store.upsert_class(conn, entry)
     results = search_mod.search(conn, "stale")
-    assert not any(r["class"] == "StaleClass" for r in results)
+    match = next((r for r in results if r["class"] == "StaleClass"), None)
+    assert match is not None
+    assert match["stale"] is True
+
+
+def test_stale_with_empty_description_excluded(conn):
+    """stale entries with empty description stay hidden (no useful content to surface)."""
+    entry = {
+        "file": "/fake/Empty.cs",
+        "class_name": "EmptyStale",
+        "namespace": "N",
+        "folder": "/fake",
+        "solution": "",
+        "project": "",
+        "kind": "class",
+        "description": "",
+        "tags": ["emptystale"],
+        "methods": [],
+        "source_hash": "sha1:empty",
+        "stale": 1,
+    }
+    store.upsert_class(conn, entry)
+    results = search_mod.search(conn, "emptystale")
+    assert not any(r["class"] == "EmptyStale" for r in results)
 
 
 def test_tag_hit_bonus_raises_score(conn):

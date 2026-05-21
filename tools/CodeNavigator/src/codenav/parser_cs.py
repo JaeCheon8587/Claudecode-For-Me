@@ -33,6 +33,21 @@ _BLOCK_COMMENT_STRIP = re.compile(r"/\*.*?\*/", re.DOTALL)
 _XML_SUMMARY_RE = re.compile(
     r"///\s*<summary>(.*?)</summary>", re.DOTALL | re.IGNORECASE
 )
+_FRONTMATTER_RE = re.compile(
+    r"""
+    ^[ \t]*//[ \t]*---[ \t]*\n       # opening marker
+    ((?:[ \t]*//[^\n]*\n)+?)         # body lines
+    [ \t]*//[ \t]*---[ \t]*\n        # closing marker
+    (?:[ \t]*\n){0,2}                # up to 2 blank lines
+    [ \t]*                           # class line indent
+    (?:(?:public|internal|protected|private|static|abstract|sealed|partial)[ \t]+)*
+    (?:class|struct|interface|record)[ \t]+
+    (\w+)                            # class name
+    """,
+    re.VERBOSE | re.MULTILINE,
+)
+_FM_KV_RE = re.compile(r"^\s*(\w+)\s*:\s*(.+?)\s*$")
+_FM_TAGS_RE = re.compile(r"^\[(.*)\]$")
 
 
 @dataclass
@@ -51,6 +66,36 @@ class ClassInfo:
     kind: str = "class"
     xml_summary: str = ""
     methods: list[MethodInfo] = field(default_factory=list)
+    frontmatter_tags: list[str] | None = None
+
+
+def _parse_frontmatter_block(body: str) -> dict:
+    """Parse `// key: value` lines from a frontmatter block body. Unknown keys skipped."""
+    out: dict = {}
+    for raw_line in body.splitlines():
+        line = re.sub(r"^\s*//\s?", "", raw_line)
+        stripped = line.strip()
+        if not stripped or stripped == "---":
+            continue
+        m = _FM_KV_RE.match(line)
+        if not m:
+            continue
+        key = m.group(1)
+        value = m.group(2).strip()
+        if key == "description":
+            if len(value) >= 2 and value.startswith('"') and value.endswith('"'):
+                value = value[1:-1]
+            out["description"] = value
+        elif key == "tags":
+            tm = _FM_TAGS_RE.match(value)
+            if not tm:
+                continue
+            inner = tm.group(1).strip()
+            if not inner:
+                out["tags"] = []
+            else:
+                out["tags"] = [t.strip() for t in inner.split(",") if t.strip()]
+    return out
 
 
 def _extract_xml_summary(block: str) -> str:
@@ -108,6 +153,13 @@ def parse_cs_file(path: Path, solution: str = "", project: str = "") -> list[Cla
     ):
         xml_summaries[m.group(2)] = _extract_xml_summary(m.group(1))
 
+    # Extract `// ---` YAML-ish frontmatter blocks directly above class declarations
+    frontmatter_by_class: dict[str, dict] = {}
+    for fm in _FRONTMATTER_RE.finditer(text):
+        parsed = _parse_frontmatter_block(fm.group(1))
+        if parsed:
+            frontmatter_by_class[fm.group(2)] = parsed
+
     clean = _BLOCK_COMMENT_STRIP.sub(" ", text)
     clean = _COMMENT_STRIP.sub("", clean)
 
@@ -135,6 +187,11 @@ def parse_cs_file(path: Path, solution: str = "", project: str = "") -> list[Cla
                 seen_methods.add(mname)
                 methods.append(MethodInfo(name=mname))
 
+        xml_summary = xml_summaries.get(class_name, "")
+        fm_meta = frontmatter_by_class.get(class_name, {})
+        description = xml_summary or fm_meta.get("description", "")
+        fm_tags = fm_meta.get("tags") if "tags" in fm_meta else None
+
         classes.append(
             ClassInfo(
                 class_name=class_name,
@@ -142,8 +199,9 @@ def parse_cs_file(path: Path, solution: str = "", project: str = "") -> list[Cla
                 file=file_str,
                 folder=folder,
                 kind=kind,
-                xml_summary=xml_summaries.get(class_name, ""),
+                xml_summary=description,
                 methods=methods,
+                frontmatter_tags=fm_tags,
             )
         )
 
@@ -164,6 +222,7 @@ def classes_to_index_entries(
     for c in classes:
         override = overrides.get(c.class_name, {})
         pascal_tags = _pascal_to_words(c.class_name)
+        default_tags = c.frontmatter_tags if c.frontmatter_tags is not None else pascal_tags
         methods_out = []
         for m in c.methods:
             mo = overrides.get(f"{c.class_name}.{m.name}", {})
@@ -184,7 +243,7 @@ def classes_to_index_entries(
                 "class_name": c.class_name,
                 "kind": c.kind,
                 "description": override.get("description", c.xml_summary),
-                "tags": override.get("tags", pascal_tags),
+                "tags": override.get("tags", default_tags),
                 "methods": methods_out,
                 "source_hash": src_hash,
             }

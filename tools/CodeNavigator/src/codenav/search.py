@@ -89,11 +89,12 @@ def search(
         SELECT
             c.solution, c.project, c.namespace, c.folder, c.file,
             c.class_name, c.kind, c.description, c.tags_json, c.methods_json,
+            c.stale,
             bm25(classes_fts, 3.0, 2.0, 1.0, 2.0, 1.5) AS bm25_score
         FROM classes_fts
         JOIN classes c ON classes_fts.rowid = c.id
         WHERE classes_fts MATCH ?
-          AND c.stale = 0
+          AND (c.stale = 0 OR COALESCE(c.description, '') != '')
           {where_extra}
         ORDER BY bm25_score
         LIMIT ?
@@ -125,6 +126,7 @@ def search(
             "score": score,
             "description": row["description"],
             "tags": tags,
+            "stale": bool(row["stale"]),
         }
         if scope == "method":
             entry["methods"] = json.loads(row["methods_json"])

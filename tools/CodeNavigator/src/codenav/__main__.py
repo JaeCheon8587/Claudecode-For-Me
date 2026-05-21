@@ -46,7 +46,8 @@ def cmd_search(args: argparse.Namespace) -> int:
         print("No results.")
         return 0
     for result in results:
-        print(f"[{result['score']:.2f}] {result['project'] or result['solution']} / {result['namespace']} / {result['class']}")
+        stale_mark = " [stale]" if result.get("stale") else ""
+        print(f"[{result['score']:.2f}]{stale_mark} {result['project'] or result['solution']} / {result['namespace']} / {result['class']}")
         print(f"       {services.display_path(root, result['file'])}")
         print(f"       {result['description']}")
         print(f"       tags: {', '.join(result['tags'])}")
