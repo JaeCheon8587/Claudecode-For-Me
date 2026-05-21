@@ -1,7 +1,7 @@
 ---
 name: forge-scope
 description: harness_framework forge-scope 경량 phase runner를 사용자 프로젝트에서 실행한다. 첫 호출 시 scripts/forge_*.py、CLAUDE.md、PHASE_SCHEMA.md、FORGE_SCOPE.md、Docs/_templates/ 를 자동 부트스트랩한 뒤 forge_scope.py를 실행한다. /claudecode-for-me:forge-scope 로 실행.
-argument-hint: "<prompt> 또는 <doc-path> <prompt> 또는 <phase-dir> [options]"
+argument-hint: "<prompt> 또는 <doc-path> <prompt> 또는 tdd <doc-path> <prompt> 또는 <phase-dir> [options]"
 input: 자유 텍스트 prompt 또는 doc-path + prompt + 선택적 CLI 옵션
 output: phases/scoped/<phase-dir>/index.json + step{N}.md 산출물
 requires-user-interaction: true
@@ -128,19 +128,46 @@ git worktree remove .worktrees/<phase-dir> && git branch -D feat-<phase-dir>
      --prompt="<전체 $ARGUMENTS>"
    ```
 
+### Mode 2c — TDD (contract-tdd preset)
+
+`$ARGUMENTS` 첫 토큰이 `tdd` (대소문자 무시) 이면 contract-tdd 분기로 진입한다.
+
+1. 첫 토큰 `tdd` 를 소비하고, 두 번째 토큰을 `Docs/...md` 형식 doc-path 로 해석 (Mode 2와 동일 정규화: 앞 `/` 제거, `Docs/` prefix 강제).
+2. 나머지 텍스트를 `--prompt` 값으로 사용한다.
+3. doc-path 가 부재(첫 토큰이 `tdd` 1개뿐)이거나 형식 위반 시 사용자에게 1회 안내 후 중단:
+   ```
+   [forge-scope] tdd 모드는 Docs/FRD/<FRD-ID>.md 경로 1개가 필요합니다.
+   예: /forge-scope tdd Docs/FRD/F003.md 로그인 인증
+   ```
+4. `<phase-dir>` 은 FRD ID 또는 doc 파일명 stem 으로 도출한다 (예: `tdd-frd-f003`).
+5. 실행:
+   ```bash
+   python ./scripts/forge_scope.py <phase-dir> --trust --yes --quiet \
+     --preset=contract-tdd --compact-docs \
+     --doc=<정규화된 doc 경로> \
+     --prompt="<나머지 텍스트>"
+   ```
+
+> 다수 sln 환경(`Src/*/*.sln` 2개 이상)에서는 `FORGE_DEFAULT_SLN` env 또는 `forge-scope.json` 의 `default_sln` 으로 한 번 지정해두면 `--sln` 명시 불필요 (parent agent 가 자동으로 첨가하지 않음 — 사용자 환경 책임).
+
+---
+
 ### Mode 2 — doc + prompt
+
 `$ARGUMENTS`의 첫 토큰이 `/Docs/...md` 또는 `Docs/...md` 형식이면 (대소문자 무시):
 
 - 첫 토큰의 앞 `/`를 제거하고, 경로 prefix를 `Docs/`로 정규화 (예: `/Docs/FRD/FRD-F003.md` → `Docs/FRD/FRD-F003.md`).
 - 나머지 텍스트를 `--prompt` 값으로 사용한다.
 
-FRD 파일이면 (`Docs/FRD/` 하위):
+FRD 파일이면 (`Docs/FRD/` 하위) — **frd-implementation (single-step)**:
 ```bash
 python ./scripts/forge_scope.py <phase-dir> --trust --yes --quiet \
   --preset=frd-implementation --compact-docs \
   --doc=<정규화된 doc 경로> \
   --prompt="<나머지 텍스트>"
 ```
+
+> FRD를 TDD 흐름(계약→red→green→회귀)으로 처리하려면 `tdd` 토큰을 앞에 붙여 호출한다 — Mode 2c 참고.
 
 일반 문서이면:
 ```bash
@@ -193,7 +220,7 @@ python ./scripts/forge_scope.py <phase-dir> --trust --yes --quiet \
 |---|---|
 | `--preset=frd-implementation` | FRD 단건 구현. splitter 없이 single step. 기본 권장. |
 | `--preset=auto` | auto-splitter. 여러 레이어 분해가 필요할 때만 사용. |
-| `--preset=contract-tdd` | 문서 1개로 contract/red/green/regression 4-step 생성. `--sln` 명시 또는 `Src/*.sln` auto-detect 필요 (다수 발견 시 명시 강제). |
+| `--preset=contract-tdd` | 문서 1개로 contract/red/green/regression 4-step 생성. sln 우선순위: `--sln` CLI > `FORGE_DEFAULT_SLN` env > `forge-scope.json` `default_sln` > auto-detect. 호출 단축형: `/forge-scope tdd <doc> <prompt>` (Mode 2c). |
 | `--sln=<path>` | contract-tdd 가 사용할 .sln 경로 (repo root 기준). 미지정 시 `Src/*.sln` (1단계) → `Src/*/*.sln` (2단계) auto-detect. 다수 시 에러 + 후보 목록 출력. |
 | `--single-step` | FRD 아닌 일반 단일 작업. |
 | `--compact-docs` | 가드레일 문서를 핵심 섹션만 압축 주입. |

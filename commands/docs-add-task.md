@@ -1,6 +1,6 @@
 # docs-add-task
 
-기존 기능 수정/개선/refactor TASK + ARD 작성, AI 가 FC 보고 영향 FRD 다수 자동 식별 후 변경 이력 + 영향 section 갱신, FC 행 상태 갱신, ARD-CATALOG Proposed 행 추가.
+기존 기능 수정/개선/refactor TASK + ADR 작성, AI 가 FC 보고 영향 FRD 다수 자동 식별 후 변경 이력 + 영향 section 갱신, FC 행 상태 갱신, ADR-CATALOG Proposed 행 추가.
 
 v0.7 per-App SSOT 체계. TASK 는 휘발성 + self-contained. 외부 SSOT 인용 금지 (양방향). source repo in-place 수정.
 
@@ -16,7 +16,7 @@ v0.7 per-App SSOT 체계. TASK 는 휘발성 + self-contained. 외부 SSOT 인�
 1. `skills/docs-add-task/SKILL.md` Phase 0~13 따름.
 2. App 결정 → 입력 수집 → **AI 가 FC 파싱 영향 FRD 식별** → 사용자 확인 → 번호 할당 → 컨텐츠 준비 → 사전 확정 → in-place 쓰기 → 자기 검증 → 결과 보고.
 3. TASK 본문에 영구 SSOT 마크다운 링크 절대 금지 (v0.7 양방향 룰).
-4. ARD 항상 동반 생성. 결정 narrative AI 추론.
+4. ADR 항상 동반 생성. 결정 narrative AI 추론.
 5. 영향 FRD 본문 자동 부분 갱신 (변경 이력 + 영향 section). TASK ID 인용 X.
 6. 호스트 영향 (refactor/migration) 감지 시 APP-ARCHITECTURE 검토 권고만.
 

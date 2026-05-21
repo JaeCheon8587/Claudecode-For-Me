@@ -134,7 +134,7 @@ python scripts/forge_scope.py <phase_dir> [options]
 | 2 | `green-implementation` | step1 테스트를 통과시키는 최소 제품 코드. 테스트 삭제/완화/skip/ignore 금지. |
 | 3 | `refactor-and-regression` | 정리 + 전체 회귀(`dotnet test ... --no-restore` filter 없음) + `git diff --check`. |
 
-- AC 의 솔루션 경로는 `--sln=<path>` 명시 또는 `Src/*.sln` (1단계) / `Src/*/*.sln` (2단계) auto-detect 로 결정. 다수 sln 발견 시 `--sln` 명시 강제 (후보 목록 출력). red/green step 의 test 명령에는 placeholder `<feature-specific-filter>`가 박혀 있으며, 구현 에이전트가 step 실행 시 채운다.
+- AC 의 솔루션 경로는 우선순위 순으로: `--sln=<path>` CLI → `FORGE_DEFAULT_SLN` 환경변수 → `forge-scope.json`의 `default_sln` 키 → `Src/*.sln` (1단계) / `Src/*/*.sln` (2단계) auto-detect. 다수 sln 발견 시 위 설정 채널 중 하나를 써야 함(후보 목록 출력). red/green step 의 test 명령에는 placeholder `<feature-specific-filter>`가 박혀 있으며, 구현 에이전트가 step 실행 시 채운다.
 - `--compact-docs` 자동 활성화.
 - `--single-step`과 함께 써도 충돌 없음(의미상 "본 개발 1 step + TDD wrap 3 step"으로 해석, 실제 dispatch는 contract-tdd 우선 → 4-step).
 - 사용처: 계약 → 실패 테스트 → 구현 → 회귀 순서를 하네스 차원에서 강제하고 싶은 모든 FRD/API 작업.
@@ -146,8 +146,25 @@ python scripts/forge_scope.py <phase_dir> [options]
 | 변수 | 효과 |
 |---|---|
 | `FORGE_TRUST` | `1` / `true` / `yes` 중 하나 → `--trust`와 동일 효과. |
+| `FORGE_DEFAULT_SLN` | `Src/` 하위에 sln이 여러 개일 때 기본값 지정 (repo root 기준 상대경로). 예: `Src/MyProject/My.sln`. `--sln` CLI보다 우선도 낮음. `forge-scope.json`의 `default_sln`보다 우선도 높음. |
 | `ANTHROPIC_API_KEY` | 설정 시 자식 claude 호출에 `--bare` 부착 가능(CLAUDE.md/hooks/plugins 자동 로딩 스킵). |
 | `CLAUDECODE` / `CLAUDE_CODE_ENTRYPOINT` / `CLAUDE_CODE_SSE_PORT` / `CLAUDE_PROJECT_DIR` / `AI_AGENT=claude-code*` | 부모가 Claude Code임을 감지. 자식에서 `--dangerously-skip-permissions` 자동 제거(상위 권한 컨텍스트 상속). |
+
+## 4.1 forge-scope.json (프로젝트 설정 파일)
+
+consumer repo root에 `forge-scope.json`을 두면 런타임 설정을 커밋으로 공유할 수 있다.
+
+```json
+{
+  "default_sln": "Src/MyProject/My.sln"
+}
+```
+
+| 키 | 타입 | 설명 |
+|---|---|---|
+| `default_sln` | string | sln 자동 탐지 다수 결과 시 사용할 경로 (repo root 기준 상대경로). `FORGE_DEFAULT_SLN` env보다 우선도 낮음. `--sln` CLI보다 우선도 낮음. |
+
+파싱 실패(JSON 오류, 파일 손상)는 경고 로그만 출력하고 무시한다.
 
 ---
 

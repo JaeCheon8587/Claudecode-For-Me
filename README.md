@@ -69,8 +69,8 @@
 | Skill | 슬래시 커맨드 | 역할 |
 |---|---|---|
 | `branch-review` | `/claudecode-for-me:branch-review [ref]` | HEAD↔ref diff을 Standards/Spec 2축 병렬 검토 |
-| `docs-add-frd` | `/claudecode-for-me:docs-add-frd [요청]` | v0.7 per-App 신규 기능 FRD + ARD 생성, PRD/FC/ARD-CATALOG 갱신 |
-| `docs-add-task` | `/claudecode-for-me:docs-add-task [요청]` | v0.7 per-App 기존 기능 수정 TASK + ARD 생성, FC/영향 FRD/ARD-CATALOG 갱신 |
+| `docs-add-frd` | `/claudecode-for-me:docs-add-frd [요청]` | v0.7 per-App 신규 기능 FRD + ADR 생성, PRD/FC/ADR-CATALOG 갱신 |
+| `docs-add-task` | `/claudecode-for-me:docs-add-task [요청]` | v0.7 per-App 기존 기능 수정 TASK + ADR 생성, FC/영향 FRD/ADR-CATALOG 갱신 |
 | `e2e-sequence` | `/claudecode-for-me:e2e-sequence [기능]` | E2E 메시지 흐름 → Mermaid 시퀀스 다이어그램 |
 | `forge-cancel` | `/claudecode-for-me:forge-cancel <phase>` | forge phase 브랜치·산출물 정리 |
 | `forge-full` | `/claudecode-for-me:forge-full <phase>` | 문서 기반 전체 프로젝트 구현 phase runner |
@@ -84,8 +84,8 @@
 |---|---|
 | `branch-review` | branch-review skill 진입 |
 | `commit-analysis` | 변경 분석 후 `[ADD]`/`[MOD]`/`[FIX]` 자동 판단 한글 커밋 생성 |
-| `docs-add-frd` | docs-add-frd skill 진입 (신규 기능 FRD + ARD) |
-| `docs-add-task` | docs-add-task skill 진입 (기존 기능 수정 TASK + ARD) |
+| `docs-add-frd` | docs-add-frd skill 진입 (신규 기능 FRD + ADR) |
+| `docs-add-task` | docs-add-task skill 진입 (기존 기능 수정 TASK + ADR) |
 | `e2e-sequence` | e2e-sequence skill 진입 |
 | `forge-cancel` | forge-cancel skill 진입 |
 | `forge-full` | forge-full skill 진입 |
@@ -123,11 +123,11 @@
 /claudecode-for-me:docs-add-task 주문 검색에 cursor 페이지네이션 추가
 ```
 
-- **v0.7 per-App 전용** — `Docs/_templates/App/` 양식 (20 section FRD, 5 표 FC, ARD/ARD-CATALOG/TASK)
+- **v0.7 per-App 전용** — `Docs/_templates/App/` 양식 (20 section FRD, 5 표 FC, ADR/ADR-CATALOG/TASK)
 - **In-place 수정** — source repo 직접 쓰기. preview 없음.
-- **ARD 항상 강제** — FRD 또는 TASK 1개 = ARD 1개 동반 (결정 없으면 placeholder 자동)
-- **/docs-add-frd**: 신규 기능 — FRD + ARD 생성, App-PRD §3.1·§7 갱신, FC 5표 행 추가, ARD-CATALOG Proposed +1
-- **/docs-add-task**: 기존 기능 수정/refactor — TASK + ARD 생성, AI 가 FC 보고 영향 FRD 다수 자동 식별, 영향 FRD 변경 이력 + section 갱신, FC 상태 갱신, ARD-CATALOG Proposed +1
+- **ADR 항상 강제** — FRD 또는 TASK 1개 = ADR 1개 동반 (결정 없으면 placeholder 자동)
+- **/docs-add-frd**: 신규 기능 — FRD + ADR 생성, App-PRD §3.1·§7 갱신, FC 5표 행 추가, ADR-CATALOG Proposed +1
+- **/docs-add-task**: 기존 기능 수정/refactor — TASK + ADR 생성, AI 가 FC 보고 영향 FRD 다수 자동 식별, 영향 FRD 변경 이력 + section 갱신, FC 상태 갱신, ADR-CATALOG Proposed +1
 - **TASK 양방향 인용 금지** (v0.7) — TASK 본문 ↔ 영구 SSOT 마크다운 링크 X
 - **자기 검증** — 쓰기 후 `python scripts/docs_helpers.py check --repo .` 자동
 - **사전 확정** — 모든 변경 사전 요약 → `AskUserQuestion` 확정 → 쓰기
@@ -282,8 +282,8 @@ Claudecode-For-Me/
 │   └── marketplace.json         # 마켓플레이스 등록 정보
 ├── skills/
 │   ├── branch-review/           # 2축 diff 리뷰
-│   ├── docs-add-frd/            # v0.7 신규 기능 FRD + ARD
-│   ├── docs-add-task/           # v0.7 기존 기능 TASK + ARD
+│   ├── docs-add-frd/            # v0.7 신규 기능 FRD + ADR
+│   ├── docs-add-task/           # v0.7 기존 기능 TASK + ADR
 │   ├── e2e-sequence/            # Mermaid 시퀀스 생성
 │   ├── forge-cancel/            # phase 취소
 │   ├── forge-full/              # full phase runner
@@ -326,7 +326,7 @@ Claudecode-For-Me/
 | `/claudecode-for-me:forge-*` 실행 즉시 종료 | `FORGE_TRUST` 미설정 | `FORGE_TRUST=1` 또는 `--trust` |
 | `docs-add-frd` / `docs-add-task` "App 0건" | `/CLAUDE.md` Backend Services Overview 표 + `Docs/<App>/` 부재 | App 행 추가 + 폴더 부트스트랩 (`_templates/App/` 양식 복사) 후 재시도 |
 | `docs-add-task` "영향 FRD 0건" + feature/변경/버그수정 | 신규 기능에 해당 | `/docs-add-frd` 사용 권장 |
-| `docs_helpers.py` next-id `FAIL LIMIT` | FRD active F099 / TASK · ARD 999 도달 | 사용자 수동 결정 (구식 FRD 정리 또는 Backlog 이전) |
+| `docs_helpers.py` next-id `FAIL LIMIT` | FRD active F099 / TASK · ADR 999 도달 | 사용자 수동 결정 (구식 FRD 정리 또는 Backlog 이전) |
 | `forge-scope` phase-dir 자동 도출 실패 | prompt 너무 모호 | 명시적 phase-dir 지정 또는 `Docs/...md` 경로 선행 |
 
 ---

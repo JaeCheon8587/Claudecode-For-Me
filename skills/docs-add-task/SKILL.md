@@ -1,12 +1,12 @@
 ---
 name: docs-add-task
-description: v0.7 per-App SSOT 체계에서 기존 기능 수정/개선/refactor TASK + ARD 를 in-place 작성한다. TASK + ARD 파일 생성, AI 가 FC 보고 영향 FRD 다수 자동 식별 후 변경 이력 + 영향 section 갱신, FC 행 상태 갱신, ARD-CATALOG Proposed 행 추가. 사용자가 기존 기능 수정/개선/refactor 를 자연어로 요청 (예: "주문 검색에 페이지네이션 추가") 할 때 트리거.
+description: v0.7 per-App SSOT 체계에서 기존 기능 수정/개선/refactor TASK + ADR 를 in-place 작성한다. TASK + ADR 파일 생성, AI 가 FC 보고 영향 FRD 다수 자동 식별 후 변경 이력 + 영향 section 갱신, FC 행 상태 갱신, ADR-CATALOG Proposed 행 추가. 사용자가 기존 기능 수정/개선/refactor 를 자연어로 요청 (예: "주문 검색에 페이지네이션 추가") 할 때 트리거.
 argument-hint: "[수정/개선/refactor 자연어 prompt]"
 ---
 
 # docs-add-task
 
-Docs/_templates v0.7 체계 (per-App PRD/FC/ARCHITECTURE/FRD/ARD/ARD-CATALOG/TASK) 에서 **기존 기능 수정/개선/refactor TASK + ARD 항상 동반 생성**. AI 가 FC 파싱하여 **영향 FRD 다수 자동 식별**. source repo in-place 수정.
+Docs/_templates v0.7 체계 (per-App PRD/FC/ARCHITECTURE/FRD/ADR/ADR-CATALOG/TASK) 에서 **기존 기능 수정/개선/refactor TASK + ADR 항상 동반 생성**. AI 가 FC 파싱하여 **영향 FRD 다수 자동 식별**. source repo in-place 수정.
 
 ---
 
@@ -15,7 +15,7 @@ Docs/_templates v0.7 체계 (per-App PRD/FC/ARCHITECTURE/FRD/ARD/ARD-CATALOG/TAS
 - **v0.7 전용**.
 - **In-place** 수정. preview 없음.
 - **TASK 휘발성** — 본 skill 은 생성만. 삭제는 사용자 수동.
-- **ARD 항상 강제** — TASK 1개 = ARD 1개.
+- **ADR 항상 강제** — TASK 1개 = ADR 1개.
 - **외부 SSOT 인용 금지 (v0.7 양방향 룰)** — TASK 본문에 영구 SSOT 마크다운 링크 사용 X. 영향 SSOT 는 §6 표에 텍스트로만 명시.
 - **AI 가 영향 FRD 자동 식별** — 사용자가 FRD ID 지정하지 않음. AI 가 FC 파싱 + prompt 매칭.
 - **FRD 본문 부분 갱신** — 변경 이력 표 + AI 판단 영향 section 텍스트만. TASK ID 인용 X.
@@ -49,7 +49,7 @@ python scripts/docs_helpers.py list-apps --repo .
 - `steps` — §8 작업 단계 (없으면 AI 가 prompt 에서 추론)
 - `completion_criteria` — §9 (default `미작성/추후`)
 - `risks` — §10
-- `ard_decision` (override 가능, 없으면 AI 추론)
+- `adr_decision` (override 가능, 없으면 AI 추론)
 
 ---
 
@@ -79,7 +79,7 @@ AI 작업:
 
 ```
 python scripts/docs_helpers.py next-id --repo . --app <App> --kind task
-python scripts/docs_helpers.py next-id --repo . --app <App> --kind ard
+python scripts/docs_helpers.py next-id --repo . --app <App> --kind adr
 python scripts/docs_helpers.py git-user --repo .
 ```
 
@@ -95,13 +95,13 @@ python scripts/docs_helpers.py parse-frd --repo . --app <App> --frd-id <F_NNN>
 
 ---
 
-## Phase 4: 다중 ARD 케이스 처리
+## Phase 4: 다중 ADR 케이스 처리
 
 AI 가 prompt 에서 결정 사항 N개 식별:
 - N ≤ 1 → 그대로 진행
 - N ≥ 2 → `AskUserQuestion`:
-  - "첫 결정만 본 TASK 의 ARD 로 등재. 나머지는 별도 `/docs-add-task` 실행 권장" (Recommended)
-  - "결정 N개를 하나의 ARD 에 통합 narrative"
+  - "첫 결정만 본 TASK 의 ADR 로 등재. 나머지는 별도 `/docs-add-task` 실행 권장" (Recommended)
+  - "결정 N개를 하나의 ADR 에 통합 narrative"
 
 ---
 
@@ -146,8 +146,8 @@ AI 가 prompt 에서 결정 사항 N개 식별:
 | <App>-PRD | 없음 / 필요 | <요지 또는 "없음"> | 완료 / 불필요 / 실패 |
 | <App>-FC | 필요 | F<NNN> 행 상태 갱신 | 완료 / 실패 |
 | <App>-FRD-<NNN> | 필요 | <영향 절 요지> | 완료 / 실패 |
-| <App>-ARD-<NNN> | 필요 | 신설 (결정 narrative) | 완료 / 실패 |
-| <App>-ARD-CATALOG | 필요 | Proposed 행 추가 | 완료 / 실패 |
+| <App>-ADR-<NNN> | 필요 | 신설 (결정 narrative) | 완료 / 실패 |
+| <App>-ADR-CATALOG | 필요 | Proposed 행 추가 | 완료 / 실패 |
 | <App>-ARCHITECTURE | 없음 / 필요 | <요지 또는 "없음"> | 완료 / 불필요 |
 ```
 
@@ -157,16 +157,16 @@ AI 가 prompt 에서 결정 사항 N개 식별:
 
 ---
 
-## Phase 6: ARD 파일 내용 준비
+## Phase 6: ADR 파일 내용 준비
 
 `/docs-add-frd` Phase 4 와 동일. 차이:
-- ARD 본문 §컨텍스트 = TASK 명세 요약 (FRD 본문 아님)
+- ADR 본문 §컨텍스트 = TASK 명세 요약 (FRD 본문 아님)
 - §결정 = AI 가 TASK 의 work_type + steps 보고 narrative
   - `refactor` → "기존 구조 X 를 Y 로 전환"
   - `maintenance` → "표준 운영 절차, 특이 결정 없음"
   - `feature` (기존 기능 확장) → "확장 정책 결정"
 - § 문서 반영:
-  - `[<App>-ARD-CATALOG]` — Proposed 행 추가
+  - `[<App>-ADR-CATALOG]` — Proposed 행 추가
   - `[<App>-FC]` — F<NNN> 행 상태 갱신
   - `[<App>-FRD-<NNN>]` — 영향 절 (다수)
   - `[<App>-TASK-<NNN>]` — **인용 X** (휘발성 룰)
@@ -244,7 +244,7 @@ v0.7 일관성 룰 따름:
 
 ---
 
-## Phase 9: ARD-CATALOG 갱신
+## Phase 9: ADR-CATALOG 갱신
 
 /docs-add-frd Phase 7 동일.
 
@@ -259,7 +259,7 @@ v0.7 일관성 룰 따름:
 
 ### 생성 파일
 - CREATE Docs/<App>/TASK/<App>-TASK-<NNN>.md (12 section)
-- CREATE Docs/<App>/ARD/<App>-ARD-<NNN>.md (Proposed, narrative)
+- CREATE Docs/<App>/ADR/<App>-ADR-<NNN>.md (Proposed, narrative)
 
 ### 영향 FRD 갱신
 - UPDATE Docs/<App>/FRD/<App>-FRD-<N1>.md
@@ -273,14 +273,14 @@ v0.7 일관성 룰 따름:
 - F<N1>: 구현 상태 → Implementing, 테스트 상태 → 작성중
 - F<N2>: ...
 
-### ARD-CATALOG
-- Proposed 행 1 추가 (<App>-ARD-<NNN>)
+### ADR-CATALOG
+- Proposed 행 1 추가 (<App>-ADR-<NNN>)
 
 ### 핵심 채움 값
 - TASK 제목: <title>
 - 작업 유형: <work_type>
 - 영향 FRD: F<N1>, F<N2>, ...
-- ARD 제목: <ARD 추론 제목>
+- ADR 제목: <ADR 추론 제목>
 ```
 
 `AskUserQuestion`:
@@ -293,13 +293,13 @@ v0.7 일관성 룰 따름:
 
 ## Phase 11: in-place 쓰기 (작성 순서)
 
-1. **ARD 파일** `Write`
+1. **ADR 파일** `Write`
 2. **영향 FRD 본문** `Edit` (다수)
    - 메타 버전 행
    - 변경 이력 행 추가
    - 영향 section 텍스트
 3. **FC** `Edit` (영향 행 상태 컬럼)
-4. **ARD-CATALOG** `Edit` (Proposed 행 추가)
+4. **ADR-CATALOG** `Edit` (Proposed 행 추가)
 5. **TASK 파일** `Write` (마지막 — §6 영향 SSOT 표에 1~4 결과 기반 "완료/실패" 텍스트 채움)
 
 각 단계 실패 = 다음 진행. 결과 보고 partial status.
@@ -318,11 +318,11 @@ python scripts/docs_helpers.py check --repo . --app <App>
 
 ```
 CREATE Docs/<App>/TASK/<App>-TASK-<NNN>.md
-CREATE Docs/<App>/ARD/<App>-ARD-<NNN>.md
+CREATE Docs/<App>/ADR/<App>-ADR-<NNN>.md
 UPDATE Docs/<App>/FRD/<App>-FRD-<N1>.md (history + sections)
 UPDATE Docs/<App>/FRD/<App>-FRD-<N2>.md (history + sections)
 UPDATE Docs/<App>/<App>-FC.md (rows updated)
-UPDATE Docs/<App>/<App>-ARD-CATALOG.md (Proposed +1)
+UPDATE Docs/<App>/<App>-ADR-CATALOG.md (Proposed +1)
 Checks: <P> PASS, <F> FAIL
 ```
 
@@ -339,7 +339,7 @@ Cross-cutting (errorCode/도메인 entity 변경) 감지 시:
 TASK 휘발성 안내:
 ```
 [Note] 본 TASK 는 작업 완료 후 삭제 가능 (v0.7 휘발성 룰).
-영구 추적은 영향 FRD §변경 이력 + ARD-CATALOG 에 보존됨.
+영구 추적은 영향 FRD §변경 이력 + ADR-CATALOG 에 보존됨.
 ```
 
 ---

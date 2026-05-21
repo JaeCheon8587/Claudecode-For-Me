@@ -1,6 +1,6 @@
 # docs-add-frd
 
-신규 기능 FRD + ARD 작성, App-PRD §3.1/§7 갱신, FC 5표 행 추가, ARD-CATALOG Proposed 행 추가.
+신규 기능 FRD + ADR 작성, App-PRD §3.1/§7 갱신, FC 5표 행 추가, ADR-CATALOG Proposed 행 추가.
 
 v0.7 per-App SSOT 체계 (`Docs/_templates/App/` 양식). Legacy (`FRD-<CODE>-F<NNN>.md` 등) 미지원. source repo in-place 수정 (preview 없음).
 
@@ -16,7 +16,7 @@ v0.7 per-App SSOT 체계 (`Docs/_templates/App/` 양식). Legacy (`FRD-<CODE>-F<
 1. `skills/docs-add-frd/SKILL.md` Phase 0~11 따름.
 2. App 결정 → 입력 수집 (필수만 질문) → 번호 할당 → 컨텐츠 준비 → 사전 확정 (`AskUserQuestion`) → in-place 쓰기 → 자기 검증 → 결과 보고.
 3. 모든 작성 전 사용자 확정 1회 필수.
-4. ARD 항상 동반 생성. 결정 없을 시 본문 placeholder 자동.
+4. ADR 항상 동반 생성. 결정 없을 시 본문 placeholder 자동.
 5. TASK 인용 금지 (v0.7 룰).
 6. Cross-cutting 영향 감지 시 경고만 (솔루션 PRD/ARCHITECTURE 자동 수정 안 함).
 

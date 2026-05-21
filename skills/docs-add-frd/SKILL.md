@@ -1,12 +1,12 @@
 ---
 name: docs-add-frd
-description: v0.7 per-App SSOT 체계에서 신규 기능 FRD + ARD 를 in-place 작성한다. FRD + ARD 파일 생성, App-PRD §3.1/§7 갱신, FC 5표 행 추가, ARD-CATALOG Proposed 행 추가. 사용자가 신규 기능을 자연어로 요청 (예: "주문 검색 기능 추가") 할 때 트리거.
+description: v0.7 per-App SSOT 체계에서 신규 기능 FRD + ADR 를 in-place 작성한다. FRD + ADR 파일 생성, App-PRD §3.1/§7 갱신, FC 5표 행 추가, ADR-CATALOG Proposed 행 추가. 사용자가 신규 기능을 자연어로 요청 (예: "주문 검색 기능 추가") 할 때 트리거.
 argument-hint: "[신규 기능 자연어 prompt]"
 ---
 
 # docs-add-frd
 
-Docs/_templates v0.7 체계 (per-App PRD/FC/ARCHITECTURE/FRD/ARD/ARD-CATALOG) 에서 **신규 기능 FRD + ARD 항상 동반 생성**. source repo in-place 수정. preview 없음.
+Docs/_templates v0.7 체계 (per-App PRD/FC/ARCHITECTURE/FRD/ADR/ADR-CATALOG) 에서 **신규 기능 FRD + ADR 항상 동반 생성**. source repo in-place 수정. preview 없음.
 
 ---
 
@@ -14,7 +14,7 @@ Docs/_templates v0.7 체계 (per-App PRD/FC/ARCHITECTURE/FRD/ARD/ARD-CATALOG) �
 
 - **v0.7 전용** — Legacy (`PRD-<CODE>-001.md`, 19-section FRD 등) 미지원.
 - **In-place** — `Docs/<App>/...` 경로에 직접 쓰기. preview-dir 없음.
-- **ARD 항상 강제** — FRD 1개 = ARD 1개 동반. 결정 사항 없을 시 placeholder 자동 채움.
+- **ADR 항상 강제** — FRD 1개 = ADR 1개 동반. 결정 사항 없을 시 placeholder 자동 채움.
 - **AI 자동 채움** — 사용자 prompt 에 없는 선택 항목은 "미작성/추후" 또는 "없음" 텍스트.
 - **TASK 인용 금지** — 본 skill 은 TASK 미관여 (v0.7 휘발성 룰).
 - **부분 실패 시 rollback X** — 결과 보고에 partial status 명시.
@@ -65,11 +65,11 @@ Backlog 신설 시 (사용자 명시 "backlog" / "확장 후보"):
 
 ```
 python scripts/docs_helpers.py next-id --repo . --app <App> --kind frd
-python scripts/docs_helpers.py next-id --repo . --app <App> --kind ard
+python scripts/docs_helpers.py next-id --repo . --app <App> --kind adr
 python scripts/docs_helpers.py git-user --repo .
 ```
 
-- 활성 FRD NNN, ARD NNN 산출
+- 활성 FRD NNN, ADR NNN 산출
 - exit 2 (`FAIL LIMIT`) 시 즉시 중단 + 보고
 - Backlog 모드 시 `next-id --kind frd --backlog`
 
@@ -91,7 +91,7 @@ python scripts/docs_helpers.py git-user --repo .
 | 기능 ID | F<NNN> |
 | 상태 | Draft |
 | 작성 가정 | <prompt 에서 추출 또는 "본 기능은 ..."> |
-| 관련 문서 | [<App>-PRD](../<App>-PRD.md) · [<App>-FC](../<App>-FC.md) · [<App>-ARCHITECTURE](../<App>-ARCHITECTURE.md) · [<App>-ARD-CATALOG](../<App>-ARD-CATALOG.md) |
+| 관련 문서 | [<App>-PRD](../<App>-PRD.md) · [<App>-FC](../<App>-FC.md) · [<App>-ARCHITECTURE](../<App>-ARCHITECTURE.md) · [<App>-ADR-CATALOG](../<App>-ADR-CATALOG.md) |
 ```
 
 ### 변경 이력 표
@@ -124,7 +124,7 @@ python scripts/docs_helpers.py git-user --repo .
 | 13 | 비기능 요구사항 | 성능/보안/로깅/에러 표 |
 | 14 | 로그/알림/이력 정책 | 정보/오류/알림/이력 bulleted |
 | 15 | UI / 외부 연계 영향 | UI/외부연계/운영 표 (api_paths 는 외부 연계 행에) |
-| 16 | FC/ARD-CATALOG/ARD 반영 여부 | 항상 3 행 자동 (아래 참조) |
+| 16 | FC/ADR-CATALOG/ADR 반영 여부 | 항상 3 행 자동 (아래 참조) |
 | 17 | 수용 기준 | AC-F<NNN>-001 ~ 행 (acceptance_criteria) |
 | 18 | 테스트 관점 | TC-F<NNN>-001 행 (test_cases 또는 placeholder) |
 | 19 | 요구 근거 | App-PRD / FC 행 링크 + notes |
@@ -135,8 +135,8 @@ python scripts/docs_helpers.py git-user --repo .
 | 문서 | 반영 여부 | 반영 내용 | 비고 |
 |---|---|---|---|
 | FC | 필요 | 신규 F<NNN> 등재 (5 표) | 완료 |
-| ARD | 필요 | <App>-ARD-<NNN> 신설 | 완료 |
-| ARD-CATALOG | 필요 | Proposed 행 추가 | 완료 |
+| ADR | 필요 | <App>-ADR-<NNN> 신설 | 완료 |
+| ADR-CATALOG | 필요 | Proposed 행 추가 | 완료 |
 ```
 
 **AC/TC/Q ID 자동**:
@@ -146,26 +146,26 @@ python scripts/docs_helpers.py git-user --repo .
 
 ---
 
-## Phase 4: ARD 파일 내용 준비
+## Phase 4: ADR 파일 내용 준비
 
-`_templates/App/ARD/APP-ARD-001-TEMPLATE.md` 기준.
+`_templates/App/ADR/APP-ADR-001-TEMPLATE.md` 기준.
 
 ### 메타 표
 
 ```
 | 항목 | 값 |
 |---|---|
-| 문서 ID | <App>-ARD-<NNN> |
+| 문서 ID | <App>-ADR-<NNN> |
 | 버전 | 0.1 (Draft) |
 | 상태 | Proposed |
-| 작성 가정 | 본 FRD 작업과 동반 신설. 결정 narrative 는 본 ARD 본문 |
-| 관련 문서 | [<App>-ARD-CATALOG](../<App>-ARD-CATALOG.md) · [<App>-PRD](../<App>-PRD.md) · [<App>-FC](../<App>-FC.md) · [<App>-ARCHITECTURE](../<App>-ARCHITECTURE.md) · [FRD 폴더](../FRD/) · [DOCUMENT_GUIDE](../../DOCUMENT_GUIDE.md) |
+| 작성 가정 | 본 FRD 작업과 동반 신설. 결정 narrative 는 본 ADR 본문 |
+| 관련 문서 | [<App>-ADR-CATALOG](../<App>-ADR-CATALOG.md) · [<App>-PRD](../<App>-PRD.md) · [<App>-FC](../<App>-FC.md) · [<App>-ARCHITECTURE](../<App>-ARCHITECTURE.md) · [FRD 폴더](../FRD/) · [DOCUMENT_GUIDE](../../DOCUMENT_GUIDE.md) |
 ```
 
 ### 변경 이력
 - 0.1 | <오늘> | 초안 | <git-user>
 
-### 본문 (## ARD-<NNN>: <제목>)
+### 본문 (## ADR-<NNN>: <제목>)
 
 **제목** = AI 가 FRD 명세 보고 추론. "결정 사항 없음" 케이스 = `"<기능명> 표준 구현 채택"`.
 
@@ -182,7 +182,7 @@ python scripts/docs_helpers.py git-user --repo .
 **§ 코드 인용**: 신규 기능 = `"신규 — 코드 인용 없음 (구현 시 첨부)"`.
 
 **§ 문서 반영** (필수):
-- `[<App>-ARD-CATALOG](../<App>-ARD-CATALOG.md)` — Proposed 행 추가
+- `[<App>-ADR-CATALOG](../<App>-ADR-CATALOG.md)` — Proposed 행 추가
 - `[<App>-PRD](../<App>-PRD.md)` — §3.1 / §7 갱신
 - `[<App>-FC](../<App>-FC.md)` — F<NNN> 행 추가 (5표)
 - `[<App>-FRD-<NNN>](../FRD/<App>-FRD-<NNN>.md)` — §16 반영
@@ -210,7 +210,7 @@ python scripts/docs_helpers.py git-user --repo .
 
 ### 4) `### 기능 요구 추적`
 ```
-| F<NNN> | <work_type> | <user_impact 또는 "없음"> | FC / FRD / ARD / ARD-CATALOG | [<App>-FRD-<NNN> §17](FRD/<App>-FRD-<NNN>.md#17-수용-기준) |
+| F<NNN> | <work_type> | <user_impact 또는 "없음"> | FC / FRD / ADR / ADR-CATALOG | [<App>-FRD-<NNN> §17](FRD/<App>-FRD-<NNN>.md#17-수용-기준) |
 ```
 
 ### 5) `### 타 App 협력 흐름`
@@ -237,12 +237,12 @@ python scripts/docs_helpers.py git-user --repo .
 
 ---
 
-## Phase 7: ARD-CATALOG 갱신 내용 준비
+## Phase 7: ADR-CATALOG 갱신 내용 준비
 
-`Docs/<App>/<App>-ARD-CATALOG.md` `## Proposed` 표 행 1 추가:
+`Docs/<App>/<App>-ADR-CATALOG.md` `## Proposed` 표 행 1 추가:
 
 ```
-| [<App>-ARD-<NNN>](ARD/<App>-ARD-<NNN>.md) | <ARD 제목> | <오늘> | <영향 모듈 또는 "F<NNN> 기능"> | <결정 기한 = 오늘+14일> | <결정 필요자 = "개발 리드"> |
+| [<App>-ADR-<NNN>](ADR/<App>-ADR-<NNN>.md) | <ADR 제목> | <오늘> | <영향 모듈 또는 "F<NNN> 기능"> | <결정 기한 = 오늘+14일> | <결정 필요자 = "개발 리드"> |
 ```
 
 `Proposed` 절 자체가 없으면 절 + 표 헤더 자동 신설.
@@ -258,7 +258,7 @@ python scripts/docs_helpers.py git-user --repo .
 
 ### 생성 파일
 - CREATE Docs/<App>/FRD/<App>-FRD-<NNN>.md (20 section + 메타 + 이력)
-- CREATE Docs/<App>/ARD/<App>-ARD-<NNN>.md (Proposed, narrative 추론)
+- CREATE Docs/<App>/ADR/<App>-ADR-<NNN>.md (Proposed, narrative 추론)
 
 ### 갱신 파일
 - UPDATE Docs/<App>/<App>-PRD.md
@@ -266,7 +266,7 @@ python scripts/docs_helpers.py git-user --repo .
   - §7 주요 기능 요약: 행 1 추가
 - UPDATE Docs/<App>/<App>-FC.md
   - 5표 모두 F<NNN> 행 추가
-- UPDATE Docs/<App>/<App>-ARD-CATALOG.md
+- UPDATE Docs/<App>/<App>-ADR-CATALOG.md
   - Proposed 행 1 추가
 
 ### 핵심 채움 값
@@ -275,7 +275,7 @@ python scripts/docs_helpers.py git-user --repo .
 - 목적: <purpose>
 - 작업 유형: <work_type>
 - 우선순위: <priority>
-- ARD 제목: <ARD 추론 제목>
+- ADR 제목: <ADR 추론 제목>
 ```
 
 `AskUserQuestion`:
@@ -290,11 +290,11 @@ python scripts/docs_helpers.py git-user --repo .
 
 작성 순서 (의존도 낮은 것부터, 부분 실패 시 partial OK):
 
-1. **ARD 파일** `Write` (Docs/<App>/ARD/<App>-ARD-<NNN>.md)
+1. **ADR 파일** `Write` (Docs/<App>/ADR/<App>-ADR-<NNN>.md)
 2. **FRD 파일** `Write` (Docs/<App>/FRD/<App>-FRD-<NNN>.md)
 3. **App-PRD** `Edit` §3.1 + §7
 4. **FC** `Edit` 5표 행 추가
-5. **ARD-CATALOG** `Edit` Proposed 행 추가
+5. **ADR-CATALOG** `Edit` Proposed 행 추가
 
 각 단계 실패 = 다음 단계 진행, 결과 보고에 `PARTIAL <항목>` 명시.
 
@@ -314,10 +314,10 @@ FAIL 있어도 source 유지. 출력 그대로 사용자에 노출. 수동 처�
 
 ```
 CREATE Docs/<App>/FRD/<App>-FRD-<NNN>.md
-CREATE Docs/<App>/ARD/<App>-ARD-<NNN>.md
+CREATE Docs/<App>/ADR/<App>-ADR-<NNN>.md
 UPDATE Docs/<App>/<App>-PRD.md (§3.1, §7)
 UPDATE Docs/<App>/<App>-FC.md (5 tables)
-UPDATE Docs/<App>/<App>-ARD-CATALOG.md (Proposed +1)
+UPDATE Docs/<App>/<App>-ADR-CATALOG.md (Proposed +1)
 Checks: <P> PASS, <F> FAIL
 ```
 
@@ -340,5 +340,5 @@ Cross-cutting 감지 시 (errorCode 신설, 솔루션 도메인 entity 변경 �
 - App 다수 → `AskUserQuestion`
 - NNN 한계 (F099 초과) → exit 2 + 중단
 - 필수 필드 부족 → `AskUserQuestion`
-- FC/PRD/ARD-CATALOG 파일 부재 → 작성 거절 + "App 부트스트랩 누락" 보고
+- FC/PRD/ADR-CATALOG 파일 부재 → 작성 거절 + "App 부트스트랩 누락" 보고
 - Backlog 모드 + 일반 FRD 모드 충돌 → 사용자 재확인
