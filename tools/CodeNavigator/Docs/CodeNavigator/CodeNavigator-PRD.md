@@ -5,13 +5,14 @@
 | 항목 | 값 |
 |---|---|
 | 문서 ID | CodeNavigator-PRD |
-| 버전 | 0.1 (Draft) |
-| 작성 가정 | AI 코딩 에이전트(Claude Code 등) 가 사용하는 도구. 사람이 직접 사용하는 UI 없음. Python 3.11+, SQLite FTS5, Claude Code CLI 사용 가능 환경 전제. |
+| 버전 | 0.3 (Draft) |
+| 작성 가정 | AI 코딩 에이전트용 검색 CLI + 개발자용 로컬 관리 UI. Python 3.11+, SQLite FTS5, Claude Code CLI 사용 가능 환경 전제. |
 | 관련 문서 | [CodeNavigator-FC](CodeNavigator-FC.md) · [CodeNavigator-ARCHITECTURE](CodeNavigator-ARCHITECTURE.md) · [CodeNavigator-ADR-CATALOG](CodeNavigator-ADR-CATALOG.md) · [/CLAUDE.md](../../CLAUDE.md) |
 
 ## 변경 이력
 | 버전 | 일자 | 변경 요약 | 작성자 |
 |---|---|---|---|
+| 0.3 | 2026-05-21 | 로컬 관리 UI(F007)·수동 메타데이터 관리(F008) 추가 | 정재천 |
 | 0.2 | 2026-05-21 | F006 delete 추가 | 정재천 |
 | 0.1 | 2026-05-21 | 초안 | 정재천 |
 
@@ -35,11 +36,11 @@
 | 구분 | 범위 |
 |---|---|
 | MVP 필수 | FTS5 기반 클래스 시맨틱 검색(F001) · 전체/변경 파일 reindex(F002) · pre-commit hook 갱신(F003) · 인덱스 상태 조회(F004) · AI description 생성(F005) |
-| 이번 릴리즈 포함 | 위 MVP 5개 기능 + 파일 단위 인덱스 삭제(F006) |
+| 이번 릴리즈 포함 | 위 MVP 5개 기능 + 파일 단위 인덱스 삭제(F006) + 로컬 관리 UI(F007) + 수동 메타데이터 관리(F008) |
 | 이번 릴리즈 제외 | embedding rerank, Roslyn 파서, 다국어 지원, 파일 감시 데몬, API 직접 호출 옵션 |
 
 ## 4. 비목표
-- 사람이 직접 사용하는 UI/UX (웹 대시보드, IDE 플러그인 등).
+- 외부 공개용 사용자 UI/UX (인터넷 노출 웹 서비스, IDE 플러그인 등).
 - C# 이외 언어 (v1 범위 밖).
 - 실시간 파일 감시 (daemon/watcher) — pre-commit hook 으로 충분.
 - 의미 임베딩(embedding) 기반 벡터 검색 — Backlog(F101).
@@ -49,7 +50,7 @@
 | 구분 | 역할 | 관심사 |
 |---|---|---|
 | AI 코딩 에이전트 (Claude Code 등) | `codenav search` 호출자 | JSON 결과 정확성·속도·한국어 인코딩 정상 |
-| 개발자 (인덱스 관리자) | `codenav reindex` 실행, hook 설치 | 설치 간편성, stale 가시성, AI call 비용 |
+| 개발자 (인덱스 관리자) | `codenav reindex` 실행, hook 설치, 로컬 UI 운영 | 설치 간편성, stale 가시성, AI call 비용, 수동 보정 편의 |
 
 ## 6. 핵심 시나리오
 
@@ -59,6 +60,9 @@
 | S2 | 개발자가 새 `.cs` 파일 커밋 | pre-commit hook 이 해당 파일 AI reindex 후 커밋 통과 |
 | S3 | AI 호출 실패 | stale=1 로 저장, 커밋 차단 없음, `codenav status` 에 stale 파일 노출 |
 | S4 | 에이전트가 `--scope method` 로 검색 | 클래스 + 메서드별 description/tags 포함 JSON 반환 |
+| S5 | 개발자가 브라우저 UI 로 인덱스 상태를 확인 | 총 클래스 수, stale 수, 마지막 인덱싱 시각, DB 경로가 즉시 보임 |
+| S6 | 개발자가 UI 에서 description/tags 를 수동 수정 | 저장 후 상세와 검색 결과에 반영 |
+| S7 | 개발자가 UI 에서 수동 항목을 추가/삭제 | 관리 목적 인덱스 항목을 명시적으로 유지/정리 |
 
 ## 7. 주요 기능 요약
 
@@ -70,6 +74,8 @@
 | F004 | 인덱스 상태 조회 | DB 경로·클래스 수·stale 수·stale 파일 목록 출력 | MVP |
 | F005 | AI description 생성 | Claude CLI 로 클래스+메서드 description/tags 생성 | MVP |
 | F006 | 파일 단위 인덱스 삭제 | `codenav delete --file` — dry-run 기본, `--yes` 로 실제 삭제, `--json` 출력 | v0.2 |
+| F007 | 로컬 관리 UI | 브라우저에서 인덱스 상태·목록·상세·재인덱싱 작업을 확인/실행 | v0.3 |
+| F008 | 수동 메타데이터 관리 | UI 에서 description/tags 수정 및 수동 인덱스 항목 추가/삭제 | v0.3 |
 
 ## 8. 비기능 요구사항
 
@@ -79,6 +85,7 @@
 | stdout 인코딩 | UTF-8 강제 (AI 소비자 JSON 파싱 보장) |
 | hook 비차단 | AI call 실패 시 stale 마킹 후 exit 0 — commit 차단 없음 |
 | 크로스 플랫폼 | Windows / macOS / Linux 동작 (bash 의존 없음) |
+| UI 접근성 | 로컬 전용 웹 UI 가 별도 인증 없이 `localhost` 에서만 접근 가능 |
 
 ## 9. 제약사항
 
@@ -86,9 +93,11 @@
 - SQLite FTS5 tokenizer `unicode61` 사용 — 한국어 bigram 은 Python 레이어에서 전처리.
 - `--output-format json` wrapper 사용: `outer["response"]` → inner JSON 이중 파싱 필요. ([CodeNavigator-ADR-001](ADR/CodeNavigator-ADR-001.md) 참조)
 - description + tags 분리 필드 설계. ([CodeNavigator-ADR-002](ADR/CodeNavigator-ADR-002.md) 참조)
+- 관리 UI 는 개발자 로컬 사용 전제. 외부 네트워크 공개, 사용자 계정, 멀티테넌시 범위 밖.
+- 수동 추가 항목은 실제 `.cs` 파일 파싱 결과와 별개로 유지되며 source-of-truth 는 인덱스 DB 이다.
 
 ## 10. Feature Catalog / FRD 진입점
 
 | Feature Catalog | 주요 FRD |
 |---|---|
-| [`CodeNavigator-FC`](CodeNavigator-FC.md) | [`CodeNavigator-FRD-001`](FRD/CodeNavigator-FRD-001.md) (검색 API) · [`CodeNavigator-FRD-002`](FRD/CodeNavigator-FRD-002.md) (hook 갱신) |
+| [`CodeNavigator-FC`](CodeNavigator-FC.md) | [`CodeNavigator-FRD-001`](FRD/CodeNavigator-FRD-001.md) (검색 API) · [`CodeNavigator-FRD-002`](FRD/CodeNavigator-FRD-002.md) (hook 갱신) · [`CodeNavigator-FRD-003`](FRD/CodeNavigator-FRD-003.md) (파일 단위 삭제) · [`CodeNavigator-FRD-004`](FRD/CodeNavigator-FRD-004.md) (관리 UI/수동 메타데이터) |
