@@ -1,0 +1,34 @@
+#!/usr/bin/env python3
+"""CodeNavigator pre-commit hook: reindex staged .cs files.
+Hook failure does NOT block the commit. Stale files shown via `codenav status`."""
+
+import subprocess
+import sys
+
+
+def main() -> None:
+    # Check if any staged .cs files exist
+    try:
+        result = subprocess.run(
+            ["git", "diff", "--name-only", "--cached"],
+            capture_output=True, text=True,
+        )
+    except FileNotFoundError:
+        sys.exit(0)
+
+    if not any(f.endswith(".cs") for f in result.stdout.splitlines()):
+        sys.exit(0)
+
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "codenav", "reindex", "--changed", "--verbose"],
+            check=False,
+        )
+    except Exception as exc:
+        print(f"[codenav] WARNING: reindex failed: {exc}", file=sys.stderr)
+
+    sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()

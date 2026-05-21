@@ -1,0 +1,8 @@
+.codenav/
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+.venv/
+*.pyo
