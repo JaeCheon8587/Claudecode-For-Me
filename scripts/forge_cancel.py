@@ -182,6 +182,11 @@ def _cancel_scoped(args: argparse.Namespace) -> int:
     if registered is not None or worktree.exists():
         target = registered if registered is not None else worktree
         dirty = registered is not None and _worktree_dirty(registered)
+        if (target / ".gitmodules").exists():
+            subprocess.run(
+                ["git", "submodule", "deinit", "-f", "--all"],
+                cwd=target, capture_output=True, text=True,
+            )
         cmd = ["worktree", "remove"]
         if dirty:
             cmd.append("--force")

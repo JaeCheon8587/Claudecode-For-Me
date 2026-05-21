@@ -13,6 +13,8 @@ Usage:
 Environment:
     FORGE_TRUST=1            --trust 대신 사용 가능 (--dangerously-skip-permissions 옵트인)
     FORGE_CLAUDE_TIMEOUT     Claude CLI 타임아웃(초). 미설정 시 1800.
+    FORGE_DEFAULT_SLN        다수 sln 존재 시 기본값 (repo root 기준 상대경로). 예: Src/Foo/Foo.sln
+                             forge-scope.json의 default_sln 키보다 우선. --sln CLI가 최우선.
 """
 
 import sys
@@ -30,6 +32,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import signal
 import subprocess
 import threading
@@ -66,6 +69,20 @@ class SlnResolveError(RuntimeError):
     """sln 경로 해석 실패 (다수/부재 등)."""
 
 
+def _read_default_sln_from_config(root: Path) -> str | None:
+    """consumer repo의 forge-scope.json에서 default_sln 읽기. 부재/파싱 실패 시 None."""
+    cfg = root / "forge-scope.json"
+    if not cfg.is_file():
+        return None
+    try:
+        data = json.loads(cfg.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as e:
+        log.warning("forge-scope.json 파싱 실패(무시): %s", e)
+        return None
+    val = data.get("default_sln")
+    return val if isinstance(val, str) and val.strip() else None
+
+
 def resolve_sln_path(
     arg_sln: str | None,
     root: Path,
@@ -75,8 +92,10 @@ def resolve_sln_path(
     """contract-tdd 등에서 사용할 sln 경로 결정.
 
     우선순위:
-    1. arg_sln 명시 → root 기준 해당 경로 (존재 검증, 없으면 SlnResolveError)
-    2. 미지정 → Src/*.sln (1단계) glob. 없으면 Src/*/*.sln (2단계).
+    1. arg_sln (CLI --sln=...) — 명시 경로 검증 후 반환
+    2. FORGE_DEFAULT_SLN 환경변수
+    3. forge-scope.json 의 default_sln 키 (consumer repo root)
+    4. Src/*.sln → Src/*/*.sln auto-detect
        - 1개 = 자동 채택
        - 0개 = None (strict=False) 또는 SlnResolveError (strict=True)
        - 다수 = 후보 목록과 함께 SlnResolveError (strict 무관: 다수는 항상 명시 강제)
@@ -92,6 +111,12 @@ def resolve_sln_path(
                 f"--sln 은 repo root({root}) 하위여야 합니다: {arg_sln}"
             ) from e
         return p
+    env_sln = os.environ.get("FORGE_DEFAULT_SLN", "").strip()
+    if env_sln:
+        return resolve_sln_path(env_sln, root, strict=strict)
+    cfg_sln = _read_default_sln_from_config(root)
+    if cfg_sln:
+        return resolve_sln_path(cfg_sln, root, strict=strict)
     src_dir = root / "Src"
     if not src_dir.is_dir():
         if strict:
@@ -110,8 +135,8 @@ def resolve_sln_path(
         return None
     rels = [c.relative_to(root).as_posix() for c in candidates]
     raise SlnResolveError(
-        "Src/ 하위 다수 sln 발견 — --sln 명시 필요.\n  후보:\n"
-        + "\n".join(f"    - {r}" for r in rels)
+        "Src/ 하위 다수 sln 발견 — --sln 또는 FORGE_DEFAULT_SLN 또는 forge-scope.json 명시 필요.\n"
+        "  후보:\n" + "\n".join(f"    - {r}" for r in rels)
     )
 
 COMPACT_DOC_HEADINGS = (
@@ -612,6 +637,7 @@ class WorktreeManager:
                 )
                 sys.exit(EXIT_ERR)
             _qprint(f"  Worktree: {self._worktree_path} (재사용)")
+            self._ensure_submodules()
             return self._worktree_path
 
         if self._worktree_path.exists():
@@ -636,6 +662,7 @@ class WorktreeManager:
             )
             sys.exit(EXIT_ERR)
         _qprint(f"  Worktree: {self._worktree_path} (생성, branch={self._branch})")
+        self._ensure_submodules()
         return self._worktree_path
 
     def _branch_exists(self) -> bool:
@@ -664,6 +691,20 @@ class WorktreeManager:
             encoding="utf-8",
             errors="replace",
         )
+
+    def _ensure_submodules(self) -> None:
+        if not (self._worktree_path / ".gitmodules").exists():
+            return
+        r = subprocess.run(
+            ["git", "submodule", "update", "--init", "--recursive"],
+            cwd=self._worktree_path,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        if r.returncode != 0:
+            _qprint(f"  Submodule init 경고: {r.stderr.strip()}")
 
 
 # ============================================================================
@@ -1528,18 +1569,17 @@ class DeterministicPlanBuilder:
 
     def _acceptance_commands(self) -> list[str]:
         root = self._cfg.root
-        preferred = root / "SajuFortune.sln"
-        if preferred.exists():
+        sln = self._sln_path
+        if sln is None:
+            try:
+                sln = resolve_sln_path(None, root, strict=False)
+            except SlnResolveError:
+                sln = None
+        if sln is not None:
+            rel = sln.relative_to(root).as_posix()
             return [
-                "dotnet build SajuFortune.sln --no-restore -q",
-                "dotnet test SajuFortune.sln --no-build -q",
-            ]
-        sln_files = sorted(root.glob("*.sln"))
-        if sln_files:
-            name = sln_files[0].name
-            return [
-                f"dotnet build {name} --no-restore -q",
-                f"dotnet test {name} --no-build -q",
+                f"dotnet build {rel} --no-restore -q",
+                f"dotnet test {rel} --no-build -q",
             ]
         if (root / "package.json").exists():
             return ["npm test"]
@@ -2057,12 +2097,22 @@ class ForgeScope:
 
     @staticmethod
     def _verify_worktree_bootstrap(worktree_root: Path, phase_dir: str) -> None:
-        """워크트리에 필수 부트스트랩 파일이 commit돼 있는지 확인.
+        """워크트리에 필수 부트스트랩 파일이 있는지 확인하고, gitignored면 main→worktree 자동 복사.
 
-        메인 repo에서 부트스트랩 파일을 commit하지 않고 forge-scope를 호출하면
-        워크트리는 생성되지만 CLAUDE.md/Docs/_templates가 워크트리에 없어
-        가드레일이 비어버린다. fail-fast로 사용자에게 commit 단계를 강제한다.
+        메인 repo에서 부트스트랩 파일을 .gitignore로 제외하면 worktree에는 tracked 파일만
+        체크아웃되어 CLAUDE.md/Docs 등이 누락된다. ROOT(=main repo)에서 자동으로 복사한 뒤
+        여전히 없으면 fail-fast로 사용자에게 알린다.
         """
+        _BOOTSTRAP_PATHS = ["CLAUDE.md", "PHASE_SCHEMA.md", "FORGE_SCOPE.md", "Docs"]
+        for rel in _BOOTSTRAP_PATHS:
+            src = ROOT / rel
+            if not src.exists():
+                continue
+            dst = worktree_root / rel
+            if src.is_dir():
+                shutil.copytree(src, dst, dirs_exist_ok=True)
+            elif not dst.exists():
+                shutil.copy2(src, dst)
         required = ["CLAUDE.md"]
         missing = [rel for rel in required if not (worktree_root / rel).exists()]
         if not missing:
