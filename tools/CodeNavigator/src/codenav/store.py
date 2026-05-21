@@ -184,9 +184,12 @@ def upsert_class(conn: sqlite3.Connection, entry: dict[str, Any]) -> bool:
     new_hash = entry.get("source_hash", "")
     stale_val = 1 if entry.get("stale") else 0
 
+    methods_json = json.dumps(entry.get("methods", []), ensure_ascii=False)
+
     row = conn.execute(
         """
-        SELECT id, source_hash, namespace, description, tags,
+        SELECT id, source_hash, solution, project, namespace, folder, kind,
+               description, tags, methods_json,
                source_type, auto_description, auto_tags_json,
                manual_description, manual_tags_json
           FROM classes
@@ -220,6 +223,12 @@ def upsert_class(conn: sqlite3.Connection, entry: dict[str, Any]) -> bool:
         and source_type == "auto"
         and row["source_hash"] == new_hash
         and not stale_val
+        and row["solution"] == entry.get("solution", "")
+        and row["project"] == entry.get("project", "")
+        and row["namespace"] == entry.get("namespace", "")
+        and row["folder"] == entry.get("folder", "")
+        and row["kind"] == entry.get("kind", "class")
+        and row["methods_json"] == methods_json
         and row["auto_description"] == auto_description
         and row["auto_tags_json"] == auto_tags_json
     ):
@@ -248,7 +257,7 @@ def upsert_class(conn: sqlite3.Connection, entry: dict[str, Any]) -> bool:
                 effective_description,
                 effective_tags_str,
                 effective_tags_json,
-                json.dumps(entry.get("methods", []), ensure_ascii=False),
+                methods_json,
                 new_hash,
                 now,
                 stale_val,
@@ -286,7 +295,7 @@ def upsert_class(conn: sqlite3.Connection, entry: dict[str, Any]) -> bool:
                 effective_description,
                 effective_tags_str,
                 effective_tags_json,
-                json.dumps(entry.get("methods", []), ensure_ascii=False),
+                methods_json,
                 new_hash,
                 now,
                 stale_val,
@@ -312,16 +321,23 @@ def count_file_classes(conn: sqlite3.Connection, file: str) -> int:
     return int(row["n"]) if row else 0
 
 
-def delete_file(conn: sqlite3.Connection, file: str) -> int:
+def delete_file(conn: sqlite3.Connection, file: str, *, source_type: str | None = None) -> int:
+    filters = ["file=?"]
+    params: list[Any] = [file]
+    if source_type is not None:
+        filters.append("source_type=?")
+        params.append(source_type)
+    where = " AND ".join(filters)
     rows = conn.execute(
-        "SELECT id, class_name, namespace, description, tags FROM classes WHERE file=?", (file,)
+        f"SELECT id, class_name, namespace, description, tags FROM classes WHERE {where}",
+        params,
     ).fetchall()
     for row in rows:
         conn.execute(
             "INSERT INTO classes_fts(classes_fts, rowid, class_name, namespace, description, tags, bigram) VALUES('delete',?,?,?,?,?,'')",
             (row["id"], row["class_name"], row["namespace"], row["description"], row["tags"]),
         )
-    conn.execute("DELETE FROM classes WHERE file=?", (file,))
+    conn.execute(f"DELETE FROM classes WHERE {where}", params)
     conn.commit()
     return len(rows)
 

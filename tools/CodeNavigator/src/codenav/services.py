@@ -8,7 +8,19 @@ from typing import Any
 
 from codenav import indexer, parser_cs, search as search_mod, store
 
-_EXCLUDE_DIRS = {".codenav", ".git", "bin", "obj", "node_modules", "packages", "TestResults"}
+_EXCLUDE_DIRS = {
+    ".cache",
+    ".claire",
+    ".codenav",
+    ".git",
+    ".pytest_cache",
+    ".worktrees",
+    "bin",
+    "obj",
+    "node_modules",
+    "packages",
+    "TestResults",
+}
 
 
 def collect_cs_files(root: Path) -> list[Path]:
@@ -23,8 +35,24 @@ def collect_cs_files(root: Path) -> list[Path]:
 
 
 def detect_solution(root: Path) -> str:
-    slns = list(root.glob("*.sln")) + list(root.glob("**/*.sln"))
+    slns = sorted(root.glob("*.sln"), key=lambda path: path.name.lower())
     return slns[0].stem if slns else ""
+
+
+def detect_solution_for_file(root: Path, file: Path) -> str:
+    """Return the closest ancestor .sln name for a source file."""
+    root_resolved = root.resolve()
+    current = file.resolve().parent
+
+    while True:
+        slns = sorted(current.glob("*.sln"), key=lambda path: path.name.lower())
+        if slns:
+            return slns[0].stem
+        if current == root_resolved or current.parent == current:
+            break
+        current = current.parent
+
+    return detect_solution(root_resolved)
 
 
 def detect_project(file: Path) -> str:
@@ -33,6 +61,58 @@ def detect_project(file: Path) -> str:
         if csproj:
             return csproj[0].stem
     return ""
+
+
+def resolve_index_path(root: Path, file: str | Path) -> Path:
+    """Resolve a stored index path back to an absolute filesystem path."""
+    path = Path(file)
+    return path.resolve() if path.is_absolute() else (root / path).resolve()
+
+
+def storage_path(root: Path, file: str | Path) -> str:
+    """Return the path format stored in the DB."""
+    path = Path(file)
+    if not path.is_absolute():
+        return str(path)
+    try:
+        return str(path.resolve().relative_to(root.resolve()))
+    except (OSError, ValueError):
+        return str(file)
+
+
+def display_path(root: Path, file: str | Path) -> str:
+    """Return a root-relative display path when possible."""
+    return storage_path(root, file)
+
+
+def normalize_index_paths(root: Path) -> int:
+    """Migrate existing in-root absolute file/folder values to relative storage."""
+    conn = store.open_db(root)
+    changed = 0
+    try:
+        rows = conn.execute("SELECT id, file, folder, class_name FROM classes").fetchall()
+        for row in rows:
+            new_file = storage_path(root, row["file"])
+            new_folder = storage_path(root, row["folder"])
+            if new_file == row["file"] and new_folder == row["folder"]:
+                continue
+            duplicate = conn.execute(
+                "SELECT id FROM classes WHERE file=? AND class_name=? AND id<>?",
+                (new_file, row["class_name"], row["id"]),
+            ).fetchone()
+            if duplicate:
+                store.delete_entry(conn, row["id"])
+                changed += 1
+                continue
+            conn.execute(
+                "UPDATE classes SET file=?, folder=? WHERE id=?",
+                (new_file, new_folder, row["id"]),
+            )
+            changed += 1
+        conn.commit()
+        return changed
+    finally:
+        conn.close()
 
 
 def get_status(root: Path) -> dict[str, Any]:
@@ -74,12 +154,21 @@ def run_reindex(
     changed: bool = False,
     verbose: bool = False,
 ) -> dict[str, Any]:
+    root = root.resolve()
+    normalized_count = normalize_index_paths(root)
     conn = store.open_db(root)
-    solution = detect_solution(root)
     deleted_files: list[str] = []
+    deleted_count = 0
 
     if full:
         file_paths = collect_cs_files(root)
+        indexed_files = {storage_path(root, path) for path in file_paths}
+        stale_indexed_files = conn.execute(
+            "SELECT DISTINCT file FROM classes WHERE source_type='auto'"
+        ).fetchall()
+        for row in stale_indexed_files:
+            if row["file"] not in indexed_files:
+                deleted_count += store.delete_file(conn, row["file"], source_type="auto")
     elif files:
         file_paths = [Path(item) for item in files]
     elif changed:
@@ -99,7 +188,7 @@ def run_reindex(
                 cwd=root,
                 check=False,
             )
-            deleted_files = [str((root / line).resolve()) for line in result_del.stdout.splitlines() if line.endswith(".cs")]
+            deleted_files = [storage_path(root, root / line) for line in result_del.stdout.splitlines() if line.endswith(".cs")]
         except FileNotFoundError as exc:
             conn.close()
             return {"ok": False, "code": 1, "error": str(exc), "message": "git not found"}
@@ -107,7 +196,6 @@ def run_reindex(
         conn.close()
         return {"ok": False, "code": 1, "message": "Specify --full, --files, or --changed"}
 
-    deleted_count = 0
     for deleted_file in deleted_files:
         deleted_count += store.delete_file(conn, deleted_file)
 
@@ -117,14 +205,15 @@ def run_reindex(
     claude_calls = 0
 
     for file in file_paths:
-        file_resolved = file.resolve()
+        file_resolved = resolve_index_path(root, file)
         if not file_resolved.exists():
             continue
+        solution = detect_solution_for_file(root, file_resolved)
         project = detect_project(file_resolved)
         classes = parser_cs.parse_cs_file(file_resolved, solution=solution, project=project)
 
         current_names = {cls.class_name for cls in classes}
-        file_str = str(file_resolved)
+        file_str = storage_path(root, file_resolved)
         existing = conn.execute("SELECT class_name FROM classes WHERE file=?", (file_str,)).fetchall()
         for row in existing:
             if row["class_name"] not in current_names:
@@ -135,6 +224,9 @@ def run_reindex(
             continue
 
         entries = parser_cs.classes_to_index_entries(classes, file_resolved, solution=solution, project=project)
+        for entry in entries:
+            entry["file"] = storage_path(root, entry["file"])
+            entry["folder"] = storage_path(root, entry["folder"])
         entries, calls = indexer.enrich_entries(entries, verbose=verbose)
         claude_calls += calls
 
@@ -161,6 +253,7 @@ def run_reindex(
         "failed_files": failed_files,
         "claude_calls": claude_calls,
         "deleted_count": deleted_count,
+        "normalized_count": normalized_count,
         "message": (
             f"Reindex done: {written} written, {skipped} skipped (unchanged), "
             f"{len(failed_files)} stale. Claude calls: {claude_calls}."
@@ -169,7 +262,9 @@ def run_reindex(
 
 
 def delete_file_index(root: Path, file: str, *, confirm: bool) -> dict[str, Any]:
-    resolved = str((root / file).resolve()) if not Path(file).is_absolute() else str(Path(file).resolve())
+    root = root.resolve()
+    normalize_index_paths(root)
+    resolved = storage_path(root, resolve_index_path(root, file))
     conn = store.open_db(root)
     try:
         count = store.count_file_classes(conn, resolved)
@@ -240,8 +335,8 @@ def create_manual_entry(root: Path, payload: dict[str, str]) -> int:
                 "solution": payload.get("solution", "").strip(),
                 "project": payload.get("project", "").strip(),
                 "namespace": payload.get("namespace", "").strip(),
-                "folder": str(resolved_folder),
-                "file": str(resolved_file),
+                "folder": storage_path(root, resolved_folder),
+                "file": storage_path(root, resolved_file),
                 "class_name": payload.get("class_name", "").strip(),
                 "kind": payload.get("kind", "class").strip() or "class",
                 "description": payload.get("description", "").strip(),

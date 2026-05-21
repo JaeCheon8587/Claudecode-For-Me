@@ -71,8 +71,22 @@ def test_entry_detail_shows_file_and_methods(tmp_path):
 
     assert status.startswith("200")
     assert "Source Hash" in response
-    assert file in response
+    assert "B.cs" in response
+    assert file not in response
     assert "Run" in response
+
+
+def test_dashboard_shows_relative_file_path(tmp_path):
+    source = tmp_path / "Src" / "Project" / "ClassA.cs"
+    source.parent.mkdir(parents=True)
+    _insert(tmp_path, str(source.resolve()), "ClassA")
+    app = web_app.CodeNavWebApp(tmp_path)
+
+    status, _, response = _request(app, "/")
+
+    assert status.startswith("200")
+    assert "Src\\Project\\ClassA.cs" in response
+    assert str(source.resolve()) not in response
 
 
 def test_create_manual_entry_redirects(tmp_path):

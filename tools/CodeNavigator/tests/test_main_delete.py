@@ -48,7 +48,7 @@ def test_delete_dry_run_default(repo, capsys):
     assert rc == 0
 
     conn = store.open_db(repo)
-    assert store.count_file_classes(conn, target) == 1, "dry-run must not delete"
+    assert store.count_file_classes(conn, "Foo.cs") == 1, "dry-run must not delete"
     conn.close()
 
     out = capsys.readouterr().out
@@ -64,7 +64,7 @@ def test_delete_yes_removes_row(repo):
     assert rc == 0
 
     conn = store.open_db(repo)
-    assert store.count_file_classes(conn, target) == 0
+    assert store.count_file_classes(conn, "Bar.cs") == 0
     conn.close()
 
 

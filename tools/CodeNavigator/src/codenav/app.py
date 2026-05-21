@@ -477,8 +477,8 @@ class CodeNavWebApp:
     <dt>Solution</dt><dd>{escape(entry['solution'])}</dd>
     <dt>Project</dt><dd>{escape(entry['project'])}</dd>
     <dt>Namespace</dt><dd>{escape(entry['namespace'])}</dd>
-    <dt>Folder</dt><dd>{escape(entry['folder'])}</dd>
-    <dt>File</dt><dd>{escape(entry['file'])}</dd>
+    <dt>Folder</dt><dd>{escape(self._display_path(entry['folder']))}</dd>
+    <dt>File</dt><dd>{escape(self._display_path(entry['file']))}</dd>
     <dt>Indexed At</dt><dd>{escape(entry['indexed_at'])}</dd>
     <dt>Source Hash</dt><dd>{escape(entry['source_hash'])}</dd>
   </dl>
@@ -534,7 +534,7 @@ class CodeNavWebApp:
         if not file:
             return self._redirect(start_response, "/?" + urlencode({"message": "File path is required."}))
         result = services.delete_file_index(self.root, file, confirm=True)
-        message = f"Deleted {result.get('deleted', 0)} class(es) for {result['file']}"
+        message = f"Deleted {result.get('deleted', 0)} class(es) for {self._display_path(result['file'])}"
         return self._redirect(start_response, "/?" + urlencode({"message": message}))
 
     def _select(self, name: str, options, selected: str) -> str:
@@ -567,7 +567,7 @@ class CodeNavWebApp:
                 f"<td class=\"col-namespace\">{escape(entry['namespace'])}</td>"
                 f"<td class=\"col-class\"><a href=\"/classes/{entry['id']}\">{escape(entry['class_name'])}</a></td>"
                 f"<td class=\"col-kind\">{escape(entry['kind'])}</td>"
-                f"<td class=\"col-file\">{escape(entry['file'])}</td>"
+                f"<td class=\"col-file\">{escape(self._display_path(entry['file']))}</td>"
                 f"<td class=\"col-description\">{escape(entry['description'])}</td>"
                 f"<td class=\"col-tags\">{escape(', '.join(entry['tags']))}</td>"
                 f"<td class=\"col-state\"><span class=\"badge {'warn' if entry['stale'] else ''}\">{'stale' if entry['stale'] else 'fresh'}</span></td>"
@@ -593,3 +593,6 @@ class CodeNavWebApp:
             f"{item.get('name', '')}: {item.get('description', '')}".strip()
             for item in methods
         )
+
+    def _display_path(self, file: str | Path) -> str:
+        return services.display_path(self.root, file)
