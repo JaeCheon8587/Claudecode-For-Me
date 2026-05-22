@@ -18,13 +18,10 @@ CodeNavigator frontmatter 자동 생성 명령. `codenav frontmatter gen` CLI �
 
 ### 0. 사전 체크
 
-1. `codenav` CLI 동작 확인. 작동 안 하면 fallback:
+1. `codenav` CLI 동작 확인. 없으면 한 줄 안내 후 중단:
    ```
-   cd tools/CodeNavigator
-   $env:PYTHONPATH = "src"   # PowerShell
-   # 또는 export PYTHONPATH=src   # bash
+   pip install codenavigator
    ```
-   ...로 로컬 src 우선 사용. 그래도 안 되면 사용자에게 설치 안내 후 중단.
 2. `where claude` (PowerShell) / `which claude` (bash) 로 `claude` CLI 존재 확인. 없으면 AI 호출 실패 (`written=0` 예상) — 사용자에게 미리 알림.
 3. `--apply` 인자 받은 경우라도 **항상 먼저 dry-run** 한 번 수행.
 

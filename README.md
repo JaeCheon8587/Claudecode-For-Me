@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v1.15.0 · 커스텀 스킬 10종 + 슬래시 커맨드 12종 + 내장 도구 CodeNavigator
+> **Claude Code Plugin** · v1.16.0 · 커스텀 스킬 10종 + 슬래시 커맨드 12종 (외부 도구 `codenavigator` 연동)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,12 +11,13 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `1.15.0` |
+| 버전 | `1.16.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
 | 네임스페이스 | `/claudecode-for-me:<name>` |
-| 구성요소 | Skill 10 · Command 12 · Python runner 4 (`scripts/`) · 내장 도구 1 (`tools/CodeNavigator/`) |
+| 구성요소 | Skill 10 · Command 12 · Python runner 4 (`scripts/`) |
+| 외부 연동 도구 | [`codenavigator`](https://github.com/JaeCheon8587/codenavigator) (PyPI) — codenav-bootstrap / codenav-frontmatter-gen 슬래시가 호출 |
 
 플러그인은 **글로벌 캐시**에 설치되므로 한 번 설치 후 모든 프로젝트의 **새 세션**에서 자동 노출된다. 프로젝트별 재설치 불필요.
 
@@ -43,17 +44,16 @@
 /claudecode-for-me:codenav-bootstrap
 ```
 
-CodeNavigator CLI는 별도 설치:
+CodeNavigator 슬래시 커맨드(`/codenav-bootstrap`, `/codenav-frontmatter-gen`)는 외부 PyPI 패키지 [`codenavigator`](https://github.com/JaeCheon8587/codenavigator)를 호출한다. 한 줄 설치:
 
 ```bash
-cd tools/CodeNavigator
-pip install -e .
+pip install codenavigator
 ```
 
-또는 PYTHONPATH 사용:
+이후 어디서든 `codenav` CLI 사용 가능. 업데이트:
 
 ```bash
-PYTHONPATH=tools/CodeNavigator/src python -m codenav ...
+pip install -U codenavigator
 ```
 
 ## 3. 업데이트
@@ -166,20 +166,22 @@ CodeNavigator는 AI 코딩 에이전트용 C# 클래스 시맨틱 인덱스. 2�
 
 CLI 직접:
 ```bash
+pip install codenavigator   # 1회
+
 # 1단계 (.cs 변경)
-PYTHONPATH=tools/CodeNavigator/src python -m codenav --root <repo> frontmatter gen --limit 10 --apply
+codenav --root <repo> frontmatter gen --limit 10 --apply
 
 # 2단계 (SQLite 빌드)
-PYTHONPATH=tools/CodeNavigator/src python -m codenav --root <repo> reindex --full --no-ai
+codenav --root <repo> reindex --full --no-ai
 
 # 검색
-PYTHONPATH=tools/CodeNavigator/src python -m codenav --root <repo> search "키워드" --limit 30
+codenav --root <repo> search "키워드" --limit 30
 
 # 대시보드 UI
-PYTHONPATH=tools/CodeNavigator/src python -m codenav --root <repo> ui --port 9876
+codenav --root <repo> ui --port 9876
 ```
 
-상세는 `tools/CodeNavigator/Docs/CodeNavigator/CodeNavigator-PRD.md` 및 `CodeNavigator-FRONTMATTER.md` 참조.
+상세는 [codenavigator README](https://github.com/JaeCheon8587/codenavigator#readme) 및 [frontmatter 규약](https://github.com/JaeCheon8587/codenavigator/blob/main/docs/frontmatter.md) 참조.
 
 ### 6.3 docs-add-frd / docs-add-task (v0.7 per-App SSOT)
 
@@ -337,76 +339,36 @@ phases/
 
 ---
 
-## 7. 내장 도구: CodeNavigator
+## 7. 외부 연동 도구: codenavigator
 
-AI 코딩 에이전트가 C# 코드베이스에서 클래스를 자연어 키워드로 빠르게 찾을 수 있도록 SQLite FTS5 기반 시맨틱 인덱스를 제공하는 Python CLI.
+C# 코드베이스 시맨틱 인덱스 + AI 자동 description 생성 도구. **별도 PyPI 패키지로 분리** (v1.16.0 부터). 본 플러그인은 슬래시 커맨드(`codenav-bootstrap`, `codenav-frontmatter-gen`)로 도구를 호출할 뿐, 코드는 동행하지 않음.
 
 | 항목 | 값 |
 |---|---|
-| 위치 | `tools/CodeNavigator/` |
-| 런타임 | Python 3.11+ |
+| GitHub | [`JaeCheon8587/codenavigator`](https://github.com/JaeCheon8587/codenavigator) |
+| PyPI | [`codenavigator`](https://pypi.org/project/codenavigator/) |
+| 설치 | `pip install codenavigator` |
+| CLI | `codenav` |
 | DB | `<repo-root>/.codenav/index.sqlite` |
-| 문서 | `tools/CodeNavigator/Docs/CodeNavigator/` |
-| 형식 규약 | `tools/CodeNavigator/Docs/CodeNavigator/CodeNavigator-FRONTMATTER.md` |
 
 ### 워크플로 (3단계)
 
 ```bash
+pip install codenavigator   # 1회
+
 cd <repo-root>
 
 # 1. AI가 description 빈 클래스에 frontmatter 영구 삽입
-PYTHONPATH=tools/CodeNavigator/src python -m codenav frontmatter gen --limit 30 --apply
+codenav frontmatter gen --limit 30 --apply
 
 # 2. parser가 frontmatter+XML doc 추출 → SQLite (AI 호출 없음)
-PYTHONPATH=tools/CodeNavigator/src python -m codenav reindex --full --no-ai
+codenav reindex --full --no-ai
 
 # 3. 검색
-PYTHONPATH=tools/CodeNavigator/src python -m codenav search "은행 계좌"
+codenav search "은행 계좌"
 ```
 
-### 주요 명령
-
-| 명령 | 설명 |
-|---|---|
-| `codenav reindex --full` | 전체 .cs 인덱싱 (AI enrichment 포함) |
-| `codenav reindex --full --no-ai` | parser-only (frontmatter+XML doc만, AI 0회) |
-| `codenav reindex --files <path>...` | 지정 파일만 |
-| `codenav reindex --changed` | git staged .cs |
-| `codenav search <query> --limit 30` | FTS5 검색 (기본 30개, `--limit 0` = 무제한) |
-| `codenav frontmatter gen --apply` | AI가 .cs에 `// ---` 블록 삽입 (dry-run 기본) |
-| `codenav status` | DB 통계 |
-| `codenav delete --file <path> --yes` | 파일 단위 인덱스 삭제 |
-| `codenav ui --port 9876` | 로컬 웹 UI (description/tags 편집) |
-
-### frontmatter 양식
-
-C# 클래스 선언 바로 위에:
-
-```csharp
-// ---
-// description: 은행 계좌 도메인 엔티티
-// tags: [account, banking, domain]
-// ---
-public class Account
-{
-    ...
-}
-```
-
-규칙:
-- `// ---` 시작/종료 마커, 사이에 `// key: value`.
-- `description`: 1줄 문자열 (큰따옴표 옵션).
-- `tags`: `[a, b, c]` 인라인 시퀀스. 빈 리스트 `[]` 허용.
-- 알 수 없는 키는 silent skip.
-- `/// <summary>` XML doc 있으면 그것이 우선.
-
-### 검색 점수
-
-- FTS5 bm25 (class_name 3.0, namespace 2.0, description 1.0, tags 2.0, bigram 1.5).
-- tag 정확 매칭 보너스 +2.0 per hit.
-- PascalCase 자동 분해 (`DataCollector` → `data` + `collector`).
-- 한글 bigram 자동 생성 (`"문서처리"` → `["문서","서처","처리"]`).
-- stale 항목도 description 있으면 검색 노출 (`[stale]` 마크).
+자세한 사용법·옵션은 [codenavigator README](https://github.com/JaeCheon8587/codenavigator#readme) 참조.
 
 ---
 
@@ -447,13 +409,7 @@ Claudecode-For-Me/
 │   ├── forge_scope.py
 │   ├── forge_cancel.py
 │   └── forge_templates/         # forge 부트스트랩 리소스
-├── tools/                       # 내장 도구
-│   └── CodeNavigator/           # C# 시맨틱 인덱서 + UI
-│       ├── src/codenav/         # Python 패키지
-│       ├── tests/               # pytest 68개
-│       ├── Docs/                # PRD/FC/FRD/ADR + FRONTMATTER 규약
-│       └── .claude/skills/      # CodeNavigator 내부 시스템 프롬프트
-├── samples/                     # 테스트용 C# 샘플 (3 프로젝트)
+├── samples/                     # 테스트용 C# 샘플 (3 프로젝트, .codenavignore 포함)
 ├── .gitattributes
 └── README.md
 ```

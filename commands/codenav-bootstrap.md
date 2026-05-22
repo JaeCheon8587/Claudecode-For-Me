@@ -17,14 +17,10 @@ CodeNavigator baseline index를 `codenav` CLI(`reindex --no-ai`) 로 생성/복�
 
 ### 1. 환경 점검
 
-- `codenav` CLI 가 PATH 에 있는지 확인 (`where codenav` / `which codenav`). 없으면:
+- `codenav` CLI 가 PATH 에 있는지 확인 (`where codenav` / `which codenav`). 없으면 한 줄 안내:
   ```
-  cd tools/CodeNavigator
-  $env:PYTHONPATH = "src"   # PowerShell
-  # 또는 export PYTHONPATH=src   # bash
-  python -m codenav ...
+  pip install codenavigator
   ```
-  로 대체 안내.
 - `--root` 가 git repo 인지 확인. 아니면 사용자 경고.
 
 ### 2. Bootstrap 실행

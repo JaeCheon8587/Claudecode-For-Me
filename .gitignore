@@ -2,3 +2,11 @@ __pycache__/
 *.pyc
 *.pyo
 .worktrees/
+
+# Local sandboxes (user-specific test corpora, may host their own git repo)
+samples/
+
+# Local debug artifacts
+_inspect.py
+_dbg.py
+_debug_*.py

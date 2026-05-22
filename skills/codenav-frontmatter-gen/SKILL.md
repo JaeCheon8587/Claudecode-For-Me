@@ -18,7 +18,7 @@ C# 클래스 중 `/// <summary>` XML doc도 없고 `// ---` frontmatter도 없�
 
 ## 사전 조건 점검
 
-1. **CodeNavigator 프로젝트 존재 확인** — `tools/CodeNavigator/` 또는 `codenav` CLI 가 PATH 에서 실행 가능해야 함. 둘 다 없으면 사용자에게 알리고 중단.
+1. **`codenav` CLI 존재 확인** — `where codenav` (PowerShell) / `which codenav` (bash). 없으면 `pip install codenavigator` 한 줄 안내 후 중단.
 2. **git working tree 깨끗** — uncommitted change 가 있으면 사용자에게 commit/stash 권유. `--allow-dirty` 우회는 사용자가 명시 요청한 경우에만.
 3. **`claude` CLI 가용성** — `where claude` (PowerShell) / `which claude` (bash) 로 확인. 없으면 AI 호출 불가 → 사용자에게 알림.
 
@@ -29,8 +29,6 @@ C# 클래스 중 `/// <summary>` XML doc도 없고 `// ---` frontmatter도 없�
 ```
 codenav frontmatter gen --limit 10 --verbose
 ```
-
-(또는 editable install 이 다른 곳을 가리키면: `cd tools/CodeNavigator; $env:PYTHONPATH = "src"; python -m codenav frontmatter gen --limit 10 --verbose`)
 
 기본 `--limit 10`. 사용자가 더 큰 배치를 원하면 인자로 받아 조정. 절대 일회성 100개 이상 권장 금지 — AI 토큰/품질 관리.
 
@@ -80,4 +78,4 @@ public class Foo
 }
 ```
 
-자세한 양식 규약은 `tools/CodeNavigator/Docs/CodeNavigator/CodeNavigator-FRONTMATTER.md` 참조.
+자세한 양식 규약은 [codenavigator/docs/frontmatter.md](https://github.com/JaeCheon8587/codenavigator/blob/main/docs/frontmatter.md) 참조.
