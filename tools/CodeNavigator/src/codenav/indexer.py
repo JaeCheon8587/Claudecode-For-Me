@@ -46,7 +46,7 @@ def _call_claude(class_info: str, retries: int = _MAX_RETRIES) -> dict[str, Any]
                 timeout=60,
             )
             outer = json.loads(result.stdout.strip())
-            inner_text = outer.get("response", "")
+            inner_text = outer.get("result") or outer.get("response", "")
             # Strip markdown code fences if model wrapped output
             if inner_text.startswith("```"):
                 lines = inner_text.splitlines()

@@ -46,7 +46,7 @@ def search(
     conn: sqlite3.Connection,
     query: str,
     *,
-    limit: int = 10,
+    limit: int = 30,
     solution: str | None = None,
     project: str | None = None,
     scope: str = "class",
@@ -100,8 +100,10 @@ def search(
         LIMIT ?
     """
     # bm25() returns negative values — lower = better match in FTS5
+    # limit=0 → SQLite sentinel -1 (no row limit)
+    effective_limit = -1 if limit <= 0 else limit
     try:
-        rows = conn.execute(sql, [fts_expr, *params, limit]).fetchall()
+        rows = conn.execute(sql, [fts_expr, *params, effective_limit]).fetchall()
     except sqlite3.OperationalError as exc:
         print(f"[codenav] FTS search error: {exc}", file=sys.stderr)
         return []

@@ -120,6 +120,85 @@ def test_create_manual_entry_stores_relative_paths(tmp_path):
     assert entry["folder"] == str(Path("Src") / "Proj")
 
 
+def test_reindex_no_ai_skips_enrichment_and_avoids_stale(tmp_path, monkeypatch):
+    """no_ai=True: parser-only path. AI 호출 0, stale 마킹 없음, frontmatter/XML 채워짐."""
+    project = tmp_path / "Src" / "Mirero.PCC.XLab"
+    project.mkdir(parents=True)
+    (project / "Mirero.PCC.XLab.sln").write_text("", encoding="utf-8")
+    (project / "Mirero.PCC.XLab.csproj").write_text("<Project />", encoding="utf-8")
+
+    (project / "WithXml.cs").write_text(
+        """
+namespace N;
+
+/// <summary>From XML doc.</summary>
+public class WithXml { public void Run() { } }
+""".strip(),
+        encoding="utf-8",
+    )
+    (project / "WithFrontmatter.cs").write_text(
+        """
+namespace N;
+
+// ---
+// description: From frontmatter
+// tags: [fm, parser]
+// ---
+public class WithFrontmatter { public void Run() { } }
+""".strip(),
+        encoding="utf-8",
+    )
+    (project / "Bare.cs").write_text(
+        """
+namespace N;
+
+public class Bare { public void Run() { } }
+""".strip(),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("CODENAV_INDEXER_MOCK", "fail")  # would mark stale if AI ran
+    result = services.run_reindex(tmp_path, full=True, no_ai=True)
+
+    assert result["code"] == 0
+    assert result["claude_calls"] == 0
+    assert result["stale_count"] == 0
+
+    conn = store.open_db(tmp_path)
+    rows = {
+        row["class_name"]: row
+        for row in conn.execute(
+            "SELECT class_name, description, stale FROM classes"
+        ).fetchall()
+    }
+    conn.close()
+
+    assert rows["WithXml"]["description"] == "From XML doc."
+    assert rows["WithXml"]["stale"] == 0
+    assert rows["WithFrontmatter"]["description"] == "From frontmatter"
+    assert rows["WithFrontmatter"]["stale"] == 0
+    assert rows["Bare"]["description"] == ""
+    assert rows["Bare"]["stale"] == 0
+
+
+def test_reindex_default_still_runs_ai_enrichment(tmp_path, monkeypatch):
+    """Regression: no_ai=False (default) still calls enrich_entries and marks stale on failure."""
+    project = tmp_path / "Src" / "Sol"
+    project.mkdir(parents=True)
+    (project / "Sol.sln").write_text("", encoding="utf-8")
+    (project / "Sol.csproj").write_text("<Project />", encoding="utf-8")
+    (project / "Bare.cs").write_text(
+        "namespace N;\npublic class Bare { public void Run() { } }\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("CODENAV_INDEXER_MOCK", "fail")
+    result = services.run_reindex(tmp_path, full=True)
+
+    assert result["stale_count"] == 1
+    assert result["claude_calls"] >= 1
+
+
 def test_full_reindex_prunes_auto_entries_outside_collection_scope(tmp_path):
     _write_project(tmp_path, "Mirero.PCC.XLab", "RCSJobNotify")
     excluded = (

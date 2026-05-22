@@ -5,7 +5,7 @@ import json
 import sys
 from pathlib import Path
 
-from codenav import services, app as web_app
+from codenav import services, app as web_app, frontmatter_gen
 
 
 def cmd_status(args: argparse.Namespace) -> int:
@@ -66,6 +66,7 @@ def cmd_reindex(args: argparse.Namespace) -> int:
         files=args.files,
         changed=args.changed,
         verbose=args.verbose,
+        no_ai=args.no_ai,
     )
     if result.get("deleted_count") and args.verbose:
         print(f"  [DELETE] removed {result['deleted_count']} classes from deleted files", file=sys.stderr)
@@ -97,6 +98,35 @@ def cmd_delete(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_frontmatter_gen(args: argparse.Namespace) -> int:
+    root = Path(args.root) if args.root else Path.cwd()
+    try:
+        result = frontmatter_gen.run(
+            root,
+            limit=args.limit,
+            apply=args.apply,
+            allow_dirty=args.allow_dirty,
+            verbose=args.verbose,
+        )
+    except RuntimeError as exc:
+        print(f"[codenav] {exc}", file=sys.stderr)
+        return 1
+    mode = "APPLY" if args.apply else "DRY-RUN"
+    print(
+        f"[{mode}] scanned_files={result.scanned_files} candidates={result.candidates} "
+        f"generated={result.generated} written={result.written} "
+        f"failures={len(result.failures)} skipped_files={len(result.skipped_files)}",
+        file=sys.stderr,
+    )
+    if result.failures and args.verbose:
+        for fail in result.failures:
+            print(f"  [FAIL] {fail}", file=sys.stderr)
+    if result.skipped_files and args.verbose:
+        for skip in result.skipped_files:
+            print(f"  [SKIP] {skip}", file=sys.stderr)
+    return 0
+
+
 def cmd_ui(args: argparse.Namespace) -> int:
     root = Path(args.root) if args.root else Path.cwd()
     web_app.run_ui_server(root, host=args.host, port=args.port)
@@ -113,7 +143,7 @@ def main() -> None:
 
     sp = sub.add_parser("search", help="Search classes by keyword")
     sp.add_argument("query", help="Keyword query (e.g. '데이터 수집')")
-    sp.add_argument("--limit", type=int, default=10)
+    sp.add_argument("--limit", type=int, default=30, help="Max results (default: 30, 0 = unlimited)")
     sp.add_argument("--scope", choices=["class", "method"], default="class")
     sp.add_argument("--solution", default="")
     sp.add_argument("--project", default="")
@@ -123,6 +153,7 @@ def main() -> None:
     rp.add_argument("--full", action="store_true", help="Reindex entire repo")
     rp.add_argument("--files", nargs="+", metavar="FILE", help="Specific files")
     rp.add_argument("--changed", action="store_true", help="Staged .cs files (git diff --cached)")
+    rp.add_argument("--no-ai", action="store_true", help="Skip AI enrichment (parser/frontmatter only, no stale marking)")
     rp.add_argument("--verbose", action="store_true")
 
     dp = sub.add_parser("delete", help="Delete indexed classes for a file")
@@ -134,6 +165,14 @@ def main() -> None:
     up.add_argument("--host", default="127.0.0.1")
     up.add_argument("--port", type=int, default=8765)
 
+    fp = sub.add_parser("frontmatter", help="Frontmatter operations")
+    fp_sub = fp.add_subparsers(dest="fm_cmd", required=True)
+    fp_gen = fp_sub.add_parser("gen", help="AI-generate `// ---` blocks for classes lacking description")
+    fp_gen.add_argument("--limit", type=int, default=50, help="Max classes per invocation (default: 50)")
+    fp_gen.add_argument("--apply", action="store_true", help="Write changes (default: dry-run)")
+    fp_gen.add_argument("--allow-dirty", action="store_true", help="Run even if git working tree is dirty")
+    fp_gen.add_argument("--verbose", action="store_true")
+
     args = parser.parse_args()
     dispatch = {
         "status": cmd_status,
@@ -141,6 +180,7 @@ def main() -> None:
         "reindex": cmd_reindex,
         "delete": cmd_delete,
         "ui": cmd_ui,
+        "frontmatter": cmd_frontmatter_gen,
     }
     sys.exit(dispatch[args.cmd](args))
 

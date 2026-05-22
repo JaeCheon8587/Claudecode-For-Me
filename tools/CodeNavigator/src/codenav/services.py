@@ -127,7 +127,7 @@ def search_index(
     root: Path,
     query: str,
     *,
-    limit: int = 10,
+    limit: int = 30,
     solution: str | None = None,
     project: str | None = None,
     scope: str = "class",
@@ -153,6 +153,7 @@ def run_reindex(
     files: list[str] | None = None,
     changed: bool = False,
     verbose: bool = False,
+    no_ai: bool = False,
 ) -> dict[str, Any]:
     root = root.resolve()
     normalized_count = normalize_index_paths(root)
@@ -227,7 +228,10 @@ def run_reindex(
         for entry in entries:
             entry["file"] = storage_path(root, entry["file"])
             entry["folder"] = storage_path(root, entry["folder"])
-        entries, calls = indexer.enrich_entries(entries, verbose=verbose)
+        if no_ai:
+            calls = 0
+        else:
+            entries, calls = indexer.enrich_entries(entries, verbose=verbose)
         claude_calls += calls
 
         for entry in entries:
@@ -237,6 +241,7 @@ def run_reindex(
                 store.upsert_class(conn, entry)
                 failed_files.append(entry["file"])
                 continue
+            entry.setdefault("description", "")
             if store.upsert_class(conn, entry):
                 written += 1
             else:
@@ -256,7 +261,9 @@ def run_reindex(
         "normalized_count": normalized_count,
         "message": (
             f"Reindex done: {written} written, {skipped} skipped (unchanged), "
-            f"{len(failed_files)} stale. Claude calls: {claude_calls}."
+            f"{len(failed_files)} stale. Claude calls: {claude_calls}"
+            + (" (AI skipped)" if no_ai else "")
+            + "."
         ),
     }
 
