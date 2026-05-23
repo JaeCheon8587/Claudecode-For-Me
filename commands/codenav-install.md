@@ -17,7 +17,7 @@ codenavigator 도구를 현재 워크스페이스에 격리 설치한다.
 6. `cwd/.gitignore` 에 `Tools/codenavigator/` 라인 없으면 추가.
 7. **PreToolUse hook 셋업** — `.claude/hooks/codenav-prefer.ps1` 복사 + `.claude/settings.json` 에 hook 정의 merge.
 8. **Docs/codenav-guide.md 작성** + CLAUDE.md 에 한 줄 + 링크 추가.
-9. `Tools/codenavigator/Scripts/codenav --version` 검증.
+9. `Tools/codenavigator/Scripts/codenav --help` 검증 (CLI dispatch 동작 확인).
 10. 결과 요약.
 
 ## 실행 절차 (AI 에이전트 가이드)
@@ -182,10 +182,15 @@ case 우선순위:
 ### 9. 검증
 
 ```
-./codenav.ps1 --version    # 또는 ./codenav.sh --version
+./codenav.ps1 --help    # 또는 ./codenav.sh --help
 ```
 
-기대 출력: `codenav 1.x.x` 또는 codenavigator 패키지 버전.
+기대 출력: `usage: codenav [-h] [--root ROOT] {status,search,reindex,delete,ui,frontmatter} ...`
+
+설치 버전 확인은 별도:
+```
+Tools/codenavigator/Scripts/pip show codenavigator | Select-String Version
+```
 
 검증 추가 항목:
 - `Test-Path .claude/hooks/codenav-prefer.ps1` → True.
