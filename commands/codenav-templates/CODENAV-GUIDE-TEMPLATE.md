@@ -42,13 +42,37 @@
 .\codenav.ps1 --root . reindex --full --no-ai      # 전체
 ```
 
-git pre-commit hook 자동화: `codenavigator` repo 의 `install-hook.ps1`.
+## Frontmatter 검증 pre-commit hook
+
+`.git/hooks/pre-commit` 에 frontmatter 정합성 검사 자동화 가능 (AI 호출 X, 1초 미만):
+
+```powershell
+.\codenav.ps1 --root . frontmatter install-hook        # 설치
+.\codenav.ps1 --root . frontmatter install-hook --uninstall   # 제거
+```
+
+hook 동작:
+- staged `.cs` 의 클래스 검사.
+- frontmatter / XML doc 둘 다 없는 클래스 → WARN (commit 허용).
+- frontmatter 본문 깨짐 (빈 description, 잘못된 tags, 닫는 `// ---` 누락) → FAIL (commit 차단).
+- bypass: `git commit --no-verify`.
+
+수동 검사:
+```powershell
+.\codenav.ps1 --root . frontmatter check --staged            # staged 만
+.\codenav.ps1 --root . frontmatter check --files Foo.cs Bar.cs
+.\codenav.ps1 --root . frontmatter check --staged --strict   # WARN 도 exit 1
+```
 
 ## 슬래시 커맨드
 
 - `/codenav-install` — 도구 셋업 (venv + launcher + hook + Docs/CLAUDE.md 자동).
 - `/codenav-bootstrap` — parser-only 인덱스 빌드.
 - `/codenav-frontmatter-gen` — AI 가 클래스 description 자동 채움.
+
+CLI 직접 호출 가능 (슬래시 미제공):
+- `codenav frontmatter check` — frontmatter 정합성 검증.
+- `codenav frontmatter install-hook` — pre-commit hook 설치.
 
 ## 검색 점수
 
