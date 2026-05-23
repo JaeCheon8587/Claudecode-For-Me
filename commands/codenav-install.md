@@ -15,8 +15,10 @@ codenavigator 도구를 현재 워크스페이스에 격리 설치한다.
    - `cwd/codenav.ps1` (PowerShell wrapper)
    - `cwd/codenav.sh` (Bash wrapper, chmod +x)
 6. `cwd/.gitignore` 에 `Tools/codenavigator/` 라인 없으면 추가.
-7. `Tools/codenavigator/Scripts/codenav --version` (또는 launcher 통해) 검증.
-8. 결과 요약 (설치 경로, 사용법 한 줄).
+7. **PreToolUse hook 셋업** — `.claude/hooks/codenav-prefer.ps1` 복사 + `.claude/settings.json` 에 hook 정의 merge.
+8. **Docs/codenav-guide.md 작성** + CLAUDE.md 에 한 줄 + 링크 추가.
+9. `Tools/codenavigator/Scripts/codenav --version` 검증.
+10. 결과 요약.
 
 ## 실행 절차 (AI 에이전트 가이드)
 
@@ -96,7 +98,88 @@ exec "$(dirname "$0")/Tools/codenavigator/bin/codenav" "$@"
 Tools/codenavigator/
 ```
 
-### 7. 검증
+### 7. PreToolUse hook 셋업
+
+#### 7.1 hook 파일 작성
+
+`cwd/.claude/hooks/codenav-prefer.ps1` 부재 시:
+
+1. `cwd/.claude/hooks/` 폴더 생성 (부재 시).
+2. 플러그인 templates 의 `codenav-prefer.ps1` 본문 그대로 복사.
+   - 소스: `${CLAUDE_PLUGIN_ROOT}/commands/codenav-templates/codenav-prefer.ps1`
+   - Claude Code 가 Read tool 로 플러그인 템플릿 읽고 Write tool 로 사용자 워크스페이스에 작성.
+
+이미 존재 → skip + "`.claude/hooks/codenav-prefer.ps1` 이미 존재" 안내.
+
+#### 7.2 .claude/settings.json merge
+
+`cwd/.claude/settings.json` 처리:
+
+- **부재** → 신규 작성:
+  ```json
+  {
+    "enabledPlugins": {
+      "claudecode-for-me@claudecode-for-me": true
+    },
+    "hooks": {
+      "PreToolUse": [
+        {
+          "matcher": "Grep|Glob",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${CLAUDE_PROJECT_DIR}\\.claude\\hooks\\codenav-prefer.ps1\"",
+              "timeout": 5
+            }
+          ]
+        }
+      ]
+    }
+  }
+  ```
+- **존재** → JSON 파싱 → `hooks.PreToolUse` 키 검사:
+  - 이미 `codenav-prefer.ps1` 호출하는 hook 있음 → skip + 안내.
+  - PreToolUse 키 부재 → 위 hook 객체 추가 (기존 키 보존).
+  - 다른 PreToolUse hook 만 있음 → matcher `Grep|Glob` 하위에 codenav-prefer hook 만 append.
+- **JSON malformed** → "settings.json JSON parse 실패. 수동 merge 필요." 안내 후 skip.
+
+### 8. Docs/codenav-guide.md + CLAUDE.md 셋업
+
+#### 8.1 Docs 폴더 결정
+
+case 우선순위:
+1. `cwd/Docs/` 존재 → 그대로 사용 → `Docs/codenav-guide.md` 작성 대상.
+2. `cwd/docs/` 존재 → 그대로 사용 → `docs/codenav-guide.md`.
+3. 둘 다 부재 → `cwd/Docs/` 신설 (PascalCase, .NET 관행).
+
+#### 8.2 codenav-guide.md 작성
+
+- 부재 → 플러그인 templates 의 `CODENAV-GUIDE-TEMPLATE.md` 본문 그대로 복사 (헤더의 `{프로젝트명}` 치환, TEMPLATE 경고 줄 제거).
+  - 소스: `${CLAUDE_PLUGIN_ROOT}/commands/codenav-templates/CODENAV-GUIDE-TEMPLATE.md`
+- 존재 → skip + "이미 존재. 갱신은 사용자 결정" 안내.
+
+#### 8.3 CLAUDE.md merge
+
+`cwd/CLAUDE.md` 처리:
+
+- **부재** → 신규 작성:
+  ```markdown
+  # <프로젝트명>
+
+  ## 코드 검색
+  - 본 워크스페이스의 클래스/심볼 검색 가이드: [Docs/codenav-guide.md](Docs/codenav-guide.md)
+  ```
+  프로젝트명 = `cwd` 디렉토리명 (예: samples_Test).
+  Docs 폴더가 `docs/` 면 링크도 `docs/codenav-guide.md`.
+- **존재** → 본문 grep `codenav-guide` → 부재면 끝에 다음 두 줄 append:
+  ```markdown
+
+  ## 코드 검색
+  - 본 워크스페이스의 클래스/심볼 검색 가이드: [Docs/codenav-guide.md](Docs/codenav-guide.md)
+  ```
+  존재 → skip + "CLAUDE.md 에 이미 codenav-guide 링크 있음" 안내.
+
+### 9. 검증
 
 ```
 ./codenav.ps1 --version    # 또는 ./codenav.sh --version
@@ -104,12 +187,24 @@ Tools/codenavigator/
 
 기대 출력: `codenav 1.x.x` 또는 codenavigator 패키지 버전.
 
-### 8. 결과 요약 (사용자에게)
+검증 추가 항목:
+- `Test-Path .claude/hooks/codenav-prefer.ps1` → True.
+- `Test-Path .claude/settings.json` → True, JSON parse 성공.
+- `Test-Path Docs/codenav-guide.md` (또는 `docs/codenav-guide.md`) → True.
+- `Select-String "codenav-guide" CLAUDE.md` → 매칭.
+
+### 10. 결과 요약 (사용자에게)
 
 ```
 ✓ codenavigator <ver> 설치 완료
   위치: <cwd>/Tools/codenavigator/
   launcher: codenav.ps1 (Windows) / codenav.sh (Unix)
+
+추가 셋업:
+  .claude/hooks/codenav-prefer.ps1   [신규 / 이미 존재]
+  .claude/settings.json              [신규 / hook merge / skip]
+  Docs/codenav-guide.md              [신규 / 이미 존재]
+  CLAUDE.md                          [신규 / 링크 append / skip]
 
 사용:
   .\codenav.ps1 --root . reindex --full --no-ai
