@@ -15,15 +15,34 @@ CodeNavigator baseline index를 `codenav` CLI(`reindex --no-ai`) 로 생성/복�
 
 ## 실행 절차
 
-### 1. 환경 점검
+### 1. codenav CLI 위치 탐지
 
-- `codenav` CLI 가 PATH 에 있는지 확인 (`where codenav` / `which codenav`). 없으면 한 줄 안내:
-  ```
-  pip install codenavigator
-  ```
+다음 순서로 어떤 명령으로 codenav 를 호출할지 결정:
+
+1. **프로젝트 venv**: `<cwd>/Tools/codenavigator/Scripts/codenav.exe` (Windows) 또는 `<cwd>/Tools/codenavigator/bin/codenav` (Unix) 존재 → 절대경로로 호출.
+2. **launcher**: `<cwd>/codenav.ps1` 존재 → `& .\codenav.ps1 @Args`.
+3. **PATH 글로벌**: `where codenav` / `which codenav` 성공 → `codenav` 그대로.
+4. 모두 부재 → 다음 안내 후 중단:
+   ```
+   codenav 가 설치되어있지 않음. 둘 중 하나:
+   
+     [프로젝트별 격리 권장]
+     python -m venv Tools/codenavigator
+     Tools/codenavigator/Scripts/pip install codenavigator
+     # 루트에 codenav.ps1 launcher 작성
+     #   & "$PSScriptRoot\Tools\codenavigator\Scripts\codenav.exe" @Args
+   
+     [글로벌]
+     pip install codenavigator
+   ```
+
+이후 단계의 `codenav ...` 호출은 위에서 결정된 경로로 치환.
+
+### 2. git repo 검사
+
 - `--root` 가 git repo 인지 확인. 아니면 사용자 경고.
 
-### 2. Bootstrap 실행
+### 3. Bootstrap 실행
 
 `scan-path` 없으면:
 ```
@@ -40,7 +59,7 @@ codenav --root <repo-root> reindex --files <file1.cs> <file2.cs> ... --no-ai --v
 - description 빈 항목도 `stale=0` 으로 저장 (AI 실패 mark X).
 - 빠름(파싱·INSERT 만 수행).
 
-### 3. 결과 확인
+### 4. 결과 확인
 
 ```
 codenav --root <repo-root> status
@@ -53,7 +72,7 @@ codenav --root <repo-root> status
 
 stale 있으면 사용자에게 알림 — 보통 `--no-ai` 모드에선 0 이 정상. 0 아니면 이전 실행의 AI 실패 잔재 가능.
 
-### 4. (선택) 검색 확인
+### 5. (선택) 검색 확인
 
 샘플 검색 한 번:
 ```

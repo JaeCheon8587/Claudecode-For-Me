@@ -18,10 +18,22 @@ CodeNavigator frontmatter 자동 생성 명령. `codenav frontmatter gen` CLI �
 
 ### 0. 사전 체크
 
-1. `codenav` CLI 동작 확인. 없으면 한 줄 안내 후 중단:
-   ```
-   pip install codenavigator
-   ```
+1. `codenav` CLI 위치 탐지 (다음 순서):
+   - **프로젝트 venv**: `<cwd>/Tools/codenavigator/Scripts/codenav.exe` (Windows) 또는 `<cwd>/Tools/codenavigator/bin/codenav` (Unix).
+   - **launcher**: `<cwd>/codenav.ps1` 존재 시 사용.
+   - **PATH 글로벌**: `where codenav` / `which codenav`.
+   - 모두 부재 → 다음 안내 후 중단:
+     ```
+     codenav 가 설치되어있지 않음. 둘 중 하나:
+
+       [프로젝트별 격리 권장]
+       python -m venv Tools/codenavigator
+       Tools/codenavigator/Scripts/pip install codenavigator
+       # 루트에 codenav.ps1 launcher 작성
+
+       [글로벌]
+       pip install codenavigator
+     ```
 2. `where claude` (PowerShell) / `which claude` (bash) 로 `claude` CLI 존재 확인. 없으면 AI 호출 실패 (`written=0` 예상) — 사용자에게 미리 알림.
 3. `--apply` 인자 받은 경우라도 **항상 먼저 dry-run** 한 번 수행.
 
