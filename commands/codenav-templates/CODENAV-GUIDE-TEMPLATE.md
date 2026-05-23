@@ -57,6 +57,27 @@ hook 동작:
 - frontmatter 본문 깨짐 (빈 description, 잘못된 tags, 닫는 `// ---` 누락) → FAIL (commit 차단).
 - bypass: `git commit --no-verify`.
 
+### autofill 옵트인 (commit 시 AI 자동 채움)
+
+```powershell
+git config codenav.autofill true        # 영구 설정
+# 또는
+$env:CODENAV_HOOK_AUTOFILL = "1"        # 현 세션만
+```
+
+활성화 시 hook 흐름:
+1. `frontmatter check --staged` (FAIL 있으면 차단).
+2. `frontmatter gen --staged --apply` (Claude CLI 호출).
+3. 수정된 `.cs` 를 `git add` 자동 재스테이지.
+
+**비용 주의**: commit 마다 AI 호출 = 5–30s + 토큰 비용 누적. 검토 없이 자동 채워지는 description 이 git history 에 박힘. 기본값 = **비활성**. 의도적으로 옵트인.
+
+자동 채움 끄기:
+```powershell
+git config --unset codenav.autofill
+Remove-Item env:CODENAV_HOOK_AUTOFILL
+```
+
 수동 검사:
 ```powershell
 .\codenav.ps1 --root . frontmatter check --staged            # staged 만
