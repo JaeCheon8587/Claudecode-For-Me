@@ -10,7 +10,7 @@ CodeNavigator frontmatter 자동 생성 명령. `codenav frontmatter gen` CLI �
 ## 인자 파싱
 
 - `--projects <CSV>` (선택): 처리 범위를 지정한 `.csproj` 의 폴더 트리로 제한. 쉼표 구분. 예: `--projects Mirero.PCC.XLab.Loader.ApiMonitor.csproj,Mirero.PCC.XLab.Loader.Core.csproj`. 접미사 `.csproj` 생략 가능. 대소문자 무시. 미지정 시 repo 전체 스캔 (기존 동작).
-- `--limit N` (기본 10): 이 호출에서 처리할 최대 클래스 수.
+- `--limit N` (기본 0 = 무제한): 이 호출에서 처리할 최대 클래스 수. 0 또는 생략 시 후보 전부 처리.
 - `--apply`: 명시되면 실제 파일 수정. 없으면 dry-run.
 - `--allow-dirty`: git working tree 가 dirty 여도 실행. 기본은 거부.
 - `--root <path>`: repo root. 기본 cwd.
