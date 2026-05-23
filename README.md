@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v1.16.0 · 커스텀 스킬 10종 + 슬래시 커맨드 12종 (외부 도구 `codenavigator` 연동)
+> **Claude Code Plugin** · v1.25.0 · 커스텀 스킬 10종 + 슬래시 커맨드 13종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,12 +11,12 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `1.16.0` |
+| 버전 | `1.25.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
 | 네임스페이스 | `/claudecode-for-me:<name>` |
-| 구성요소 | Skill 10 · Command 12 · Python runner 4 (`scripts/`) |
+| 구성요소 | Skill 10 · Command 13 · Python runner 4 (`scripts/`) |
 | 외부 연동 도구 | [`codenavigator`](https://github.com/JaeCheon8587/codenavigator) (PyPI) — codenav-bootstrap / codenav-frontmatter-gen 슬래시가 호출 |
 
 플러그인은 **글로벌 캐시**에 설치되므로 한 번 설치 후 모든 프로젝트의 **새 세션**에서 자동 노출된다. 프로젝트별 재설치 불필요.
@@ -93,13 +93,14 @@ pip install -U codenavigator
 | `grill-me` | `/claudecode-for-me:grill-me [주제]` | 1문 1답으로 요구사항 모호점 추적 |
 | `meta-prompter` | `/claudecode-for-me:meta-prompter [요청]` | 거친 요청 → 구조화된 메타 프롬프트 |
 
-### Command 12종
+### Command 13종
 
 | Command | 설명 |
 |---|---|
 | `branch-review` | branch-review skill 진입 |
 | `codenav-bootstrap` | CodeNavigator parser-only 인덱싱 (frontmatter/XML doc만 읽어 SQLite 빌드, AI 호출 없음) |
-| `codenav-frontmatter-gen` | codenav-frontmatter-gen skill 진입 (AI가 .cs에 frontmatter 영구 삽입) |
+| `codenav-frontmatter-gen` | codenav-frontmatter-gen skill 진입 (AI가 .cs에 frontmatter 영구 삽입). `--projects` / `--files` / `--staged` 스코프 인자 |
+| `codenav-install` | 프로젝트 루트의 `Tools/codenavigator/` 폴더에 codenavigator (PyPI) 격리 설치 + `codenav.ps1/codenav.sh` launcher + `.gitignore` 자동 작성 + Docs/CLAUDE.md 링크 셋업 |
 | `commit-analysis` | 변경 분석 후 `[ADD]`/`[MOD]`/`[FIX]` 자동 판단 한글 커밋 생성 |
 | `docs-add-frd` | docs-add-frd skill 진입 (신규 기능 FRD + ADR) |
 | `docs-add-task` | docs-add-task skill 진입 (기존 기능 수정 TASK + ADR) |
@@ -370,6 +371,68 @@ codenav search "은행 계좌"
 
 자세한 사용법·옵션은 [codenavigator README](https://github.com/JaeCheon8587/codenavigator#readme) 참조.
 
+### Pre-commit hook (frontmatter 정합성)
+
+codenavigator v1.0.5+ 는 git pre-commit hook 설치 CLI 제공. **AI 호출 없는 정적 검증** — staged `.cs` 의 frontmatter 누락/깨짐 잡음. 1초 미만.
+
+```powershell
+# Tools/codenavigator/ venv 또는 글로벌 codenav 설치 후
+.\codenav.ps1 --root . frontmatter install-hook              # 설치
+.\codenav.ps1 --root . frontmatter install-hook --uninstall  # 제거
+.\codenav.ps1 --root . frontmatter install-hook --force      # 덮어쓰기
+```
+
+hook 동작 (commit 마다 자동):
+- staged `.cs` 추출 후 클래스 검사.
+- **WARN** (commit 통과): frontmatter / XML doc 둘 다 없는 클래스.
+- **FAIL** (commit 차단): 빈 `description:`, 잘못된 `tags:`, 닫는 `// ---` 누락, frontmatter block 안에 `description:` 라인 자체 없음.
+- bypass: `git commit --no-verify`.
+
+설치 결과:
+- `.git/hooks/pre-commit` 생성/갱신. sentinel marker (`# codenav-frontmatter-hook-start`/`-end`) 로 멱등성 보장.
+- 기존 hook 내용 있으면 append. 다른 도구의 hook 과 공존 가능.
+- launcher `./codenav.ps1` 우선 탐지 → PATH `codenav` fallback → 둘 다 없으면 skip (commit 안 막음).
+
+#### AI 자동 채움 옵트인
+
+기본은 **검증만**. AI 가 commit 시점에 frontmatter 자동 채움까지 원하면:
+
+```powershell
+git config codenav.autofill true        # 영구
+# 또는
+$env:CODENAV_HOOK_AUTOFILL = "1"        # 현 세션
+```
+
+활성 시 hook 흐름:
+1. `frontmatter check --staged` (FAIL 있으면 차단).
+2. `frontmatter gen --staged --apply` (Claude CLI 호출, 빈 description 채움).
+3. 수정된 `.cs` 자동 `git add`.
+4. commit 진행.
+
+비용 주의:
+- commit 마다 Claude CLI 호출 → 5–30s + 토큰 비용.
+- 자동 채워진 description 검토 없이 git history 에 박힘.
+- claude CLI 부재 시 그냥 통과 (warning, commit 안 막음).
+
+끄기:
+```powershell
+git config --unset codenav.autofill
+Remove-Item env:CODENAV_HOOK_AUTOFILL
+```
+
+#### 수동 호출 (hook 외)
+
+```powershell
+# 정합성 검사만
+.\codenav.ps1 --root . frontmatter check --staged             # staged 만
+.\codenav.ps1 --root . frontmatter check --files Foo.cs Bar.cs
+.\codenav.ps1 --root . frontmatter check --staged --strict    # WARN 도 exit 1
+
+# AI 채움 (수동)
+.\codenav.ps1 --root . frontmatter gen --staged --apply       # staged 빈 클래스 채움
+.\codenav.ps1 --root . frontmatter gen --files Foo.cs --apply # 명시 파일만
+```
+
 ---
 
 ## 8. 프로젝트 구조
@@ -391,9 +454,13 @@ Claudecode-For-Me/
 │   ├── grill-me/
 │   └── meta-prompter/
 ├── commands/                    # 슬래시 커맨드 (명시 호출)
+│   ├── codenav-templates/       # /codenav-install 이 워크스페이스로 복사하는 자산
+│   │   ├── CODENAV-GUIDE-TEMPLATE.md
+│   │   └── codenav-prefer.ps1
 │   ├── branch-review.md
 │   ├── codenav-bootstrap.md
 │   ├── codenav-frontmatter-gen.md
+│   ├── codenav-install.md
 │   ├── commit-analysis.md
 │   ├── docs-add-frd.md
 │   ├── docs-add-task.md
@@ -430,6 +497,9 @@ Claudecode-For-Me/
 | `codenav reindex` 후 description 절반 빔 | XML doc/frontmatter 양쪽 모두 없는 클래스 | `/codenav-frontmatter-gen --apply` 로 AI 자동 채움 |
 | `codenav search` "No results" 인데 항목 존재 | 과거 AI 실패로 `stale=1` 마킹 + 검색 필터 | v1.15.0+ 는 description 있으면 stale도 노출. `reindex --no-ai` 로 stale 해소 |
 | `codenav frontmatter gen --files` 매칭 안 됨 | `--root` 와 `--files` 경로 중첩 | `--files` 는 `--root` 기준 상대경로 또는 절대경로 |
+| pre-commit hook 이 commit 안 막음 | codenav CLI 부재 → hook 자동 skip 안전장치 | `Tools/codenavigator/` venv 또는 글로벌 `pip install codenavigator` |
+| pre-commit hook 매 commit `[FAIL]` | staged `.cs` 의 frontmatter 깨짐 (빈 description, 잘못된 tags, 닫는 `---` 누락) | `codenav frontmatter check --staged` 로 디버그 후 수정. 우회는 `--no-verify` |
+| `git config codenav.autofill true` 했는데 자동 채움 안 됨 | claude CLI PATH 부재 또는 인덱스 stale | `where claude` 확인. autofill 은 안전상 실패 시 통과 (commit 진행) |
 
 ---
 
