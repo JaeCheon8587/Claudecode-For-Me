@@ -1,6 +1,6 @@
 ---
-description: C# 클래스의 description 빈칸을 AI로 일괄 채워 `// ---` frontmatter 블록을 삽입한다. dry-run 기본, --apply 시에만 파일 수정.
-argument-hint: "[--limit N] [--apply] [--allow-dirty]"
+description: C# 클래스의 description 빈칸을 AI로 일괄 채워 `// ---` frontmatter 블록을 삽입한다. dry-run 기본, --apply 시에만 파일 수정. --projects 로 .csproj 단위 범위 한정 가능.
+argument-hint: "[--projects A.csproj,B.csproj] [--limit N] [--apply] [--allow-dirty]"
 ---
 
 CodeNavigator frontmatter 자동 생성 명령. `codenav frontmatter gen` CLI 를 호출해 description 빈칸인 C# 클래스에 `// ---` 블록을 삽입한다.
@@ -9,6 +9,7 @@ CodeNavigator frontmatter 자동 생성 명령. `codenav frontmatter gen` CLI �
 
 ## 인자 파싱
 
+- `--projects <CSV>` (선택): 처리 범위를 지정한 `.csproj` 의 폴더 트리로 제한. 쉼표 구분. 예: `--projects Mirero.PCC.XLab.Loader.ApiMonitor.csproj,Mirero.PCC.XLab.Loader.Core.csproj`. 접미사 `.csproj` 생략 가능. 대소문자 무시. 미지정 시 repo 전체 스캔 (기존 동작).
 - `--limit N` (기본 10): 이 호출에서 처리할 최대 클래스 수.
 - `--apply`: 명시되면 실제 파일 수정. 없으면 dry-run.
 - `--allow-dirty`: git working tree 가 dirty 여도 실행. 기본은 거부.
@@ -40,7 +41,7 @@ CodeNavigator frontmatter 자동 생성 명령. `codenav frontmatter gen` CLI �
 ### 1. Dry-run
 
 ```
-codenav frontmatter gen --limit <N> --verbose
+codenav frontmatter gen --limit <N> [--projects <CSV>] --verbose
 ```
 
 stderr 의 `[DRY]` 라인을 수집해 사람이 읽을 표 형식으로 정리:
@@ -60,10 +61,10 @@ stderr 의 `[DRY]` 라인을 수집해 사람이 읽을 표 형식으로 정리:
 ### 3. Apply
 
 ```
-codenav frontmatter gen --limit <N> --apply --verbose
+codenav frontmatter gen --limit <N> [--projects <CSV>] --apply --verbose
 ```
 
-`--allow-dirty` 인자가 있었으면 그대로 전달.
+`--allow-dirty`, `--projects` 인자가 있었으면 그대로 전달.
 
 ### 4. 사후 보고
 
