@@ -78,6 +78,7 @@ Python 스크립트 종료 코드별 대응:
 | **3** | `"리뷰할 변경 없음. working-tree와 branch 모두 비어있습니다."` |
 | **4** | `"첨부 문서 합계 200KB 초과. 더 작은 문서로 분할하거나 한 번에 하나씩 사용하세요."` |
 | **5** | `"\`--base <ref>\` 존재하지 않습니다. ref 확인 또는 --base 미지정으로 재시도하세요."` |
+| **6** | `"--worktree 해석 실패. branch명 또는 유효 경로인지 확인. \`git worktree list\` 로 등록 워크트리 확인하세요."` |
 | **1** | stderr 그대로 노출 + `"스크립트 실행 오류. \`--verbose\` 옵션 추가 후 재시도하면 상세 로그를 확인할 수 있습니다."` |
 | **130** | `"사용자 중단."` |
 
@@ -91,6 +92,8 @@ Python 스크립트 종료 코드별 대응:
 - `"문서 기준 리뷰"`
 - `"doc-driven-review Docs/design.md"`
 - `"DDR Docs/x.md --wait"`
+- `"doc-driven-review Docs/spec.md --worktree feat-foo"`
+- `"forge-scope 워크트리 spec 반영 확인"`
 
 ---
 
@@ -101,6 +104,7 @@ Python 스크립트 종료 코드별 대응:
 | `--wait` | — | 결과 기다림 (foreground) |
 | `--background` | — | 백그라운드 실행 |
 | `--scope auto\|working-tree\|branch` | `auto` | 리뷰 범위 |
+| `--worktree <branch\|path>` | — | 대상 워크트리 지정. branch명 또는 경로. linked worktree(forge-scope) 사용 시 권장. `--repo-root` 와 mutex |
 | `--base <ref>` | 자동 추정 | branch scope 기준점 |
 | `--model <name>` | 기본 | codex 모델 선택 |
 | `--effort minimal\|low\|medium\|high\|xhigh` | 기본 | codex 추론 수준 |

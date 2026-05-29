@@ -1,6 +1,6 @@
 ---
 description: 첨부 문서가 코드 변경점에 반영됐는지 Codex 위임으로 검증 (Missing/Improve/Overengineered/Conformance%)
-argument-hint: "<doc-path> [추가 doc-path...] [--wait|--background] [--scope working-tree|branch] [--base <ref>] [--model <name>] [--effort <level>] [--no-auto-context]"
+argument-hint: "<doc-path> [추가 doc-path...] [--wait|--background] [--scope working-tree|branch] [--worktree <ref>] [--base <ref>] [--model <name>] [--effort <level>] [--no-auto-context]"
 ---
 
 $ARGUMENTS 인자로 doc-driven-review 스킬을 실행하라.
