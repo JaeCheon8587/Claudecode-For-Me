@@ -358,8 +358,10 @@ class TestInvokeCodex:
 
         monkeypatch.setattr(subprocess, "Popen", lambda *a, **kw: FakePopen())
 
-        # background 경로: git/info 디렉토리 필요
-        (tmp_path / ".git" / "info").mkdir(parents=True)
+        # background 경로: _git_info_dir monkeypatch (tmp_path은 real git 레포 아님)
+        fake_info_dir = tmp_path / "fake-git-info"
+        fake_info_dir.mkdir(parents=True)
+        monkeypatch.setattr(ddr, "_git_info_dir", lambda repo_root: fake_info_dir)
 
         rc, stdout, stderr = ddr.invoke_codex_background("prompt", None, None, tmp_path)
         assert rc == ddr.EXIT_OK
@@ -571,3 +573,151 @@ class TestFindCallerCandidates:
             tmp_git_repo, {"MyClass"}, exclude_paths=set()
         )
         assert len(result) <= ddr.AUTO_CONTEXT_MAX_FILES
+
+
+# ─── linked_worktree fixture ──────────────────────────────────────────────────
+
+@pytest.fixture
+def linked_worktree(tmp_git_repo, tmp_path):
+    """
+    tmp_git_repo 기반 linked worktree 생성. fixture teardown 시 자동 정리.
+
+    Yields:
+        tuple[Path, Path, str]: (main_repo, linked_path, branch_name)
+    """
+    import subprocess as sp
+    linked = tmp_path / "linked-wt"
+    branch = "feat-fixture-linked"
+    sp.run(
+        ["git", "worktree", "add", "-b", branch, str(linked), "HEAD"],
+        cwd=tmp_git_repo, check=True, capture_output=True,
+    )
+    try:
+        yield tmp_git_repo, linked, branch
+    finally:
+        sp.run(
+            ["git", "worktree", "remove", "--force", str(linked)],
+            cwd=tmp_git_repo, check=False, capture_output=True,
+        )
+        sp.run(
+            ["git", "branch", "-D", branch],
+            cwd=tmp_git_repo, check=False, capture_output=True,
+        )
+
+
+# ─── TestGitInfoDir ───────────────────────────────────────────────────────────
+
+class TestGitInfoDir:
+    """linked worktree 호환 .git/info 경로 해석."""
+
+    def test_main_worktree_정상_경로(self, tmp_git_repo):
+        info = ddr._git_info_dir(tmp_git_repo)
+        assert info.is_dir()
+        assert info.name == "info"
+        assert (tmp_git_repo / ".git" / "info").resolve() == info.resolve()
+
+    def test_linked_worktree_main_info_공유(self, linked_worktree):
+        """linked worktree에서 _git_info_dir이 main repo .git/info 반환."""
+        main, linked, _ = linked_worktree
+        info_main = ddr._git_info_dir(main)
+        info_linked = ddr._git_info_dir(linked)
+        assert info_main.resolve() == info_linked.resolve()
+
+    def test_linked_worktree_patch_쓰기_가능(self, linked_worktree):
+        """회귀 방지: linked worktree에서도 patch 파일 생성 정상."""
+        _, linked, _ = linked_worktree
+        info = ddr._git_info_dir(linked)
+        test_patch = info / "doc-review-test-write.patch"
+        test_patch.write_text("test content", encoding="utf-8")
+        try:
+            assert test_patch.read_text(encoding="utf-8") == "test content"
+        finally:
+            test_patch.unlink(missing_ok=True)
+
+
+# ─── TestWorktreeFlag ─────────────────────────────────────────────────────────
+
+class TestWorktreeFlag:
+    """--worktree 플래그 token 해석."""
+
+    def test_절대경로_해석(self, tmp_git_repo):
+        resolved = ddr.resolve_worktree(str(tmp_git_repo), cwd=tmp_git_repo)
+        assert resolved.resolve() == tmp_git_repo.resolve()
+
+    def test_상대경로_해석(self, tmp_git_repo, tmp_path, monkeypatch):
+        """./ 접두 경로도 정상 해석."""
+        monkeypatch.chdir(tmp_path)
+        # tmp_git_repo는 tmp_path 하위 디렉토리가 아닐 수 있어 절대경로로 테스트
+        rel = f"./{tmp_git_repo.name}"
+        # tmp_path 안에 심볼릭 링크 또는 경로가 없으면 절대경로 fallback
+        target = tmp_path / tmp_git_repo.name
+        if not target.exists():
+            pytest.skip("relative path test requires same parent dir")
+        resolved = ddr.resolve_worktree(rel, cwd=tmp_path)
+        assert resolved.resolve() == tmp_git_repo.resolve()
+
+    def test_branch명_해석(self, linked_worktree):
+        main, linked, branch = linked_worktree
+        resolved = ddr.resolve_worktree(branch, cwd=main)
+        assert resolved.resolve() == linked.resolve()
+
+    def test_refs_heads_접두_해석(self, linked_worktree):
+        """refs/heads/<branch> 풀네임 입력도 정상."""
+        main, linked, branch = linked_worktree
+        resolved = ddr.resolve_worktree(f"refs/heads/{branch}", cwd=main)
+        assert resolved.resolve() == linked.resolve()
+
+    def test_매칭_실패_에러(self, tmp_git_repo):
+        with pytest.raises(ddr.DocReviewError, match="매칭 안 됨"):
+            ddr.resolve_worktree("nonexistent-branch-xyz", cwd=tmp_git_repo)
+
+    def test_존재하지_않는_경로_에러(self, tmp_git_repo):
+        with pytest.raises(ddr.DocReviewError, match="존재하지 않음"):
+            ddr.resolve_worktree("./does-not-exist-dir", cwd=tmp_git_repo)
+
+    def test_git_레포_아닌_경로_에러(self, tmp_path):
+        """경로는 존재하나 git 레포 아닌 디렉토리 거부."""
+        non_git = tmp_path / "plain-dir"
+        non_git.mkdir()
+        with pytest.raises(ddr.DocReviewError, match="git 레포 아님"):
+            ddr.resolve_worktree(str(non_git), cwd=non_git)
+
+
+# ─── TestWorktreeMainIntegration ─────────────────────────────────────────────
+
+class TestWorktreeMainIntegration:
+    """main() 진입점에서 --worktree / --repo-root mutex 동작."""
+
+    def test_worktree_와_repo_root_동시_지정_에러(
+        self, tmp_git_repo, capsys, tmp_path
+    ):
+        """둘 다 지정하면 명확한 에러 + EXIT_ERR."""
+        doc = tmp_path / "spec.md"
+        doc.write_text("# spec\n", encoding="utf-8")
+        argv = [
+            "--docs", str(doc),
+            "--worktree", str(tmp_git_repo),
+            "--repo-root", str(tmp_git_repo),
+            "--dry-run",
+        ]
+        rc = ddr.main(argv)
+        captured = capsys.readouterr()
+        assert rc == ddr.EXIT_ERR
+        assert "동시 지정 불가" in captured.err
+
+    def test_worktree_해석_실패_exit_6(
+        self, tmp_git_repo, capsys, tmp_path, monkeypatch
+    ):
+        """잘못된 worktree 토큰 → EXIT_WORKTREE(6)."""
+        monkeypatch.chdir(tmp_git_repo)
+        doc = tmp_path / "spec.md"
+        doc.write_text("# spec\n", encoding="utf-8")
+        argv = [
+            "--docs", str(doc),
+            "--worktree", "nonexistent-branch-xyz",
+            "--dry-run",
+        ]
+        rc = ddr.main(argv)
+        captured = capsys.readouterr()
+        assert rc == ddr.EXIT_WORKTREE
+        assert "매칭 안 됨" in captured.err
