@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v1.25.0 · 커스텀 스킬 10종 + 슬래시 커맨드 13종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v1.26.0 · 커스텀 스킬 11종 + 슬래시 커맨드 14종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,12 +11,12 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `1.25.0` |
+| 버전 | `1.26.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
 | 네임스페이스 | `/claudecode-for-me:<name>` |
-| 구성요소 | Skill 10 · Command 13 · Python runner 4 (`scripts/`) |
+| 구성요소 | Skill 11 · Command 14 · Python runner 5 (`scripts/`) |
 | 외부 연동 도구 | [`codenavigator`](https://github.com/JaeCheon8587/codenavigator) (PyPI) — codenav-bootstrap / codenav-frontmatter-gen 슬래시가 호출 |
 
 플러그인은 **글로벌 캐시**에 설치되므로 한 번 설치 후 모든 프로젝트의 **새 세션**에서 자동 노출된다. 프로젝트별 재설치 불필요.
@@ -78,12 +78,13 @@ pip install -U codenavigator
 
 ## 5. 플러그인 구성요소
 
-### Skill 10종
+### Skill 11종
 
 | Skill | 슬래시 커맨드 | 역할 |
 |---|---|---|
 | `branch-review` | `/claudecode-for-me:branch-review [ref]` | HEAD↔ref diff을 Standards/Spec 2축 병렬 검토 |
 | `codenav-frontmatter-gen` | `/claudecode-for-me:codenav-frontmatter-gen [--limit N] [--apply]` | C# 클래스 description 빈칸을 AI로 일괄 채워 `// ---` frontmatter 블록 삽입 |
+| `doc-driven-review` | `/claudecode-for-me:doc-driven-review <doc-path>... [--worktree <ref>]` | 첨부 문서 기준 working-tree 변경을 Codex CLI로 검증. Missing/Improve/Overengineered + Conformance(%) 보고. forge-scope linked worktree 지원 |
 | `docs-add-frd` | `/claudecode-for-me:docs-add-frd [요청]` | v0.7 per-App 신규 기능 FRD + ADR 생성, PRD/FC/ADR-CATALOG 갱신 |
 | `docs-add-task` | `/claudecode-for-me:docs-add-task [요청]` | v0.7 per-App 기존 기능 수정 TASK + ADR 생성, FC/영향 FRD/ADR-CATALOG 갱신 |
 | `e2e-sequence` | `/claudecode-for-me:e2e-sequence [기능]` | E2E 메시지 흐름 → Mermaid 시퀀스 다이어그램 |
@@ -93,7 +94,7 @@ pip install -U codenavigator
 | `grill-me` | `/claudecode-for-me:grill-me [주제]` | 1문 1답으로 요구사항 모호점 추적 |
 | `meta-prompter` | `/claudecode-for-me:meta-prompter [요청]` | 거친 요청 → 구조화된 메타 프롬프트 |
 
-### Command 13종
+### Command 14종
 
 | Command | 설명 |
 |---|---|
@@ -101,6 +102,7 @@ pip install -U codenavigator
 | `codenav-bootstrap` | CodeNavigator parser-only 인덱싱 (frontmatter/XML doc만 읽어 SQLite 빌드, AI 호출 없음) |
 | `codenav-frontmatter-gen` | codenav-frontmatter-gen skill 진입 (AI가 .cs에 frontmatter 영구 삽입). `--projects` / `--files` / `--staged` 스코프 인자 |
 | `codenav-install` | 프로젝트 루트의 `Tools/codenavigator/` 폴더에 codenavigator (PyPI) 격리 설치 + `codenav.ps1/codenav.sh` launcher + `.gitignore` 자동 작성 + Docs/CLAUDE.md 링크 셋업 |
+| `doc-driven-review` | doc-driven-review skill 진입. Codex CLI 위임 read-only 리뷰. `--worktree <branch\|path>` 로 linked worktree 지정 가능 |
 | `commit-analysis` | 변경 분석 후 `[ADD]`/`[MOD]`/`[FIX]` 자동 판단 한글 커밋 생성 |
 | `docs-add-frd` | docs-add-frd skill 진입 (신규 기능 FRD + ADR) |
 | `docs-add-task` | docs-add-task skill 진입 (기존 기능 수정 TASK + ADR) |
@@ -337,6 +339,32 @@ phases/
 - `.md` 자동 제외 (`git add --all` 후 `git reset -- "*.md"`)
 - Co-Authored-By / "Generated with Claude Code" 문구 제외
 - 한글 커밋 메시지
+
+### 6.9 doc-driven-review
+
+```
+/claudecode-for-me:doc-driven-review Docs/spec-feature.md
+/claudecode-for-me:doc-driven-review Docs/spec.md --wait --scope working-tree
+/claudecode-for-me:doc-driven-review Docs/spec.md --worktree feat-cn-foo
+/claudecode-for-me:doc-driven-review Docs/spec.md --worktree .worktrees/cn-foo --background
+```
+
+- **Codex CLI 위임** — 첨부 문서 기준 working-tree + untracked 변경을 codex가 리뷰. read-only.
+- **산출**: Missing / Improve / Overengineered + **Conformance (0-100%)** 점수.
+- **strict 상태 판정**: ✓ 모든 시그니처/literal 일치 · ⚠ 외형 맞지만 일부 누락 · ✗ literal 부재 또는 완전 부재.
+- **Cross-file ripple**: public API 변경 시 patch + UNCHANGED CONTEXT(caller auto-detect) 모두 참조.
+- **Weighted Conformance**: Critical=4 / Major=2 / Minor=1, ✓=full ⚠=0.5× ✗=0. `pct = round(100 × passed / total)`.
+- **워크트리 지정**: `--worktree <branch|path>` — forge-scope linked worktree 또는 임의 경로 직접 리뷰. `--repo-root` 와 mutex.
+- **scope**: `working-tree` (변경) / `branch` (HEAD↔base diff) / `auto` (변경 있으면 working-tree).
+- **결과 파일**: `<repo>/.review/<doc-stem>-review.md`.
+- **모드**: `--wait` (foreground) / `--background` (PID + log 출력). 미지정 시 변경 규모로 자동 추천.
+- **dry-run**: `--dry-run`으로 codex 호출 없이 prompt만 stdout. `--keep-patch`로 디버깅용 patch 보존.
+
+#### 한계
+
+- Codex CLI 필수. 미설치 시 exit 2. `/codex:setup` 안내.
+- patch + background log는 main repo `.git/info/` 공유 (파일명 unique로 동시 실행 안전).
+- submodule / multi-repo 미지원.
 
 ---
 
