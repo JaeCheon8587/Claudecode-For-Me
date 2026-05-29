@@ -13,6 +13,7 @@ Options:
     --effort <level>              codex --effort 통과
     --background                  detach 실행, PID + log path 출력
     --repo-root <path>            기본 git rev-parse --show-toplevel
+    --worktree <branch|path>      대상 워크트리 지정 (--repo-root 와 mutex). linked worktree 시 권장
     --dry-run                     codex 호출 skip, 생성 프롬프트만 stdout 출력
     --verbose                     DEBUG 로그
     --keep-patch                  종료 후 .patch 파일 보존 (디버깅)
@@ -24,6 +25,7 @@ Exit codes:
     3   리뷰할 변경 없음
     4   첨부 문서 합계 >200KB (사전 차단)
     5   --base ref 존재하지 않음
+    6   --worktree 해석 실패 (branch/path 매칭 안 됨)
     130 KeyboardInterrupt
 """
 
@@ -60,6 +62,7 @@ EXIT_NO_CODEX = 2
 EXIT_NO_CHANGES = 3
 EXIT_DOC_TOO_BIG = 4
 EXIT_NO_BASE = 5
+EXIT_WORKTREE = 6
 EXIT_KBI = 130
 
 DOC_TOTAL_BYTES_LIMIT = 200_000        # 합산 200KB
@@ -362,6 +365,14 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--background", action="store_true",
                    help="detach 실행, PID + log path 출력")
     p.add_argument("--repo-root", type=Path, default=None, dest="repo_root")
+    p.add_argument(
+        "--worktree",
+        metavar="<branch|path>",
+        default=None,
+        help="대상 워크트리 지정. branch명 또는 경로. "
+             "linked worktree(forge-scope) 사용 시 권장. "
+             "--repo-root 와 동시 사용 불가. 미지정 시 cwd 기준.",
+    )
     p.add_argument("--dry-run", action="store_true", dest="dry_run",
                    help="codex 호출 skip, 생성 프롬프트만 stdout")
     p.add_argument("--keep-patch", action="store_true", dest="keep_patch",
@@ -410,6 +421,77 @@ def find_repo_root(start: Path) -> Path:
     if result.returncode != 0:
         raise DocReviewError(f"git 레포 아님: {start}")
     return Path(result.stdout.strip())
+
+
+def _git_info_dir(repo_root: Path) -> Path:
+    """
+    `.git/info` 디렉토리 경로 반환. worktree 토폴로지 무관.
+
+    - main worktree: `<repo>/.git/info`
+    - linked worktree: `<main-repo>/.git/info` (info는 common dir 소속, 모든 worktree 공유)
+    - bare repo: `<repo>.git/info`
+
+    부수효과: 디렉토리 부재 시 생성 (`parents=True, exist_ok=True`).
+    """
+    r = _git(["rev-parse", "--git-path", "info"], cwd=repo_root, check=False)
+    if r.returncode != 0:
+        raise DocReviewError(
+            f"git rev-parse --git-path info 실패 ({repo_root}): {r.stderr.strip()}"
+        )
+    info = Path(r.stdout.strip())
+    if not info.is_absolute():
+        info = (repo_root / info).resolve()
+    info.mkdir(parents=True, exist_ok=True)
+    return info
+
+
+def resolve_worktree(token: str, cwd: Path) -> Path:
+    """
+    `--worktree <token>` 인자 해석.
+
+    경로 형태(`/`, `\\`, 절대경로, `./`/`../`): Path 즉시 해석.
+    그 외: branch명으로 간주, `git worktree list --porcelain` 파싱.
+    `refs/heads/<branch>` 접두 자동 처리.
+    """
+    looks_like_path = (
+        not token.startswith("refs/")
+        and (
+            "/" in token
+            or "\\" in token
+            or Path(token).is_absolute()
+            or token.startswith(".")
+        )
+    )
+    if looks_like_path:
+        p = Path(token).expanduser().resolve()
+        if not p.is_dir():
+            raise DocReviewError(f"--worktree 경로 존재하지 않음: {token}")
+        verify = _git(["rev-parse", "--show-toplevel"], cwd=p, check=False)
+        if verify.returncode != 0:
+            raise DocReviewError(f"--worktree 경로가 git 레포 아님: {token}")
+        return p
+
+    r = _git(["worktree", "list", "--porcelain"], cwd=cwd, check=False)
+    if r.returncode != 0:
+        raise DocReviewError(
+            f"git worktree list 실패 ({cwd}): {r.stderr.strip()}"
+        )
+
+    current_path: Optional[Path] = None
+    target_full = f"refs/heads/{token}" if not token.startswith("refs/heads/") else token
+
+    for line in r.stdout.splitlines():
+        if line.startswith("worktree "):
+            current_path = Path(line[len("worktree "):].strip())
+        elif line.startswith("branch "):
+            ref = line[len("branch "):].strip()
+            if ref == target_full and current_path is not None:
+                return current_path.resolve()
+
+    raise DocReviewError(
+        f"--worktree 해석 실패 (branch/path 매칭 안 됨): {token}. "
+        f"`git worktree list` 로 등록된 워크트리 확인하세요."
+    )
 
 
 def _merge_base(repo_root: Path, remote: str = "origin/main") -> Optional[str]:
@@ -950,8 +1032,7 @@ def invoke_codex_background(
     repo_root: Path,
 ) -> tuple[int, str, str]:
     cmd = _build_codex_cmd(model, effort)
-    log_dir = repo_root / ".git" / "info"
-    log_dir.mkdir(parents=True, exist_ok=True)
+    log_dir = _git_info_dir(repo_root)
     job_id = uuid.uuid4().hex[:8]
     log_file = log_dir / f"doc-review-bg-{job_id}.log"
 
@@ -1019,10 +1100,24 @@ def main(argv: list[str]) -> int:
     log.info("doc-driven-review 시작. docs=%s scope=%s", args.docs, args.scope)
 
     # repo root 결정
+    if args.worktree and args.repo_root:
+        print(
+            "오류: --worktree 와 --repo-root 동시 지정 불가. 하나만 사용하세요.",
+            file=sys.stderr,
+        )
+        return EXIT_ERR
     try:
-        repo_root = args.repo_root or find_repo_root(Path.cwd())
+        if args.worktree:
+            repo_root = resolve_worktree(args.worktree, cwd=Path.cwd())
+            log.info("worktree 해석: %s → %s", args.worktree, repo_root)
+        elif args.repo_root:
+            repo_root = args.repo_root
+        else:
+            repo_root = find_repo_root(Path.cwd())
     except DocReviewError as e:
         print(f"오류: {e}", file=sys.stderr)
+        if args.worktree and "worktree" in str(e).lower():
+            return EXIT_WORKTREE
         return EXIT_ERR
 
     # 문서 읽기
@@ -1064,7 +1159,7 @@ def main(argv: list[str]) -> int:
     # patch 합성
     ts = datetime.now(TZ).strftime("%Y%m%d-%H%M%S")
     rand = uuid.uuid4().hex[:6]
-    patch_path = repo_root / ".git" / "info" / f"doc-review-{ts}-{rand}.patch"
+    patch_path = _git_info_dir(repo_root) / f"doc-review-{ts}-{rand}.patch"
     untracked = list_untracked_text_files(repo_root)
 
     try:
