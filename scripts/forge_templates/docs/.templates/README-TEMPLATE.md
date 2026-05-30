@@ -10,7 +10,7 @@
 
 ## 개요
 
-{2~4줄 요약. 제품의 목적·핵심 가치·범위. 더 깊은 컨텍스트는 [`Docs/PRD.md`](Docs/PRD.md) 참조.}
+{2~4줄 요약. 제품의 목적·핵심 가치·범위. 더 깊은 컨텍스트는 [`docs/PRD.md`](docs/PRD.md) 참조.}
 
 ## 빠른 시작
 
@@ -39,29 +39,28 @@
 
 {한 단락 요약. 호스트 N종 + 통신 방식 + 저장소}.
 
-상세는 [`Docs/ARCHITECTURE.md`](Docs/ARCHITECTURE.md) 참조 (DDD 5-레이어·참조 매트릭스·폴더→레이어 매핑).
+상세는 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) 참조 (DDD 5-레이어·참조 매트릭스·폴더→레이어 매핑).
 
 ## 문서
 
 | 영역 | 경로 |
 |---|---|
-| 문서 작성 룰 | [`Docs/DOCUMENT_GUIDE.md`](Docs/DOCUMENT_GUIDE.md) |
-| 솔루션 아키텍처 | [`Docs/ARCHITECTURE.md`](Docs/ARCHITECTURE.md) |
-| App 요구사항 | [`Docs/{SYSTEM_CODE}/{SYSTEM_CODE}-PRD.md`](Docs/{SYSTEM_CODE}/{SYSTEM_CODE}-PRD.md) |
-| App 기능 레지스트리 | [`Docs/{SYSTEM_CODE}/{SYSTEM_CODE}-FC.md`](Docs/{SYSTEM_CODE}/{SYSTEM_CODE}-FC.md) |
-| App 기능별 상세 | [`Docs/{SYSTEM_CODE}/FRD/`](Docs/{SYSTEM_CODE}/FRD/) |
-| App AI 실행용 작업 지시서 (휘발성) | [`Docs/{SYSTEM_CODE}/TASK/`](Docs/{SYSTEM_CODE}/TASK/) |
-| App 결정 이력 | [`Docs/{SYSTEM_CODE}/{SYSTEM_CODE}-ADR-CATALOG.md`](Docs/{SYSTEM_CODE}/{SYSTEM_CODE}-ADR-CATALOG.md) |
-| 코드 레이어 규칙 | [`Docs/ARCHITECTURE.md`](Docs/ARCHITECTURE.md) |
+| 제품 요구사항 | [`docs/PRD.md`](docs/PRD.md) |
+| 기능 레지스트리 | [`docs/Feature_Catalog/FC-{SYSTEM_CODE}-001.md`](docs/Feature_Catalog/FC-{SYSTEM_CODE}-001.md) |
+| 기능별 상세 | [`docs/FRD/`](docs/FRD/) |
+| 결정 이력 | [`docs/ADR.md`](docs/ADR.md) |
+| UX 가이드 | [`docs/UI_GUIDE.md`](docs/UI_GUIDE.md) |
+| 코드 레이어 규칙 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
+| 문서 작성·이식 가이드 | [`docs/DOCUMENT_GUIDE.md`](docs/DOCUMENT_GUIDE.md) |
 
 > AI 에이전트(Claude Code 등)로 작업 시: 레포 루트 [`CLAUDE.md`](CLAUDE.md)를 참조한다.
 
 ## 기여
 
-{기여 정책. 예: 신규 기능은 PRD → FC → FRD 갱신 후 구현 착수. FRD 에는 코드 상세를 쓰지 않는다. AI 실행용 코드 작업 (feature / refactor / maintenance / migration / setup / investigation) 은 TASK 양식 (휘발성 + self-contained) 으로 작성한다. 상세는 Docs/DOCUMENT_GUIDE.md §2. RFD 양식은 v0.7 폐기.}
+{기여 정책. 예: 신규 기능은 PRD → FC → FRD 갱신 후 테스트 → 구현. 상세는 docs/DOCUMENT_GUIDE.md §7.}
 
 - 커밋 메시지: {conventional commits 형식 — `feat:`, `fix:`, `docs:`, `refactor:` 등}
-- PR 전 체크리스트: [`Docs/DOCUMENT_GUIDE.md` §9](Docs/DOCUMENT_GUIDE.md) 검증 항목 통과.
+- PR 전 체크리스트: [`docs/DOCUMENT_GUIDE.md` §9](docs/DOCUMENT_GUIDE.md) 검증 항목 통과.
 
 ## 라이선스
 

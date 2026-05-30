@@ -6,8 +6,8 @@
 
 신규 App 기능 카탈로그 작성 시 아래 템플릿을 사용한다.
 
-- 원본: `_templates/App/APP-FC-TEMPLATE.md`
-- 결과: `Docs/{App}/{App}-FC.md`
-- 관련 FRD: `Docs/{App}/FRD/{App}-FRD-{NNN}.md`
+- 원본: `.templates/App/APP-FC-TEMPLATE.md`
+- 결과: `docs/{App}/{App}-FC.md`
+- 관련 FRD: `docs/{App}/FRD/{App}-FRD-{NNN}.md`
 
 작성 순서는 [`DOCUMENT_GUIDE §2`](DOCUMENT_GUIDE.md#2-작성-순서) 의 "신규 기능 추가" 절을 따른다.

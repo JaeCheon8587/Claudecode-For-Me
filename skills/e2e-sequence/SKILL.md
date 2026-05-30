@@ -277,7 +277,7 @@ sequenceDiagram
 
 ### 출력 경로
 
-- **저장 위치**: `Docs/E2E-Sequence/{기능명}_Sequence.md`
+- **저장 위치**: `docs/E2E-Sequence/{기능명}_Sequence.md`
 - 기능명은 한국어 또는 영문 모두 가능 (사용자 지정 따름)
 
 ### Mermaid 검증
@@ -306,5 +306,5 @@ sequenceDiagram
 | 외부 시스템 | 모든 항목 기재, 미사용도 X로 명시, 인메모리 대체 시 비고 |
 | 설명 언어 | 한국어 |
 | 메시지 레이블 | 프로토콜 정보 + DTO명 |
-| 저장 경로 | `Docs/E2E-Sequence/{기능명}_Sequence.md` |
+| 저장 경로 | `docs/E2E-Sequence/{기능명}_Sequence.md` |
 | 검증 | Mermaid MCP 도구로 렌더링 테스트 |

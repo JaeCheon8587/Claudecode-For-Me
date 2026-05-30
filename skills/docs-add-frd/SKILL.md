@@ -6,14 +6,14 @@ argument-hint: "[신규 기능 자연어 prompt]"
 
 # docs-add-frd
 
-Docs/_templates v0.7 체계 (per-App PRD/FC/ARCHITECTURE/FRD/ADR/ADR-CATALOG) 에서 **신규 기능 FRD + ADR 항상 동반 생성**. source repo in-place 수정. preview 없음.
+docs/.templates v0.7 체계 (per-App PRD/FC/ARCHITECTURE/FRD/ADR/ADR-CATALOG) 에서 **신규 기능 FRD + ADR 항상 동반 생성**. source repo in-place 수정. preview 없음.
 
 ---
 
 ## 핵심 원칙
 
 - **v0.7 전용** — Legacy (`PRD-<CODE>-001.md`, 19-section FRD 등) 미지원.
-- **In-place** — `Docs/<App>/...` 경로에 직접 쓰기. preview-dir 없음.
+- **In-place** — `docs/<App>/...` 경로에 직접 쓰기. preview-dir 없음.
 - **ADR 항상 강제** — FRD 1개 = ADR 1개 동반. 결정 사항 없을 시 placeholder 자동 채움.
 - **AI 자동 채움** — 사용자 prompt 에 없는 선택 항목은 "미작성/추후" 또는 "없음" 텍스트.
 - **TASK 인용 금지** — 본 skill 은 TASK 미관여 (v0.7 휘발성 룰).
@@ -28,11 +28,11 @@ python scripts/docs_helpers.py list-apps --repo .
 ```
 
 응답 JSON 의 `apps[].code` 이용:
-- 0건 → 중단. 가이드: "`/CLAUDE.md` Backend Services Overview 표에 App 행 추가 + `Docs/<App>/` 폴더 부트스트랩 후 재시도."
+- 0건 → 중단. 가이드: "`/CLAUDE.md` Backend Services Overview 표에 App 행 추가 + `docs/<App>/` 폴더 부트스트랩 후 재시도."
 - 1건 → 자동 채택.
 - 2건 이상 → `AskUserQuestion` 으로 사용자 선택.
 
-`unbootstrapped` 가 비어있지 않으면 (CLAUDE.md 등재됐으나 `Docs/<App>/` 부재) 경고 보고.
+`unbootstrapped` 가 비어있지 않으면 (CLAUDE.md 등재됐으나 `docs/<App>/` 부재) 경고 보고.
 
 ---
 
@@ -79,7 +79,7 @@ python scripts/docs_helpers.py git-user --repo .
 
 ## Phase 3: FRD 파일 내용 준비
 
-`_templates/App/FRD/APP-FRD-001-TEMPLATE.md` 기준 20 section + 메타 표 + 변경 이력 표.
+`.templates/App/FRD/APP-FRD-001-TEMPLATE.md` 기준 20 section + 메타 표 + 변경 이력 표.
 
 ### 메타 표 6 행
 
@@ -148,7 +148,7 @@ python scripts/docs_helpers.py git-user --repo .
 
 ## Phase 4: ADR 파일 내용 준비
 
-`_templates/App/ADR/APP-ADR-001-TEMPLATE.md` 기준.
+`.templates/App/ADR/APP-ADR-001-TEMPLATE.md` 기준.
 
 ### 메타 표
 
@@ -191,7 +191,7 @@ python scripts/docs_helpers.py git-user --repo .
 
 ## Phase 5: FC 갱신 내용 준비
 
-`Docs/<App>/<App>-FC.md` 5표 모두 행 1 추가.
+`docs/<App>/<App>-FC.md` 5표 모두 행 1 추가.
 
 ### 1) `### 기본 식별·설명`
 ```
@@ -223,7 +223,7 @@ python scripts/docs_helpers.py git-user --repo .
 
 ## Phase 6: App-PRD 갱신 내용 준비
 
-`Docs/<App>/<App>-PRD.md` 다음 절 갱신:
+`docs/<App>/<App>-PRD.md` 다음 절 갱신:
 
 ### §3.1 (릴리즈 범위)
 - `이번 릴리즈 포함` 셀 텍스트 끝에 `, F<NNN>` 추가. 셀에 `{본 App 의 현 릴리즈 범위}` placeholder 만 있으면 `F<NNN>` 로 교체.
@@ -239,7 +239,7 @@ python scripts/docs_helpers.py git-user --repo .
 
 ## Phase 7: ADR-CATALOG 갱신 내용 준비
 
-`Docs/<App>/<App>-ADR-CATALOG.md` `## Proposed` 표 행 1 추가:
+`docs/<App>/<App>-ADR-CATALOG.md` `## Proposed` 표 행 1 추가:
 
 ```
 | [<App>-ADR-<NNN>](ADR/<App>-ADR-<NNN>.md) | <ADR 제목> | <오늘> | <영향 모듈 또는 "F<NNN> 기능"> | <결정 기한 = 오늘+14일> | <결정 필요자 = "개발 리드"> |
@@ -257,16 +257,16 @@ python scripts/docs_helpers.py git-user --repo .
 ## 작성 계획
 
 ### 생성 파일
-- CREATE Docs/<App>/FRD/<App>-FRD-<NNN>.md (20 section + 메타 + 이력)
-- CREATE Docs/<App>/ADR/<App>-ADR-<NNN>.md (Proposed, narrative 추론)
+- CREATE docs/<App>/FRD/<App>-FRD-<NNN>.md (20 section + 메타 + 이력)
+- CREATE docs/<App>/ADR/<App>-ADR-<NNN>.md (Proposed, narrative 추론)
 
 ### 갱신 파일
-- UPDATE Docs/<App>/<App>-PRD.md
+- UPDATE docs/<App>/<App>-PRD.md
   - §3.1 릴리즈 범위: F<NNN> 추가
   - §7 주요 기능 요약: 행 1 추가
-- UPDATE Docs/<App>/<App>-FC.md
+- UPDATE docs/<App>/<App>-FC.md
   - 5표 모두 F<NNN> 행 추가
-- UPDATE Docs/<App>/<App>-ADR-CATALOG.md
+- UPDATE docs/<App>/<App>-ADR-CATALOG.md
   - Proposed 행 1 추가
 
 ### 핵심 채움 값
@@ -290,8 +290,8 @@ python scripts/docs_helpers.py git-user --repo .
 
 작성 순서 (의존도 낮은 것부터, 부분 실패 시 partial OK):
 
-1. **ADR 파일** `Write` (Docs/<App>/ADR/<App>-ADR-<NNN>.md)
-2. **FRD 파일** `Write` (Docs/<App>/FRD/<App>-FRD-<NNN>.md)
+1. **ADR 파일** `Write` (docs/<App>/ADR/<App>-ADR-<NNN>.md)
+2. **FRD 파일** `Write` (docs/<App>/FRD/<App>-FRD-<NNN>.md)
 3. **App-PRD** `Edit` §3.1 + §7
 4. **FC** `Edit` 5표 행 추가
 5. **ADR-CATALOG** `Edit` Proposed 행 추가
@@ -313,23 +313,23 @@ FAIL 있어도 source 유지. 출력 그대로 사용자에 노출. 수동 처�
 ## Phase 11: 결과 보고
 
 ```
-CREATE Docs/<App>/FRD/<App>-FRD-<NNN>.md
-CREATE Docs/<App>/ADR/<App>-ADR-<NNN>.md
-UPDATE Docs/<App>/<App>-PRD.md (§3.1, §7)
-UPDATE Docs/<App>/<App>-FC.md (5 tables)
-UPDATE Docs/<App>/<App>-ADR-CATALOG.md (Proposed +1)
+CREATE docs/<App>/FRD/<App>-FRD-<NNN>.md
+CREATE docs/<App>/ADR/<App>-ADR-<NNN>.md
+UPDATE docs/<App>/<App>-PRD.md (§3.1, §7)
+UPDATE docs/<App>/<App>-FC.md (5 tables)
+UPDATE docs/<App>/<App>-ADR-CATALOG.md (Proposed +1)
 Checks: <P> PASS, <F> FAIL
 ```
 
 Cross-cutting 감지 시 (errorCode 신설, 솔루션 도메인 entity 변경 등):
 ```
 [Warning] 솔루션 PRD 동기화 필요:
-- Docs/PRD.md §3.1·§8·부록 B/D/E 검토 권장 (자동 수정 안 함)
+- docs/PRD.md §3.1·§8·부록 B/D/E 검토 권장 (자동 수정 안 함)
 ```
 
 호스트 영향 감지 시:
 ```
-[Warning] Docs/<App>/<App>-ARCHITECTURE.md §1·§2 검토 권장
+[Warning] docs/<App>/<App>-ARCHITECTURE.md §1·§2 검토 권장
 ```
 
 ---

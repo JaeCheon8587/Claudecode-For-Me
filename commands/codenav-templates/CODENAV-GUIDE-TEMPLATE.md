@@ -1,6 +1,6 @@
 # codenav 사용 가이드 — {프로젝트명}
 
-> ⚠ **TEMPLATE** — `/codenav-install` 슬래시 커맨드가 본 파일을 사용자 워크스페이스의 `Docs/codenav-guide.md` (또는 `docs/codenav-guide.md`) 로 복사한다. `{프로젝트명}` placeholder 는 cwd 디렉토리명으로 치환. 작성 후 본 경고 줄은 삭제한다.
+> ⚠ **TEMPLATE** — `/codenav-install` 슬래시 커맨드가 본 파일을 사용자 워크스페이스의 `docs/codenav-guide.md` 로 복사한다. `{프로젝트명}` placeholder 는 cwd 디렉토리명으로 치환. 작성 후 본 경고 줄은 삭제한다.
 
 이 워크스페이스는 [codenavigator](https://github.com/JaeCheon8587/codenavigator) 시맨틱 클래스 인덱스 도구를 사용해 C# 코드베이스를 빠르게 탐색한다.
 
@@ -26,12 +26,12 @@
 
 | 자원 | 위치 |
 |---|---|
-| codenav CLI | `Tools/codenavigator/Scripts/codenav.exe` (Windows venv) |
+| codenav CLI | `tools/codenavigator/Scripts/codenav.exe` (Windows venv) |
 | launcher | `codenav.ps1` (PowerShell), `codenav.sh` (Bash) |
 | 인덱스 DB | `.codenav/index.sqlite` (`.gitignore` 처리됨) |
 | hook | `.claude/hooks/codenav-prefer.ps1` |
 
-**격리 원칙**: `Tools/codenavigator/` 는 self-contained venv. `.gitignore` 로 commit 차단. 다른 프로젝트와 별개.
+**격리 원칙**: `tools/codenavigator/` 는 self-contained venv. `.gitignore` 로 commit 차단. 다른 프로젝트와 별개.
 
 ## 재인덱싱
 
@@ -87,7 +87,7 @@ Remove-Item env:CODENAV_HOOK_AUTOFILL
 
 ## 슬래시 커맨드
 
-- `/codenav-install` — 도구 셋업 (venv + launcher + hook + Docs/CLAUDE.md 자동).
+- `/codenav-install` — 도구 셋업 (venv + launcher + hook + docs/CLAUDE.md 자동).
 - `/codenav-bootstrap` — parser-only 인덱스 빌드.
 - `/codenav-frontmatter-gen` — AI 가 클래스 description 자동 채움.
 

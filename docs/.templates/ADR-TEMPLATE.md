@@ -6,8 +6,8 @@
 
 신규 결정 작성 시 아래 템플릿을 사용한다.
 
-- 원본: `_templates/App/ADR/APP-ADR-001-TEMPLATE.md`
-- 결과: `Docs/{App}/ADR/{App}-ADR-{NNN}.md`
-- 인덱스: `Docs/{App}/{App}-ADR-CATALOG.md`
+- 원본: `.templates/App/ADR/APP-ADR-001-TEMPLATE.md`
+- 결과: `docs/{App}/ADR/{App}-ADR-{NNN}.md`
+- 인덱스: `docs/{App}/{App}-ADR-CATALOG.md`
 
 작성 순서는 [`DOCUMENT_GUIDE §2`](DOCUMENT_GUIDE.md#2-작성-순서) 의 "신규 결정 등재" 절을 따른다.

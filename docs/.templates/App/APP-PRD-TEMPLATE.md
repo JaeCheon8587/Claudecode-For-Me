@@ -2,7 +2,7 @@
 
 > ⚠ **TEMPLATE** — 모든 `{...}` placeholder를 실제 값으로 채우거나 해당 줄을 삭제한다.
 > **본 App 의 product 요구사항** (시점 = 솔루션 내 단일 App 포커스). 솔루션 전체 시야 = [`../PRD.md`](../PRD.md) (있을 시) 또는 [`/CLAUDE.md`](../../CLAUDE.md). 기술 시야 (호스트/런타임/진입점) = [`{App}-ARCHITECTURE.md`]({App}-ARCHITECTURE.md). 기능 정의 SSOT = [`{App}-FC.md`]({App}-FC.md).
-> **Single-S/W 솔루션 시** 본 App PRD 가 솔루션 PRD 역할 겸유 가능. 그 경우 § 부록 B/C/D/E 본문을 [`../_templates/PRD-TEMPLATE.md`](../_templates/PRD-TEMPLATE.md) 부록 양식에서 복사 후 본 App 한정으로 유지.
+> **Single-S/W 솔루션 시** 본 App PRD 가 솔루션 PRD 역할 겸유 가능. 그 경우 § 부록 B/C/D/E 본문을 [`../.templates/PRD-TEMPLATE.md`](../.templates/PRD-TEMPLATE.md) 부록 양식에서 복사 후 본 App 한정으로 유지.
 
 | 항목 | 값 |
 |---|---|

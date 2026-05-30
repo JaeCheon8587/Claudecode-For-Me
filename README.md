@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v1.26.0 · 커스텀 스킬 11종 + 슬래시 커맨드 14종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v2.0.0 · 커스텀 스킬 11종 + 슬래시 커맨드 14종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,7 +11,7 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `1.26.0` |
+| 버전 | `2.0.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
@@ -67,6 +67,17 @@ pip install -U codenavigator
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
 
+### v2.0.0 — 경로 컨벤션 통일 (Breaking)
+
+전 리소스의 디렉토리 케이싱을 소문자로 통일했다. major 승격 사유:
+
+- **문서 경로**: `Docs/` → `docs/`, `Docs/_templates/` → `docs/.templates/`, 코드 룰은 `docs/.rules/` 하위로 정렬.
+- **codenav venv 경로**: `Tools/codenavigator/` → `tools/codenavigator/` (install·bootstrap·launcher·`.gitignore`·검증 전 지점 동기).
+- **codenav-install legacy 호환 제거**: 워크스페이스 `Docs/` 폴더 fallback 삭제 — 이제 소문자 `docs/` 만 인식.
+- **forge 데이터 계약**: forge index/plan JSON 키 `Docs`/`Docs_scope` → `docs`/`docs_scope`, 경로 prefix 소문자화. 기존 forge 상태 파일은 비호환 → 재부트스트랩 필요.
+
+기존 설치 워크스페이스: codenav 는 재설치 시 `tools/` 신생(Windows case-insensitive FS 는 무영향). forge 진행 중 작업은 phase 재시작 권장.
+
 ## 4. 제거
 
 ```text
@@ -101,7 +112,7 @@ pip install -U codenavigator
 | `branch-review` | branch-review skill 진입 |
 | `codenav-bootstrap` | CodeNavigator parser-only 인덱싱 (frontmatter/XML doc만 읽어 SQLite 빌드, AI 호출 없음) |
 | `codenav-frontmatter-gen` | codenav-frontmatter-gen skill 진입 (AI가 .cs에 frontmatter 영구 삽입). `--projects` / `--files` / `--staged` 스코프 인자 |
-| `codenav-install` | 프로젝트 루트의 `Tools/codenavigator/` 폴더에 codenavigator (PyPI) 격리 설치 + `codenav.ps1/codenav.sh` launcher + `.gitignore` 자동 작성 + Docs/CLAUDE.md 링크 셋업 |
+| `codenav-install` | 프로젝트 루트의 `tools/codenavigator/` 폴더에 codenavigator (PyPI) 격리 설치 + `codenav.ps1/codenav.sh` launcher + `.gitignore` 자동 작성 + `docs/codenav-guide.md` 작성 + 루트 `CLAUDE.md` 링크 셋업 |
 | `doc-driven-review` | doc-driven-review skill 진입. Codex CLI 위임 read-only 리뷰. `--worktree <branch\|path>` 로 linked worktree 지정 가능 |
 | `commit-analysis` | 변경 분석 후 `[ADD]`/`[MOD]`/`[FIX]` 자동 판단 한글 커밋 생성 |
 | `docs-add-frd` | docs-add-frd skill 진입 (신규 기능 FRD + ADR) |
@@ -150,7 +161,7 @@ CodeNavigator는 AI 코딩 에이전트용 C# 클래스 시맨틱 인덱스. 2�
 `codenav-frontmatter-gen` 특성:
 - **dry-run 기본** — `--apply` 없이는 .cs 파일 무변경. 미리보기 후 적용.
 - **git clean 강제** — uncommitted change 있으면 거부 (`--allow-dirty` 우회).
-- **배치 제한** — `--limit N` (기본 10).
+- **배치 제한** — `--limit N` (기본 50, `0` = 무제한).
 - **idempotent** — 이미 XML doc 또는 frontmatter 있는 클래스는 자동 스킵.
 - **삽입 형식**:
   ```csharp
@@ -172,7 +183,7 @@ CLI 직접:
 pip install codenavigator   # 1회
 
 # 1단계 (.cs 변경)
-codenav --root <repo> frontmatter gen --limit 10 --apply
+codenav --root <repo> frontmatter gen --limit 50 --apply
 
 # 2단계 (SQLite 빌드)
 codenav --root <repo> reindex --full --no-ai
@@ -193,7 +204,7 @@ codenav --root <repo> ui --port 9876
 /claudecode-for-me:docs-add-task 주문 검색에 cursor 페이지네이션 추가
 ```
 
-- **v0.7 per-App 전용** — `Docs/_templates/App/` 양식 (20 section FRD, 5 표 FC, ADR/ADR-CATALOG/TASK)
+- **v0.7 per-App 전용** — `docs/.templates/App/` 양식 (20 section FRD, 5 표 FC, ADR/ADR-CATALOG/TASK)
 - **In-place 수정** — source repo 직접 쓰기. preview 없음.
 - **ADR 항상 강제** — FRD 또는 TASK 1개 = ADR 1개 동반 (결정 없으면 placeholder 자동)
 - **/docs-add-frd**: 신규 기능 — FRD + ADR 생성, App-PRD §3.1·§7 갱신, FC 5표 행 추가, ADR-CATALOG Proposed +1
@@ -214,7 +225,7 @@ codenav --root <repo> ui --port 9876
 - **alt/deactivate 충돌 방지**: `alt`/`else` 블록 내부 `deactivate` 금지
 - **외부 시스템 부재 가시화**: DB·MQ·WS·캐시·외부 HTTP 모두 기재(미사용도 X로 명시)
 - MCP Mermaid Chart 도구로 렌더링 검증
-- 출력: `Docs/E2E-Sequence/{기능명}_Sequence.md`
+- 출력: `docs/E2E-Sequence/{기능명}_Sequence.md`
 
 ### 6.5 forge-full / forge-scope / forge-cancel (harness_framework 임베디드)
 
@@ -246,14 +257,14 @@ codenav --root <repo> ui --port 9876
 ./CLAUDE.md
 ./PHASE_SCHEMA.md
 ./FORGE_SCOPE.md
-./Docs/_templates/   (8 템플릿)
+./docs/.templates/   (8 템플릿)
 ```
 
 #### 사용 예시
 
 ```bash
 # FRD 단건 구현 (권장 — splitter 우회, 토큰 절감)
-/claudecode-for-me:forge-scope /Docs/FRD/FRD-F003.md FRD-F003 주문 상태 API 구현
+/claudecode-for-me:forge-scope /docs/FRD/FRD-F003.md FRD-F003 주문 상태 API 구현
 
 # 자유 텍스트 prompt (phase-dir 자동 도출, 확인 1회)
 /claudecode-for-me:forge-scope 로그인 기능에 소셜 로그인 옵션 추가
@@ -262,7 +273,7 @@ codenav --root <repo> ui --port 9876
 /claudecode-for-me:forge-full mvp-v2 --prompt="MVP v2 전체 구현" --docs-mode=recursive --trust
 
 # plan 미리보기 (파일·브랜치 생성 없음)
-/claudecode-for-me:forge-full order-flow --plan-only --prompt="주문 흐름" --doc=Docs/FRD/FRD-F009.md --trust
+/claudecode-for-me:forge-full order-flow --plan-only --prompt="주문 흐름" --doc=docs/FRD/FRD-F009.md --trust
 
 # 취소
 /claudecode-for-me:forge-cancel login-feature --dry-run
@@ -272,8 +283,8 @@ codenav --root <repo> ui --port 9876
 #### forge-scope 인자 모드
 
 - **Mode 1 (prompt-only)**: 일반 텍스트 → phase-dir 자동 도출 + 확인 1회
-- **Mode 2 (doc + prompt)**: 첫 토큰이 `Docs/...md` / `/Docs/...md`(대소문자 무시) → `--doc` 분리
-- FRD(`Docs/FRD/` 하위) → `--preset=frd-implementation --compact-docs` 자동
+- **Mode 2 (doc + prompt)**: 첫 토큰이 `docs/...md` / `/docs/...md`(대소문자 무시) → `--doc` 분리
+- FRD(`docs/FRD/` 하위) → `--preset=frd-implementation --compact-docs` 자동
 - 일반 문서 → `--single-step --compact-docs` 자동
 
 #### forge-full 주요 옵션
@@ -281,7 +292,7 @@ codenav --root <repo> ui --port 9876
 | 옵션 | 설명 |
 |---|---|
 | `--prompt` | plan 생성 입력 (반복 가능) |
-| `--doc` | guardrail 문서 (`Docs/` 하위 `.md`, 반복 가능) |
+| `--doc` | guardrail 문서 (`docs/` 하위 `.md`, 반복 가능) |
 | `--docs-mode=root\|recursive\|explicit` | 문서 인입 정책 |
 | `--trust` | child claude 권한 (`FORGE_TRUST=1` 동일) |
 | `--yes` | plan 자동 승인 |
@@ -343,10 +354,10 @@ phases/
 ### 6.9 doc-driven-review
 
 ```
-/claudecode-for-me:doc-driven-review Docs/spec-feature.md
-/claudecode-for-me:doc-driven-review Docs/spec.md --wait --scope working-tree
-/claudecode-for-me:doc-driven-review Docs/spec.md --worktree feat-cn-foo
-/claudecode-for-me:doc-driven-review Docs/spec.md --worktree .worktrees/cn-foo --background
+/claudecode-for-me:doc-driven-review docs/spec-feature.md
+/claudecode-for-me:doc-driven-review docs/spec.md --wait --scope working-tree
+/claudecode-for-me:doc-driven-review docs/spec.md --worktree feat-cn-foo
+/claudecode-for-me:doc-driven-review docs/spec.md --worktree .worktrees/cn-foo --background
 ```
 
 - **Codex CLI 위임** — 첨부 문서 기준 working-tree + untracked 변경을 codex가 리뷰. read-only.
@@ -404,7 +415,7 @@ codenav search "은행 계좌"
 codenavigator v1.0.5+ 는 git pre-commit hook 설치 CLI 제공. **AI 호출 없는 정적 검증** — staged `.cs` 의 frontmatter 누락/깨짐 잡음. 1초 미만.
 
 ```powershell
-# Tools/codenavigator/ venv 또는 글로벌 codenav 설치 후
+# tools/codenavigator/ venv 또는 글로벌 codenav 설치 후
 .\codenav.ps1 --root . frontmatter install-hook              # 설치
 .\codenav.ps1 --root . frontmatter install-hook --uninstall  # 제거
 .\codenav.ps1 --root . frontmatter install-hook --force      # 덮어쓰기
@@ -473,6 +484,7 @@ Claudecode-For-Me/
 ├── skills/                      # Claude Code 스킬 (자연어 트리거)
 │   ├── branch-review/
 │   ├── codenav-frontmatter-gen/
+│   ├── doc-driven-review/
 │   ├── docs-add-frd/
 │   ├── docs-add-task/
 │   ├── e2e-sequence/
@@ -490,6 +502,7 @@ Claudecode-For-Me/
 │   ├── codenav-frontmatter-gen.md
 │   ├── codenav-install.md
 │   ├── commit-analysis.md
+│   ├── doc-driven-review.md
 │   ├── docs-add-frd.md
 │   ├── docs-add-task.md
 │   ├── e2e-sequence.md
@@ -498,14 +511,19 @@ Claudecode-For-Me/
 │   ├── forge-scope.md
 │   ├── grill-me.md
 │   └── meta-prompter.md
+├── docs/                       # v0.7 문서 시스템 자산
+│   └── .templates/             # PRD/FC/FRD/ADR/ARCHITECTURE/CLAUDE/README 양식 + App/ + .rules/ (코드 룰 3종)
 ├── scripts/                     # Python 헬퍼·러너
+│   ├── doc_driven_review.py
 │   ├── docs_helpers.py
 │   ├── forge_full.py
 │   ├── forge_scope.py
 │   ├── forge_cancel.py
 │   └── forge_templates/         # forge 부트스트랩 리소스
-├── samples/                     # 테스트용 C# 샘플 (3 프로젝트, .codenavignore 포함)
+├── tests/                       # pytest 스위트 (forge·docs·doc-driven-review)
+├── samples/                     # (gitignored) 로컬 C# 테스트 픽스처 — 미커밋
 ├── .gitattributes
+├── .gitignore
 └── README.md
 ```
 
@@ -518,14 +536,14 @@ Claudecode-For-Me/
 | install 직후 슬래시 자동완성에 안 보임 | 매니페스트는 세션 시작 시 1회 로드 | 세션 종료 → 재시작 |
 | update 후 신규 스킬 호출 불가 | 동일 — 캐시는 갱신됐으나 세션은 구버전 보유 | 세션 재시작 |
 | `/claudecode-for-me:forge-*` 실행 즉시 종료 | `FORGE_TRUST` 미설정 | `FORGE_TRUST=1` 또는 `--trust` |
-| `docs-add-frd` / `docs-add-task` "App 0건" | `/CLAUDE.md` Backend Services Overview 표 + `Docs/<App>/` 부재 | App 행 추가 + 폴더 부트스트랩 |
+| `docs-add-frd` / `docs-add-task` "App 0건" | `/CLAUDE.md` Backend Services Overview 표 + `docs/<App>/` 부재 | App 행 추가 + 폴더 부트스트랩 |
 | `codenav frontmatter gen` 결과 `generated=0` | `claude` CLI 부재 또는 stdout JSON 키 mismatch | `where claude` 확인. v1.15.0+ 는 `result`/`response` 둘 다 처리 |
 | `codenav frontmatter gen` "git working tree is dirty" 거부 | 안전장치 | commit/stash 또는 `--allow-dirty` |
 | `codenav ui --port 8765` 실행 시 `WinError 10013` | Windows excluded port range (8601-8900 등) | 다른 포트 사용 (예: `--port 9876`). `netsh interface ipv4 show excludedportrange protocol=tcp` 로 확인 |
 | `codenav reindex` 후 description 절반 빔 | XML doc/frontmatter 양쪽 모두 없는 클래스 | `/codenav-frontmatter-gen --apply` 로 AI 자동 채움 |
 | `codenav search` "No results" 인데 항목 존재 | 과거 AI 실패로 `stale=1` 마킹 + 검색 필터 | v1.15.0+ 는 description 있으면 stale도 노출. `reindex --no-ai` 로 stale 해소 |
 | `codenav frontmatter gen --files` 매칭 안 됨 | `--root` 와 `--files` 경로 중첩 | `--files` 는 `--root` 기준 상대경로 또는 절대경로 |
-| pre-commit hook 이 commit 안 막음 | codenav CLI 부재 → hook 자동 skip 안전장치 | `Tools/codenavigator/` venv 또는 글로벌 `pip install codenavigator` |
+| pre-commit hook 이 commit 안 막음 | codenav CLI 부재 → hook 자동 skip 안전장치 | `tools/codenavigator/` venv 또는 글로벌 `pip install codenavigator` |
 | pre-commit hook 매 commit `[FAIL]` | staged `.cs` 의 frontmatter 깨짐 (빈 description, 잘못된 tags, 닫는 `---` 누락) | `codenav frontmatter check --staged` 로 디버그 후 수정. 우회는 `--no-verify` |
 | `git config codenav.autofill true` 했는데 자동 채움 안 됨 | claude CLI PATH 부재 또는 인덱스 stale | `where claude` 확인. autofill 은 안전상 실패 시 통과 (commit 진행) |
 

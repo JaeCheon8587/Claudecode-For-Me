@@ -1,6 +1,6 @@
 ---
 name: forge-scope
-description: harness_framework forge-scope 경량 phase runner를 사용자 프로젝트에서 실행한다. 첫 호출 시 scripts/forge_*.py、CLAUDE.md、PHASE_SCHEMA.md、FORGE_SCOPE.md、Docs/_templates/ 를 자동 부트스트랩한 뒤 forge_scope.py를 실행한다. /claudecode-for-me:forge-scope 로 실행.
+description: harness_framework forge-scope 경량 phase runner를 사용자 프로젝트에서 실행한다. 첫 호출 시 scripts/forge_*.py、CLAUDE.md、PHASE_SCHEMA.md、FORGE_SCOPE.md、docs/.templates/ 를 자동 부트스트랩한 뒤 forge_scope.py를 실행한다. /claudecode-for-me:forge-scope 로 실행.
 argument-hint: "<prompt> 또는 <doc-path> <prompt> 또는 tdd <doc-path> <prompt> 또는 <phase-dir> [options]"
 input: 자유 텍스트 prompt 또는 doc-path + prompt + 선택적 CLI 옵션
 output: phases/scoped/<phase-dir>/index.json + step{N}.md 산출물
@@ -57,9 +57,9 @@ python --version 2>&1 || py -3 --version 2>&1
 | `scripts/forge_templates/CLAUDE.md` | `./CLAUDE.md` |
 | `scripts/forge_templates/PHASE_SCHEMA.md` | `./PHASE_SCHEMA.md` |
 | `scripts/forge_templates/FORGE_SCOPE.md` | `./FORGE_SCOPE.md` |
-| `scripts/forge_templates/Docs/_templates/*` | `./Docs/_templates/` (각 파일) |
+| `scripts/forge_templates/docs/.templates/*` | `./docs/.templates/` (각 파일) |
 
-`./scripts/`, `./Docs/_templates/` 디렉토리가 없으면 먼저 생성한다.
+`./scripts/`, `./docs/.templates/` 디렉토리가 없으면 먼저 생성한다.
 
 부트스트랩 완료 후 복사된 파일 목록과 skip된 파일 목록을 사용자에게 한 번 출력한다.
 
@@ -70,7 +70,7 @@ python --version 2>&1 || py -3 --version 2>&1
 
 ```bash
 git add scripts/forge_full.py scripts/forge_scope.py scripts/forge_cancel.py \
-        CLAUDE.md PHASE_SCHEMA.md FORGE_SCOPE.md Docs/_templates/ .gitignore
+        CLAUDE.md PHASE_SCHEMA.md FORGE_SCOPE.md docs/.templates/ .gitignore
 git commit -m "chore: bootstrap forge-scope"
 ```
 
@@ -118,7 +118,7 @@ git worktree remove .worktrees/<phase-dir> && git branch -D feat-<phase-dir>
 `$ARGUMENTS`를 두 모드 중 하나로 해석한다.
 
 ### Mode 1 — prompt-only
-`$ARGUMENTS`가 일반 텍스트로 시작하면 (`/Docs/`·`Docs/` 형식이 아님, 대소문자 무시):
+`$ARGUMENTS`가 일반 텍스트로 시작하면 (`/docs/`·`docs/` 형식이 아님, 대소문자 무시):
 
 1. `<phase-dir>`을 prompt 핵심 의도 1~3단어 kebab-case로 도출한다 (예: `login-feature`).
 2. 사용자에게 phase-dir slug를 한 번 확인한다. 다른 이름을 원하면 그대로 따른다.
@@ -132,12 +132,12 @@ git worktree remove .worktrees/<phase-dir> && git branch -D feat-<phase-dir>
 
 `$ARGUMENTS` 첫 토큰이 `tdd` (대소문자 무시) 이면 contract-tdd 분기로 진입한다.
 
-1. 첫 토큰 `tdd` 를 소비하고, 두 번째 토큰을 `Docs/...md` 형식 doc-path 로 해석 (Mode 2와 동일 정규화: 앞 `/` 제거, `Docs/` prefix 강제).
+1. 첫 토큰 `tdd` 를 소비하고, 두 번째 토큰을 `docs/...md` 형식 doc-path 로 해석 (Mode 2와 동일 정규화: 앞 `/` 제거, `docs/` prefix 강제).
 2. 나머지 텍스트를 `--prompt` 값으로 사용한다.
 3. doc-path 가 부재(첫 토큰이 `tdd` 1개뿐)이거나 형식 위반 시 사용자에게 1회 안내 후 중단:
    ```
-   [forge-scope] tdd 모드는 Docs/FRD/<FRD-ID>.md 경로 1개가 필요합니다.
-   예: /forge-scope tdd Docs/FRD/F003.md 로그인 인증
+   [forge-scope] tdd 모드는 docs/FRD/<FRD-ID>.md 경로 1개가 필요합니다.
+   예: /forge-scope tdd docs/FRD/F003.md 로그인 인증
    ```
 4. `<phase-dir>` 은 FRD ID 또는 doc 파일명 stem 으로 도출한다 (예: `tdd-frd-f003`).
 5. 실행:
@@ -154,12 +154,12 @@ git worktree remove .worktrees/<phase-dir> && git branch -D feat-<phase-dir>
 
 ### Mode 2 — doc + prompt
 
-`$ARGUMENTS`의 첫 토큰이 `/Docs/...md` 또는 `Docs/...md` 형식이면 (대소문자 무시):
+`$ARGUMENTS`의 첫 토큰이 `/docs/...md` 또는 `docs/...md` 형식이면 (대소문자 무시):
 
-- 첫 토큰의 앞 `/`를 제거하고, 경로 prefix를 `Docs/`로 정규화 (예: `/Docs/FRD/FRD-F003.md` → `Docs/FRD/FRD-F003.md`).
+- 첫 토큰의 앞 `/`를 제거하고, 경로 prefix를 `docs/`로 정규화 (예: `/docs/FRD/FRD-F003.md` → `docs/FRD/FRD-F003.md`).
 - 나머지 텍스트를 `--prompt` 값으로 사용한다.
 
-FRD 파일이면 (`Docs/FRD/` 하위) — **frd-implementation (single-step)**:
+FRD 파일이면 (`docs/FRD/` 하위) — **frd-implementation (single-step)**:
 ```bash
 python ./scripts/forge_scope.py <phase-dir> --trust --yes --quiet \
   --preset=frd-implementation --compact-docs \

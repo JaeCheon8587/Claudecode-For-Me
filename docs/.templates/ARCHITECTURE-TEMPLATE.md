@@ -56,9 +56,9 @@
 
 ## 3. 호스트 책임 분리 — App별 ARCHITECTURE 위임
 
-호스트별 핵심 책임/금지/절대 금지는 각 App 의 `Docs/{App}/{App}-ARCHITECTURE.md` 가 SSOT. 본 문서는 솔루션 공통 룰만 보유.
+호스트별 핵심 책임/금지/절대 금지는 각 App 의 `docs/{App}/{App}-ARCHITECTURE.md` 가 SSOT. 본 문서는 솔루션 공통 룰만 보유.
 
-App 코드 후보는 [`/CLAUDE.md` Backend Services Overview](../CLAUDE.md) 표가 단일 출처. 신규 App 도입 시 `/CLAUDE.md` 표 행 추가 + `Docs/{App}/{App}-ARCHITECTURE.md` 신규 작성 (`_templates/App/APP-ARCHITECTURE-TEMPLATE.md` 기반).
+App 코드 후보는 [`/CLAUDE.md` Backend Services Overview](../CLAUDE.md) 표가 단일 출처. 신규 App 도입 시 `/CLAUDE.md` 표 행 추가 + `docs/{App}/{App}-ARCHITECTURE.md` 신규 작성 (`.templates/App/APP-ARCHITECTURE-TEMPLATE.md` 기반).
 
 > **충돌 시 우선순위**: 본 솔루션 ARCHITECTURE 룰 (§2, §4, §5, §6, §7) 이 App ARCHITECTURE 보다 우선. App 은 솔루션 룰 준수 + 호스트 특이 사항만 명시.
 
@@ -149,7 +149,7 @@ App 코드 후보는 [`/CLAUDE.md` Backend Services Overview](../CLAUDE.md) 표�
 | Presentation | **금지** | **허용** | **허용** | **허용** | **허용** |
 | Shared/Cross-Cutting | **금지** | **금지** | **금지** | **금지** | **허용** |
 
-> 도메인이 특정 Cross-Cutting 모듈(예: UI 추상화·통신 추상화)에 의존하지 않아야 한다면 본 절에 예외를 명시하고 **반드시** 영향 App 의 ADR (`Docs/{App}/ADR/{App}-ADR-{NNN}.md`) 를 인용한다. ADR 미존재 시 신규 ADR 등재 후 본 절에 인용. 카탈로그 갱신은 `Docs/{App}/{App}-ADR-CATALOG.md`.
+> 도메인이 특정 Cross-Cutting 모듈(예: UI 추상화·통신 추상화)에 의존하지 않아야 한다면 본 절에 예외를 명시하고 **반드시** 영향 App 의 ADR (`docs/{App}/ADR/{App}-ADR-{NNN}.md`) 를 인용한다. ADR 미존재 시 신규 ADR 등재 후 본 절에 인용. 카탈로그 갱신은 `docs/{App}/{App}-ADR-CATALOG.md`.
 
 ## 7. 프로젝트 매핑 규칙
 

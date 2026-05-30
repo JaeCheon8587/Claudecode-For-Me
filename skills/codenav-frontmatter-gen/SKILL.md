@@ -27,10 +27,10 @@ C# 클래스 중 `/// <summary>` XML doc도 없고 `// ---` frontmatter도 없�
 ### 1. Dry-run (필수 — 절대 건너뛰지 말 것)
 
 ```
-codenav frontmatter gen --limit 10 --verbose
+codenav frontmatter gen --limit 50 --verbose
 ```
 
-기본 `--limit 10`. 사용자가 더 큰 배치를 원하면 인자로 받아 조정. 절대 일회성 100개 이상 권장 금지 — AI 토큰/품질 관리.
+기본 `--limit 50`. 사용자가 더 큰 배치를 원하면 인자로 받아 조정. 절대 일회성 100개 이상 권장 금지 — AI 토큰/품질 관리.
 
 ### 2. 결과 보고
 

@@ -28,7 +28,7 @@ argument-hint: "<doc-path> [추가 doc-path...] [--wait|--background] [--scope w
 
 doc 경로 0개 → 아래 안내 후 종료:
 ```
-문서 경로 필수. 예: /claudecode-for-me:doc-driven-review Docs/feature.md
+문서 경로 필수. 예: /claudecode-for-me:doc-driven-review docs/feature.md
 ```
 
 ### Step 2 — Doc 미리 검증
@@ -88,11 +88,11 @@ Python 스크립트 종료 코드별 대응:
 
 - `"이 문서대로 만들었는지 codex로 확인"`
 - `"spec 반영됐는지 검토해줘"`
-- `"Docs/feature.md 기준으로 변경점 리뷰"`
+- `"docs/feature.md 기준으로 변경점 리뷰"`
 - `"문서 기준 리뷰"`
-- `"doc-driven-review Docs/design.md"`
-- `"DDR Docs/x.md --wait"`
-- `"doc-driven-review Docs/spec.md --worktree feat-foo"`
+- `"doc-driven-review docs/design.md"`
+- `"DDR docs/x.md --wait"`
+- `"doc-driven-review docs/spec.md --worktree feat-foo"`
 - `"forge-scope 워크트리 spec 반영 확인"`
 
 ---

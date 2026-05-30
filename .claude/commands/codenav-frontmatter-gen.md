@@ -13,7 +13,7 @@ CodeNavigator frontmatter 자동 생성 명령. `codenav frontmatter gen` CLI �
 - `--files F1.cs F2.cs ...` (선택): 명시 파일만 처리. `--projects` 보다 우선.
 - `--staged` (선택): `git diff --cached` 의 `.cs` 만 처리. `--files` 와 함께 사용 가능 (합집합). `--projects` 보다 우선.
 - 셋 다 미지정 → repo 전체 스캔 (기존 동작).
-- `--limit N` (기본 0 = 무제한): 이 호출에서 처리할 최대 클래스 수. 0 또는 생략 시 후보 전부 처리.
+- `--limit N` (기본 50): 이 호출에서 처리할 최대 클래스 수. `0` = 무제한 (후보 전부 처리).
 - `--apply`: 명시되면 실제 파일 수정. 없으면 dry-run.
 - `--allow-dirty`: git working tree 가 dirty 여도 실행. 기본은 거부.
 - `--root <path>`: repo root. 기본 cwd.
@@ -23,7 +23,7 @@ CodeNavigator frontmatter 자동 생성 명령. `codenav frontmatter gen` CLI �
 ### 0. 사전 체크
 
 1. `codenav` CLI 위치 탐지 (다음 순서):
-   - **프로젝트 venv**: `<cwd>/Tools/codenavigator/Scripts/codenav.exe` (Windows) 또는 `<cwd>/Tools/codenavigator/bin/codenav` (Unix).
+   - **프로젝트 venv**: `<cwd>/tools/codenavigator/Scripts/codenav.exe` (Windows) 또는 `<cwd>/tools/codenavigator/bin/codenav` (Unix).
    - **launcher**: `<cwd>/codenav.ps1` 존재 시 사용.
    - **PATH 글로벌**: `where codenav` / `which codenav`.
    - 모두 부재 → 다음 안내 후 중단:
@@ -31,8 +31,8 @@ CodeNavigator frontmatter 자동 생성 명령. `codenav frontmatter gen` CLI �
      codenav 가 설치되어있지 않음. 둘 중 하나:
 
        [프로젝트별 격리 권장]
-       python -m venv Tools/codenavigator
-       Tools/codenavigator/Scripts/pip install codenavigator
+       python -m venv tools/codenavigator
+       tools/codenavigator/Scripts/pip install codenavigator
        # 루트에 codenav.ps1 launcher 작성
 
        [글로벌]

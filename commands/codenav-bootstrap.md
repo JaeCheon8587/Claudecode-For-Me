@@ -19,7 +19,7 @@ CodeNavigator baseline index를 `codenav` CLI(`reindex --no-ai`) 로 생성/복�
 
 다음 순서로 어떤 명령으로 codenav 를 호출할지 결정:
 
-1. **프로젝트 venv**: `<cwd>/Tools/codenavigator/Scripts/codenav.exe` (Windows) 또는 `<cwd>/Tools/codenavigator/bin/codenav` (Unix) 존재 → 절대경로로 호출.
+1. **프로젝트 venv**: `<cwd>/tools/codenavigator/Scripts/codenav.exe` (Windows) 또는 `<cwd>/tools/codenavigator/bin/codenav` (Unix) 존재 → 절대경로로 호출.
 2. **launcher**: `<cwd>/codenav.ps1` 존재 → `& .\codenav.ps1 @Args`.
 3. **PATH 글로벌**: `where codenav` / `which codenav` 성공 → `codenav` 그대로.
 4. 모두 부재 → 다음 안내 후 중단:
@@ -27,10 +27,10 @@ CodeNavigator baseline index를 `codenav` CLI(`reindex --no-ai`) 로 생성/복�
    codenav 가 설치되어있지 않음. 둘 중 하나:
    
      [프로젝트별 격리 권장]
-     python -m venv Tools/codenavigator
-     Tools/codenavigator/Scripts/pip install codenavigator
+     python -m venv tools/codenavigator
+     tools/codenavigator/Scripts/pip install codenavigator
      # 루트에 codenav.ps1 launcher 작성
-     #   & "$PSScriptRoot\Tools\codenavigator\Scripts\codenav.exe" @Args
+     #   & "$PSScriptRoot\tools\codenavigator\Scripts\codenav.exe" @Args
    
      [글로벌]
      pip install codenavigator

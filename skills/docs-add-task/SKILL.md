@@ -6,7 +6,7 @@ argument-hint: "[수정/개선/refactor 자연어 prompt]"
 
 # docs-add-task
 
-Docs/_templates v0.7 체계 (per-App PRD/FC/ARCHITECTURE/FRD/ADR/ADR-CATALOG/TASK) 에서 **기존 기능 수정/개선/refactor TASK + ADR 항상 동반 생성**. AI 가 FC 파싱하여 **영향 FRD 다수 자동 식별**. source repo in-place 수정.
+docs/.templates v0.7 체계 (per-App PRD/FC/ARCHITECTURE/FRD/ADR/ADR-CATALOG/TASK) 에서 **기존 기능 수정/개선/refactor TASK + ADR 항상 동반 생성**. AI 가 FC 파싱하여 **영향 FRD 다수 자동 식별**. source repo in-place 수정.
 
 ---
 
@@ -107,7 +107,7 @@ AI 가 prompt 에서 결정 사항 N개 식별:
 
 ## Phase 5: TASK 파일 내용 준비
 
-`_templates/App/TASK/APP-TASK-001-TEMPLATE.md` 기준.
+`.templates/App/TASK/APP-TASK-001-TEMPLATE.md` 기준.
 
 ### 메타 표 (5 행, 관련 문서 행 없음)
 ```
@@ -258,15 +258,15 @@ v0.7 일관성 룰 따름:
 ## 작성 계획
 
 ### 생성 파일
-- CREATE Docs/<App>/TASK/<App>-TASK-<NNN>.md (12 section)
-- CREATE Docs/<App>/ADR/<App>-ADR-<NNN>.md (Proposed, narrative)
+- CREATE docs/<App>/TASK/<App>-TASK-<NNN>.md (12 section)
+- CREATE docs/<App>/ADR/<App>-ADR-<NNN>.md (Proposed, narrative)
 
 ### 영향 FRD 갱신
-- UPDATE Docs/<App>/FRD/<App>-FRD-<N1>.md
+- UPDATE docs/<App>/FRD/<App>-FRD-<N1>.md
   - 메타 표 버전 0.1 → 0.2
   - 변경 이력 +1
   - §5 / §15 텍스트 갱신
-- UPDATE Docs/<App>/FRD/<App>-FRD-<N2>.md (있을 경우)
+- UPDATE docs/<App>/FRD/<App>-FRD-<N2>.md (있을 경우)
   - ...
 
 ### FC 행 갱신
@@ -317,23 +317,23 @@ python scripts/docs_helpers.py check --repo . --app <App>
 ## Phase 13: 결과 보고
 
 ```
-CREATE Docs/<App>/TASK/<App>-TASK-<NNN>.md
-CREATE Docs/<App>/ADR/<App>-ADR-<NNN>.md
-UPDATE Docs/<App>/FRD/<App>-FRD-<N1>.md (history + sections)
-UPDATE Docs/<App>/FRD/<App>-FRD-<N2>.md (history + sections)
-UPDATE Docs/<App>/<App>-FC.md (rows updated)
-UPDATE Docs/<App>/<App>-ADR-CATALOG.md (Proposed +1)
+CREATE docs/<App>/TASK/<App>-TASK-<NNN>.md
+CREATE docs/<App>/ADR/<App>-ADR-<NNN>.md
+UPDATE docs/<App>/FRD/<App>-FRD-<N1>.md (history + sections)
+UPDATE docs/<App>/FRD/<App>-FRD-<N2>.md (history + sections)
+UPDATE docs/<App>/<App>-FC.md (rows updated)
+UPDATE docs/<App>/<App>-ADR-CATALOG.md (Proposed +1)
 Checks: <P> PASS, <F> FAIL
 ```
 
 호스트 영향 (work_type=refactor/migration 이면서 진입점/런타임 영향) 감지 시:
 ```
-[Warning] Docs/<App>/<App>-ARCHITECTURE.md §1·§2 검토 권장 (자동 수정 안 함)
+[Warning] docs/<App>/<App>-ARCHITECTURE.md §1·§2 검토 권장 (자동 수정 안 함)
 ```
 
 Cross-cutting (errorCode/도메인 entity 변경) 감지 시:
 ```
-[Warning] 솔루션 PRD (Docs/PRD.md) 부록 B/D/E 검토 권장
+[Warning] 솔루션 PRD (docs/PRD.md) 부록 B/D/E 검토 권장
 ```
 
 TASK 휘발성 안내:

@@ -1,7 +1,7 @@
 # {SOLUTION_CODE}-PRD — {프로젝트명}
 
 > ⚠ **TEMPLATE** — 모든 `{...}` placeholder를 실제 값으로 채우거나 해당 줄을 삭제한다.
-> **솔루션 단일 PRD** (시스템 전체 시점). 다중 S/W 솔루션 시 채택. per-app 상세는 [`Docs/{App}/{App}-PRD.md`]({App}/{App}-PRD.md) SSOT.
+> **솔루션 단일 PRD** (시스템 전체 시점). 다중 S/W 솔루션 시 채택. per-app 상세는 [`docs/{App}/{App}-PRD.md`]({App}/{App}-PRD.md) SSOT.
 > **SYSTEM_CODE SSOT 는 [`/CLAUDE.md` Backend Services Overview](../CLAUDE.md)**. 본 PRD §7 은 BSO 인용 + product 시야 공통 영역만 보유. ID 규약은 [DOCUMENT_GUIDE §5](DOCUMENT_GUIDE.md#5-식별자-규약).
 
 | 항목 | 값 |
@@ -16,7 +16,7 @@
 |---|---|---|---|
 | 0.1 | YYYY-MM-DD | 초안 | {이름} |
 
-> 본 문서는 **시스템 전체 시점**의 제품 요구사항. 단일 App 의 상세 product 요구사항은 [`Docs/{App}/{App}-PRD.md`]({App}/{App}-PRD.md) 위임. App별 기능 정의 SSOT 는 [`{App}-FC.md`]({App}/{App}-FC.md). 부록 B·D·E 는 솔루션 전체 S/W 를 망라하는 cross-cutting 단일 정의 위치.
+> 본 문서는 **시스템 전체 시점**의 제품 요구사항. 단일 App 의 상세 product 요구사항은 [`docs/{App}/{App}-PRD.md`]({App}/{App}-PRD.md) 위임. App별 기능 정의 SSOT 는 [`{App}-FC.md`]({App}/{App}-FC.md). 부록 B·D·E 는 솔루션 전체 S/W 를 망라하는 cross-cutting 단일 정의 위치.
 
 ---
 
@@ -33,7 +33,7 @@
 - {목표 2}
 
 ### 3.1 릴리즈 범위
-> 솔루션 전체 구현 범위. 모든 App roll-up. App 별 상세는 [`Docs/{App}/{App}-PRD.md` §3.1]({App}/{App}-PRD.md) 참조.
+> 솔루션 전체 구현 범위. 모든 App roll-up. App 별 상세는 [`docs/{App}/{App}-PRD.md` §3.1]({App}/{App}-PRD.md) 참조.
 
 | 구분 | 범위 |
 |---|---|
@@ -62,7 +62,7 @@
 ## 7. 제품 범위
 
 ### App 레지스트리
-> **SYSTEM_CODE SSOT 는 [`/CLAUDE.md` Backend Services Overview](../CLAUDE.md).** 본 절은 BSO 인용 + 솔루션 product 시야 요약. App 호스트/런타임 등 기술 시야는 [`Docs/{App}/{App}-ARCHITECTURE.md`]({App}/{App}-ARCHITECTURE.md) SSOT.
+> **SYSTEM_CODE SSOT 는 [`/CLAUDE.md` Backend Services Overview](../CLAUDE.md).** 본 절은 BSO 인용 + 솔루션 product 시야 요약. App 호스트/런타임 등 기술 시야는 [`docs/{App}/{App}-ARCHITECTURE.md`]({App}/{App}-ARCHITECTURE.md) SSOT.
 
 | App | 솔루션 내 product 역할 | App PRD |
 |---|---|---|
@@ -95,8 +95,8 @@
 | 응답 시간 | {SLA 또는 "명시 없음"} |
 
 ## 10. 제약사항 (솔루션 공통)
-> 코드/레이어 제약은 [`DDD_ARCHITECTURE_RULES.md`](DDD_ARCHITECTURE_RULES.md) / [`OBJECT_ORIENTED_DESIGN_RULES.md`](OBJECT_ORIENTED_DESIGN_RULES.md) SSOT 인용. 본 절은 product/도메인 제약 + 룰 파일 인용만.
-> 솔루션 level architecture 결정은 App ADR 가 SSOT — cross-app 영향 ADR 는 영향 App 중 하나의 [`Docs/{App}/ADR/{App}-ADR-{NNN}.md`]({App}/ADR/{App}-ADR-{NNN}.md) 본문 인용.
+> 코드/레이어 제약은 [`DDD_ARCHITECTURE_RULES.md`](.rules/DDD_ARCHITECTURE_RULES.md) / [`OBJECT_ORIENTED_DESIGN_RULES.md`](.rules/OBJECT_ORIENTED_DESIGN_RULES.md) SSOT 인용. 본 절은 product/도메인 제약 + 룰 파일 인용만.
+> 솔루션 level architecture 결정은 App ADR 가 SSOT — cross-app 영향 ADR 는 영향 App 중 하나의 [`docs/{App}/ADR/{App}-ADR-{NNN}.md`]({App}/ADR/{App}-ADR-{NNN}.md) 본문 인용.
 
 - {도메인 제약 1 — cross-app 적용}
 - {기술 제약 — DDD/레이어 룰 인용}

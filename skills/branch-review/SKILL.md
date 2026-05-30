@@ -102,7 +102,7 @@ git log <ref>..HEAD --format='%H%n%B%n---'
 1. **커밋 메시지 이슈 참조** — 정규식 `#\d+|[A-Z]+-\d+|(?i)closes\s+#\d+|fixes\s+#\d+` 추출. 이슈 트래커 MCP 있으면 본문 조회. 없으면 이슈 번호 + 커밋 메시지만 기록.
 2. **사용자 명시 경로** — 인자로 받은 spec 파일.
 3. **레포 표준 위치** — 최근 30일 내 변경된 매칭 문서:
-   - `docs/**/*.md`, `specs/**/*.md`, `.scratch/**/*.md`, `.atdd/**/*.md`, `Docs/**/*.md`
+   - `docs/**/*.md`, `specs/**/*.md`, `.scratch/**/*.md`, `.atdd/**/*.md`
    - 브랜치명과 유사 토큰 매칭 (e.g. `feature/auth` → `auth`, `authentication` 포함 파일).
 4. **PR description** — `gh pr view --json title,body` 가능 시 본문. 실패 시 건너뜀.
 5. **Commit message fallback** — 위 모두 빈약 시 `git log <ref>..HEAD` 본문 전체를 **합성 spec**으로 사용.

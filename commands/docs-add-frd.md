@@ -2,7 +2,7 @@
 
 신규 기능 FRD + ADR 작성, App-PRD §3.1/§7 갱신, FC 5표 행 추가, ADR-CATALOG Proposed 행 추가.
 
-v0.7 per-App SSOT 체계 (`Docs/_templates/App/` 양식). Legacy (`FRD-<CODE>-F<NNN>.md` 등) 미지원. source repo in-place 수정 (preview 없음).
+v0.7 per-App SSOT 체계 (`docs/.templates/App/` 양식). Legacy (`FRD-<CODE>-F<NNN>.md` 등) 미지원. source repo in-place 수정 (preview 없음).
 
 ## 사용
 
