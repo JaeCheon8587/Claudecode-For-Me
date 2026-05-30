@@ -38,7 +38,7 @@ PROMPT_ARGV_LIMIT = (
 )  # 이 길이 초과 시 stdin 으로 전달 (argv ARG_MAX 회피 + ps 노출 방지). Windows ARG_MAX≈32KB 회피.
 PLACEHOLDER_RE = re.compile(r"\{[^}\n]+\}")
 VALID_PRESETS = frozenset({"auto", "contract-tdd"})
-VALID_DOCS_MODES = frozenset({"root", "recursive", "explicit"})
+VALID_docs_MODES = frozenset({"root", "recursive", "explicit"})
 DEFAULT_MAX_GUARDRAIL_BYTES = 120_000
 REQUIRED_STEP_HEADINGS = (
     "## 읽어야 할 파일",
@@ -80,7 +80,7 @@ class FullGuardrailPathValidator:
 
     def __init__(self, root: Optional[Path] = None):
         self._root = root or ROOT
-        self._docs_dir = (self._root / "Docs").resolve()
+        self._docs_dir = (self._root / "docs").resolve()
 
     def validate_one(self, rel: str) -> Path:
         if not isinstance(rel, str) or not rel:
@@ -92,13 +92,13 @@ class FullGuardrailPathValidator:
             raise ValueError(f"역슬래시 경로는 허용되지 않습니다: {rel}")
         if Path(rel).is_absolute() or re.match(r"^[A-Za-z]:[\\/]", rel):
             raise ValueError(f"절대 경로는 허용되지 않습니다: {rel}")
-        if not rel.startswith("Docs/"):
-            raise ValueError(f"Docs/ 하위 문서만 허용됩니다: {rel}")
+        if not rel.startswith("docs/"):
+            raise ValueError(f"docs/ 하위 문서만 허용됩니다: {rel}")
         if not rel.endswith(".md"):
             raise ValueError(f"Markdown 문서만 허용됩니다: {rel}")
         candidate = (self._root / rel).resolve()
         if self._docs_dir not in candidate.parents and candidate != self._docs_dir:
-            raise ValueError(f"Docs/ 밖을 가리킵니다: {rel}")
+            raise ValueError(f"docs/ 밖을 가리킵니다: {rel}")
         if not candidate.is_file():
             raise FileNotFoundError(f"문서 파일 없음: {rel}")
         return candidate
@@ -133,10 +133,10 @@ class FullGuardrailLoader:
         self._validator = FullGuardrailPathValidator(self._root)
 
     def load(self, guardrails: Optional[dict] = None) -> str:
-        guardrails = guardrails or {"mode": "root", "Docs": []}
+        guardrails = guardrails or {"mode": "root", "docs": []}
         mode = guardrails.get("mode", "root")
-        docs = list(guardrails.get("Docs") or [])
-        if mode not in VALID_DOCS_MODES:
+        docs = list(guardrails.get("docs") or [])
+        if mode not in VALID_docs_MODES:
             raise ValueError(f"알 수 없는 docs-mode: {mode}")
 
         sections: list[str] = []
@@ -164,13 +164,13 @@ class FullGuardrailLoader:
         return result
 
     def _select_docs(self, mode: str, docs: list[str]) -> list[Path]:
-        docs_dir = self._root / "Docs"
+        docs_dir = self._root / "docs"
         if mode == "explicit":
             return self._validator.validate_many(docs)
         if not docs_dir.is_dir():
             return []
         if mode == "recursive":
-            return [p for p in sorted(docs_dir.rglob("*.md")) if "_templates" not in p.relative_to(docs_dir).parts]
+            return [p for p in sorted(docs_dir.rglob("*.md")) if ".templates" not in p.relative_to(docs_dir).parts]
         return sorted(docs_dir.glob("*.md"))
 
     def _warn_placeholders(self, path: Path, text: str) -> None:
@@ -289,11 +289,11 @@ class FullPlanValidator:
         if not isinstance(guardrails, dict):
             _err("plan.guardrails는 객체여야 합니다.")
         mode = guardrails.get("mode")
-        docs = guardrails.get("Docs", [])
-        if mode not in VALID_DOCS_MODES:
+        docs = guardrails.get("docs", [])
+        if mode not in VALID_docs_MODES:
             _err(f"plan.guardrails.mode가 올바르지 않습니다: {mode}")
         if not isinstance(docs, list) or not all(isinstance(d, str) for d in docs):
-            _err("plan.guardrails.Docs는 문자열 배열이어야 합니다.")
+            _err("plan.guardrails.docs는 문자열 배열이어야 합니다.")
         FullGuardrailPathValidator(root).validate_many(docs)
 
         steps = plan["steps"]
@@ -539,7 +539,7 @@ class FullStepSplitter:
             "{\n"
             '  "project": "<project>",\n'
             f'  "phase": "{phase}",\n'
-            '  "guardrails": {"mode": "root|recursive|explicit", "Docs": ["Docs/...md"]},\n'
+            '  "guardrails": {"mode": "root|recursive|explicit", "docs": ["docs/...md"]},\n'
             '  "steps": [{"step": 0, "name": "kebab-case", "brief": "...", "body": "..."}]\n'
             "}\n\n"
             "각 body는 반드시 다음 H2를 포함한다: "
@@ -715,11 +715,11 @@ class StepExecutor:
             if not isinstance(guardrails, dict):
                 _err("'guardrails'는 객체여야 합니다.")
             mode = guardrails.get("mode")
-            docs = guardrails.get("Docs", [])
-            if mode not in VALID_DOCS_MODES:
+            docs = guardrails.get("docs", [])
+            if mode not in VALID_docs_MODES:
                 _err(f"guardrails.mode='{mode}' 허용되지 않음.")
             if not isinstance(docs, list) or not all(isinstance(d, str) for d in docs):
-                _err("guardrails.Docs는 문자열 배열이어야 합니다.")
+                _err("guardrails.docs는 문자열 배열이어야 합니다.")
         steps = idx.get("steps")
         if not isinstance(steps, list):
             _err("'steps'는 배열이어야 합니다.")
@@ -876,9 +876,9 @@ class StepExecutor:
     def _load_guardrails(self) -> str:
         if hasattr(self, "_index_file"):
             index = self._read_json(self._index_file)
-            guardrails = index.get("guardrails") or {"mode": "root", "Docs": []}
+            guardrails = index.get("guardrails") or {"mode": "root", "docs": []}
         else:
-            guardrails = {"mode": "root", "Docs": []}
+            guardrails = {"mode": "root", "docs": []}
         loader = FullGuardrailLoader(
             ROOT,
             strict=getattr(self, "_strict", False),
@@ -1311,7 +1311,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--verbose", action="store_true", help="Enable DEBUG-level forge logging to stderr")
     parser.add_argument("--strict", action="store_true", help="Fail when CLAUDE.md/docs contain {placeholder} patterns")
     parser.add_argument("--prompt", action="append", default=None, help="문서 기반 full splitter 입력 (반복 가능)")
-    parser.add_argument("--doc", action="append", default=None, help="guardrail 문서 경로 (Docs/ 하위 .md, 반복 가능)")
+    parser.add_argument("--doc", action="append", default=None, help="guardrail 문서 경로 (docs/ 하위 .md, 반복 가능)")
     parser.add_argument("--yes", action="store_true", help="splitter plan 승인 자동화")
     parser.add_argument("--quiet", action="store_true", help="진행/commit 출력 최소화")
     parser.add_argument(
@@ -1323,9 +1323,9 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--compact-docs", action="store_true", help="guardrail 문서를 핵심 섹션 중심으로 압축")
     parser.add_argument(
         "--docs-mode",
-        choices=sorted(VALID_DOCS_MODES),
+        choices=sorted(VALID_docs_MODES),
         default=None,
-        help="root=Docs/*.md, recursive=Docs/**/*.md, explicit=--doc만",
+        help="root=docs/*.md, recursive=docs/**/*.md, explicit=--doc만",
     )
     parser.add_argument("--plan-only", action="store_true", help="plan을 생성/검증/출력만 하고 파일을 쓰지 않음")
     parser.add_argument(
@@ -1382,12 +1382,12 @@ def _guardrails_from_args(args) -> dict:
         mode = "explicit" if docs else "recursive"
     if mode == "explicit" and not docs:
         _err("--docs-mode=explicit은 --doc이 1개 이상 필요합니다.")
-    return {"mode": mode, "Docs": docs}
+    return {"mode": mode, "docs": docs}
 
 
 def _docs_for_readiness(guardrails: dict) -> list[Path]:
     loader = FullGuardrailLoader(ROOT, max_bytes=0)
-    return loader._select_docs(guardrails["mode"], list(guardrails.get("Docs") or []))
+    return loader._select_docs(guardrails["mode"], list(guardrails.get("docs") or []))
 
 
 def _handle_readiness(readiness: dict) -> None:
@@ -1418,7 +1418,7 @@ def _check_contract_frd_ready(docs: list[str], force: bool) -> None:
 def _print_plan(plan: dict) -> None:
     print(f"Plan: {plan['phase']} (project: {plan['project']})")
     guardrails = plan.get("guardrails", {})
-    print(f"Guardrails: {guardrails.get('mode')} ({len(guardrails.get('Docs') or [])} docs)")
+    print(f"Guardrails: {guardrails.get('mode')} ({len(guardrails.get('docs') or [])} docs)")
     for step in plan["steps"]:
         print(f"  [{step['step']}] {step['name']}: {step['brief']}")
 
@@ -1440,10 +1440,10 @@ def _create_plan(args) -> dict:
     docs = _docs_for_readiness(guardrails)
     readiness = FullDocReadinessChecker(ROOT).check(docs)
     if args.preset == "contract-tdd":
-        _check_contract_frd_ready(guardrails["Docs"], args.force)
+        _check_contract_frd_ready(guardrails["docs"], args.force)
         plan = FullContractTddPlanBuilder(ROOT).build(
             args.phase_dir,
-            guardrails["Docs"],
+            guardrails["docs"],
             args.prompt or [],
             guardrails,
         )

@@ -1,10 +1,10 @@
 """docs_helpers — v0.7 per-App docs read-only inspection helper.
 
 Subcommands:
-    list-apps   /CLAUDE.md Backend Services Overview 표 + Docs/<App>/ 폴더 교차검증
+    list-apps   /CLAUDE.md Backend Services Overview 표 + docs/<App>/ 폴더 교차검증
     next-id     기존 NNN 최대값 + 1 산출 (frd/task/adr, active 또는 backlog)
-    parse-fc    Docs/<App>/<App>-FC.md 5 표 파싱
-    parse-frd   Docs/<App>/FRD/<App>-FRD-<NNN>.md 파싱
+    parse-fc    docs/<App>/<App>-FC.md 5 표 파싱
+    parse-frd   docs/<App>/FRD/<App>-FRD-<NNN>.md 파싱
     git-user    git config user.name
     check       v0.7 파일 무결성 검사
 
@@ -139,14 +139,14 @@ def _parse_backend_services_table(text: str) -> list[AppEntry]:
             code = cells[0]
             if not APP_CODE_PATTERN.match(code) or code in {"SYSTEM_CODE", "APP_CODE", "App", "{SYSTEM_CODE}", "{APP_CODE}"}:
                 continue
-            candidates.append(AppEntry(code=code, docs_dir=f"Docs/{code}", src_dir=f"Src/{code}"))
+            candidates.append(AppEntry(code=code, docs_dir=f"docs/{code}", src_dir=f"Src/{code}"))
         if candidates:
             break
     return candidates
 
 
 def _scan_docs_folders(repo: Path) -> list[str]:
-    docs = repo / "Docs"
+    docs = repo / "docs"
     if not docs.is_dir():
         return []
     out: list[str] = []
@@ -171,7 +171,7 @@ def cmd_list_apps(repo: Path) -> int:
         verified = [a for a in parsed if a.code in docs_folders]
         unbootstrapped = [a.code for a in parsed if a.code not in docs_folders]
     else:
-        verified = [AppEntry(code=c, docs_dir=f"Docs/{c}", src_dir=f"Src/{c}") for c in sorted(docs_folders)]
+        verified = [AppEntry(code=c, docs_dir=f"docs/{c}", src_dir=f"Src/{c}") for c in sorted(docs_folders)]
         unbootstrapped = []
     payload = {
         "apps": [a.to_dict() for a in verified],
@@ -209,7 +209,7 @@ def cmd_next_id(repo: Path, app: str, kind: str, backlog: bool) -> int:
         print("FAIL ARGS --backlog only valid with --kind frd", file=sys.stderr)
         return 2
 
-    docs_dir = repo / "Docs" / app
+    docs_dir = repo / "docs" / app
     if not docs_dir.is_dir():
         print(f"FAIL ARGS app docs not found: {docs_dir}", file=sys.stderr)
         return 2
@@ -316,7 +316,7 @@ FC_BACKLOG_HEADINGS = ("확장 후보 기능 (Backlog)",)
 
 
 def cmd_parse_fc(repo: Path, app: str) -> int:
-    fc_path = repo / "Docs" / app / f"{app}-FC.md"
+    fc_path = repo / "docs" / app / f"{app}-FC.md"
     text = _read_text(fc_path)
     if text is None:
         print(f"FAIL FC not found: {fc_path}", file=sys.stderr)
@@ -406,7 +406,7 @@ def cmd_parse_frd(repo: Path, app: str, frd_id: str) -> int:
         print(f"FAIL ARGS --frd-id must match F\\d{{3}}: {frd_id}", file=sys.stderr)
         return 2
     nnn = frd_id[1:]
-    frd_path = repo / "Docs" / app / "FRD" / f"{app}-FRD-{nnn}.md"
+    frd_path = repo / "docs" / app / "FRD" / f"{app}-FRD-{nnn}.md"
     text = _read_text(frd_path)
     if text is None:
         print(f"FAIL FRD not found: {frd_path}", file=sys.stderr)
@@ -500,7 +500,7 @@ def _format(r: CheckResult, repo: Path) -> str:
 
 def _check_app(repo: Path, app: str) -> list[CheckResult]:
     results: list[CheckResult] = []
-    docs_dir = repo / "Docs" / app
+    docs_dir = repo / "docs" / app
     if not docs_dir.is_dir():
         results.append(CheckResult("FAIL", "APP_DIR", "missing", docs_dir))
         return results
@@ -599,7 +599,7 @@ def cmd_check(repo: Path, app: str | None) -> int:
     else:
         apps = _scan_docs_folders(repo)
         if not apps:
-            print("FAIL APPS no app found via Docs/<App>/ scan")
+            print("FAIL APPS no app found via docs/<App>/ scan")
             return 2
 
     results: list[CheckResult] = []

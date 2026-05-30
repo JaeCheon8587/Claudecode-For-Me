@@ -398,9 +398,9 @@ class TestScopeAuto:
         assert base is None
 
 
-# ─── TestReadAttachedDocs ─────────────────────────────────────────────────────
+# ─── TestReadAttachedDocuments ─────────────────────────────────────────────────────
 
-class TestReadAttachedDocs:
+class TestReadAttachedDocuments:
     def test_정상_읽기(self, tmp_path):
         doc = tmp_path / "spec.md"
         doc.write_text("# Hello", encoding="utf-8")
