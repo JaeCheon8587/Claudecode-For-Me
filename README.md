@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v2.0.0 · 커스텀 스킬 11종 + 슬래시 커맨드 14종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v2.0.0 · 커스텀 스킬 10종 + 슬래시 커맨드 13종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -16,7 +16,7 @@
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
 | 네임스페이스 | `/claudecode-for-me:<name>` |
-| 구성요소 | Skill 11 · Command 14 · Python runner 5 (`scripts/`) |
+| 구성요소 | Skill 10 · Command 13 · Python runner 5 (`scripts/`) |
 | 외부 연동 도구 | [`codenavigator`](https://github.com/JaeCheon8587/codenavigator) (PyPI) — codenav-bootstrap / codenav-frontmatter-gen 슬래시가 호출 |
 
 플러그인은 **글로벌 캐시**에 설치되므로 한 번 설치 후 모든 프로젝트의 **새 세션**에서 자동 노출된다. 프로젝트별 재설치 불필요.
@@ -89,7 +89,7 @@ pip install -U codenavigator
 
 ## 5. 플러그인 구성요소
 
-### Skill 11종
+### Skill 10종
 
 | Skill | 슬래시 커맨드 | 역할 |
 |---|---|---|
@@ -98,14 +98,13 @@ pip install -U codenavigator
 | `doc-driven-review` | `/claudecode-for-me:doc-driven-review <doc-path>... [--worktree <ref>]` | 첨부 문서 기준 working-tree 변경을 Codex CLI로 검증. Missing/Improve/Overengineered + Conformance(%) 보고. forge-scope linked worktree 지원 |
 | `docs-add-frd` | `/claudecode-for-me:docs-add-frd [요청]` | v0.7 per-App 신규 기능 FRD + ADR 생성, PRD/FC/ADR-CATALOG 갱신 |
 | `docs-add-task` | `/claudecode-for-me:docs-add-task [요청]` | v0.7 per-App 기존 기능 수정 TASK + ADR 생성, FC/영향 FRD/ADR-CATALOG 갱신 |
-| `e2e-sequence` | `/claudecode-for-me:e2e-sequence [기능]` | E2E 메시지 흐름 → Mermaid 시퀀스 다이어그램 |
 | `forge-cancel` | `/claudecode-for-me:forge-cancel <phase>` | forge phase 브랜치·산출물 정리 |
 | `forge-full` | `/claudecode-for-me:forge-full <phase>` | 문서 기반 전체 프로젝트 구현 phase runner |
 | `forge-scope` | `/claudecode-for-me:forge-scope <prompt>` | 단일 FRD·기능·버그픽스용 경량 phase runner |
 | `grill-me` | `/claudecode-for-me:grill-me [주제]` | 1문 1답으로 요구사항 모호점 추적 |
 | `meta-prompter` | `/claudecode-for-me:meta-prompter [요청]` | 거친 요청 → 구조화된 메타 프롬프트 |
 
-### Command 14종
+### Command 13종
 
 | Command | 설명 |
 |---|---|
@@ -117,7 +116,6 @@ pip install -U codenavigator
 | `commit-analysis` | 변경 분석 후 `[ADD]`/`[MOD]`/`[FIX]` 자동 판단 한글 커밋 생성 |
 | `docs-add-frd` | docs-add-frd skill 진입 (신규 기능 FRD + ADR) |
 | `docs-add-task` | docs-add-task skill 진입 (기존 기능 수정 TASK + ADR) |
-| `e2e-sequence` | e2e-sequence skill 진입 |
 | `forge-cancel` | forge-cancel skill 진입 |
 | `forge-full` | forge-full skill 진입 |
 | `forge-scope` | forge-scope skill 진입 |
@@ -213,21 +211,7 @@ codenav --root <repo> ui --port 9876
 - **자기 검증** — 쓰기 후 `python scripts/docs_helpers.py check --repo .` 자동
 - Python helper (read-only): `python scripts/docs_helpers.py {list-apps|next-id|parse-fc|parse-frd|git-user|check}`
 
-### 6.4 e2e-sequence
-
-```
-/claudecode-for-me:e2e-sequence 로그인
-```
-
-- **2단계 파이프라인**: Explore 에이전트 코드 추적 → 메인 Mermaid 생성
-- 서비스 간 통신 (HTTP·WebSocket·메시지 큐 등) 시각화
-- **참여자 통합**: 같은 프로세스 레이어(ViewModel/UseCase/Service)는 단일 participant, 내부 처리는 `Note over`
-- **alt/deactivate 충돌 방지**: `alt`/`else` 블록 내부 `deactivate` 금지
-- **외부 시스템 부재 가시화**: DB·MQ·WS·캐시·외부 HTTP 모두 기재(미사용도 X로 명시)
-- MCP Mermaid Chart 도구로 렌더링 검증
-- 출력: `docs/E2E-Sequence/{기능명}_Sequence.md`
-
-### 6.5 forge-full / forge-scope / forge-cancel (harness_framework 임베디드)
+### 6.4 forge-full / forge-scope / forge-cancel (harness_framework 임베디드)
 
 #### 전제 조건
 
@@ -314,7 +298,7 @@ codenav --root <repo> ui --port 9876
 phases/
 ```
 
-### 6.6 grill-me
+### 6.5 grill-me
 
 ```
 /claudecode-for-me:grill-me 알림 시스템 설계
@@ -327,7 +311,7 @@ phases/
 - 3~4 교환마다 영역별 완료 트래커
 - 종료 시 Requirements Summary (영역별 + Key Decisions Q&A + Open Items + Next Steps) 후 확정 리뷰
 
-### 6.7 meta-prompter
+### 6.6 meta-prompter
 
 ```
 /claudecode-for-me:meta-prompter ApiGateway에 health check 엔드포인트 추가
@@ -340,7 +324,7 @@ phases/
 - **채팅 출력 전용**: 마크다운 코드블록 1개로 wrap, `.md` 저장 안 함
 - 개조식 종결 강제, 출력 끝 `[에이전트 행동 규칙]` 4문구 자동 부착
 
-### 6.8 commit-analysis
+### 6.7 commit-analysis
 
 ```
 /claudecode-for-me:commit-analysis
@@ -351,7 +335,7 @@ phases/
 - Co-Authored-By / "Generated with Claude Code" 문구 제외
 - 한글 커밋 메시지
 
-### 6.9 doc-driven-review
+### 6.8 doc-driven-review
 
 ```
 /claudecode-for-me:doc-driven-review docs/spec-feature.md
@@ -487,7 +471,6 @@ Claudecode-For-Me/
 │   ├── doc-driven-review/
 │   ├── docs-add-frd/
 │   ├── docs-add-task/
-│   ├── e2e-sequence/
 │   ├── forge-cancel/
 │   ├── forge-full/
 │   ├── forge-scope/
@@ -505,7 +488,6 @@ Claudecode-For-Me/
 │   ├── doc-driven-review.md
 │   ├── docs-add-frd.md
 │   ├── docs-add-task.md
-│   ├── e2e-sequence.md
 │   ├── forge-cancel.md
 │   ├── forge-full.md
 │   ├── forge-scope.md
