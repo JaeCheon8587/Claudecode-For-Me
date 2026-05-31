@@ -148,6 +148,30 @@ def _summarize_scoped(branch: str, worktree: Optional[Path]) -> None:
         print(f"- commits on branch: {count.stdout.strip()}")
 
 
+def _cancel_scoped_inplace(args: argparse.Namespace, scoped_dir: Path) -> int:
+    """--no-worktree 로 생성된 in-place scoped 산출물 정리.
+
+    브랜치·워크트리가 없고 phases/scoped/<phase>/ 가 메인 repo에 직접 존재하는 경우.
+    디렉토리 삭제 + phases/scoped/index.json 항목 제거만 수행한다 (브랜치 정리 없음).
+    동명 feat-<phase> 브랜치가 별도로 존재하지 않는다고 가정한다 (존재 시 _cancel_scoped
+    의 일반 경로로 라우팅됨).
+    """
+    print("Forge cancel target (scoped/in-place, no worktree)")
+    print(f"- phase dir: {scoped_dir.relative_to(ROOT).as_posix()}")
+    if args.dry_run:
+        print("dry-run: 변경하지 않았습니다.")
+        return EXIT_OK
+    if not args.yes:
+        _err("실제 삭제에는 --yes가 필요합니다.")
+    _delete_phase_dir(scoped_dir)
+    removed_from_index = _update_top_index("scoped", args.phase_dir)
+    print("Forge cancel completed")
+    print(f"- deleted phase dir: {scoped_dir.relative_to(ROOT).as_posix()}")
+    if removed_from_index:
+        print("- updated top index: phases/scoped/index.json")
+    return EXIT_OK
+
+
 def _cancel_scoped(args: argparse.Namespace) -> int:
     branch = f"feat-{args.phase_dir}"
     worktree = _worktree_path(args.phase_dir)
@@ -160,6 +184,9 @@ def _cancel_scoped(args: argparse.Namespace) -> int:
 
     branch_exists = _branch_exists(branch)
     if not branch_exists and registered is None and not worktree.exists():
+        scoped_dir = _phase_path("scoped", args.phase_dir)
+        if scoped_dir.exists():
+            return _cancel_scoped_inplace(args, scoped_dir)
         _err(f"취소 대상이 없습니다: branch={branch}, worktree={worktree}")
 
     cwd_real = Path.cwd().resolve()

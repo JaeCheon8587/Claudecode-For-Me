@@ -1,7 +1,7 @@
 ---
 name: forge-scope
 description: harness_framework forge-scope 경량 phase runner를 사용자 프로젝트에서 실행한다. 첫 호출 시 scripts/forge_*.py、CLAUDE.md、PHASE_SCHEMA.md、FORGE_SCOPE.md、docs/.templates/ 를 자동 부트스트랩한 뒤 forge_scope.py를 실행한다. /claudecode-for-me:forge-scope 로 실행.
-argument-hint: "<prompt> 또는 <doc-path> <prompt> 또는 tdd <doc-path> <prompt> 또는 <phase-dir> [options]"
+argument-hint: "<prompt> 또는 <doc-path> <prompt> 또는 tdd <doc-path> <prompt> 또는 <phase-dir> [--no-worktree] [--test-target=<csproj>] [options]"
 input: 자유 텍스트 prompt 또는 doc-path + prompt + 선택적 CLI 옵션
 output: phases/scoped/<phase-dir>/index.json + step{N}.md 산출물
 requires-user-interaction: true
@@ -76,6 +76,8 @@ git commit -m "chore: bootstrap forge-scope"
 
 복사된 파일이 0개(이미 모두 존재)면 이 단계는 생략한다.
 
+> **no-worktree 모드에서도 commit 권장**: `--no-worktree` 는 HEAD 기준 체크아웃이 없어 "워크트리에 누락" 문제는 없지만, 단계 5의 dirty 검사를 통과하려면 부트스트랩 신규 파일을 commit하거나 `--force` 로 우회해야 한다.
+
 ---
 
 ## 단계 3 — Git repo 확인 + 워크트리 동작 안내
@@ -111,11 +113,26 @@ python scripts/forge_cancel.py <phase-dir> --yes   # 워크트리 + 브랜치 �
 git worktree remove .worktrees/<phase-dir> && git branch -D feat-<phase-dir>
 ```
 
+### no-worktree 모드 (--no-worktree)
+
+`--no-worktree` 첨가 시 워크트리·`feat-<phase-dir>` 브랜치를 만들지 않고 **현재 브랜치/작업 트리에서 직접** 실행한다. 다음이 메인 repo에 그대로 기록된다:
+
+- `phases/scoped/<phase-dir>/index.json` 및 `step{N}.md`
+- step 실행 코드 + 모든 `git commit` (현재 브랜치)
+
+- **격리 없음** — 결과 확인은 메인 repo에서 `git diff` / `git log`, 별도 머지 단계 불필요.
+- **시작 전 dirty 검사 유지** — 작업 트리에 미커밋 변경이 있으면 중단한다(자식 commit이 무관 변경을 흡수하는 사고 차단). `git stash` 또는 commit 후 재실행, 또는 `--force` 로 우회.
+- **정리**: `python scripts/forge_cancel.py <phase-dir> --yes` (브랜치·워크트리 없음을 자동 감지해 `phases/scoped/<phase-dir>` + top index 항목만 제거).
+
 ---
 
 ## 단계 4 — 인자 파싱
 
 `$ARGUMENTS`를 두 모드 중 하나로 해석한다.
+
+> **in-place 직교 옵션**: 사용자가 *워크트리 없이 / 현재 트리에서 / in-place / 직접* 류 의도를 표현하면, 어느 모드를 고르든 실행 명령 끝에 `--no-worktree` 를 첨가한다. preset(auto/frd-implementation/contract-tdd)·`--single-step` 과 직교한다. 첨가 시 산출물·commit이 현재 브랜치에 직접 기록되며 워크트리·`feat-<phase-dir>` 브랜치는 생성되지 않는다.
+
+> **테스트 스코프 자동 판단**: 작업 문서(TASK/FRD/prompt)에서 대상 App·기능을 읽어 **검증할 테스트 프로젝트(.csproj)** 를 추론하고 실행 명령에 `--test-target=<csproj>` (repo root 기준 상대경로)를 첨가한다. 추론 근거: App 이름 → 해당 테스트 프로젝트(예: MASTER → `Src/.../z_Test/Master/Mirero.XLab.Test.Master/...csproj`). 풀 솔루션 빌드를 피해 빠르게 검증한다. 확신 없으면 생략(자동감지/sln fallback). `forge-scope.json` 의 `test_target` 보다 우선.
 
 ### Mode 1 — prompt-only
 `$ARGUMENTS`가 일반 텍스트로 시작하면 (`/docs/`·`docs/` 형식이 아님, 대소문자 무시):
@@ -192,13 +209,12 @@ python ./scripts/forge_scope.py <phase-dir> --trust --yes --quiet \
 ### 실행 패턴
 
 `forge-scope`는 수 분~수십 분이 소요될 수 있으므로 **`run_in_background=true`** 로 호출하고 즉시 turn을 종료한다.
-완료 알림이 도착하면 `.worktrees/<phase-dir>/phases/scoped/<phase-dir>/index.json` 을 1회 read하여 최종 상태를 사용자에게 보고한다. (메인 repo의 `phases/scoped/` 에는 산출물이 존재하지 않는다 — 워크트리 안에만 있다.)
+완료 알림이 도착하면 index.json 을 1회 read하여 최종 상태를 사용자에게 보고한다.
 
 완료 보고 시 다음 경로를 사용자에게 명시한다:
 
-- 워크트리: `.worktrees/<phase-dir>/`
-- 브랜치: `feat-<phase-dir>`
-- index: `.worktrees/<phase-dir>/phases/scoped/<phase-dir>/index.json`
+- **워크트리 모드(기본)**: 워크트리 `.worktrees/<phase-dir>/` · 브랜치 `feat-<phase-dir>` · index `.worktrees/<phase-dir>/phases/scoped/<phase-dir>/index.json`. (메인 repo의 `phases/scoped/` 에는 산출물 없음 — 워크트리 안에만.)
+- **no-worktree 모드(`--no-worktree`)**: 워크트리·`feat-` 브랜치 없음 · 현재 브랜치에 직접 commit · index `phases/scoped/<phase-dir>/index.json` (메인 repo 루트). `--push` 는 현재 브랜치를 push한다.
 
 **필수 금지** (부모 세션 토큰 절감):
 - `Monitor` 사용 금지
@@ -227,6 +243,10 @@ python ./scripts/forge_scope.py <phase-dir> --trust --yes --quiet \
 | `--yes` | plan 자동 승인. Claude Code spawn 시 항상 포함. |
 | `--quiet` | 진행 표시기 억제. Claude Code spawn 시 항상 포함. |
 | `--force` | 워크트리 dirty 검사 우회 (재실행 시 워크트리 안 수동 변경 흡수 허용). |
+| `--no-worktree` | 워크트리·`feat-<phase>` 브랜치 미생성. 메인 repo 현재 브랜치에서 직접 실행(격리·머지 단계 없음). 시작 시 작업 트리 dirty면 중단(`--force` 우회). `--push` 는 현재 브랜치 push. 모든 preset/모드와 직교. |
+| `--test-target` | 검증 대상 테스트 `.csproj` 1회 지정(휘발성, repo root 기준 상대경로). parent AI가 작업 문서 보고 추론. 우선순위 최상(>config>자동>풀sln). 풀 솔루션 빌드 회피. 무효 경로면 즉시 ERROR. |
 | `--push` | 실행 후 원격 push. |
 | `--strict` | placeholder 패턴 발견 시 실패. |
 | `--step-model` | step 실행 모델. 기본 `claude-sonnet-4-6`. |
+
+> **빌드 스코프**: 검증은 풀 솔루션 `dotnet build` 대신 **대상 테스트 프로젝트만** `dotnet test`(빌드 겸함)로 좁힌다. 타깃 우선순위: `--test-target=<csproj>` CLI(작업 문서 기반 추론, 휘발성) > `forge-scope.json` 의 `test_target` 키 > 자동 감지(`Src/Tests/` 하위 단일 `*.csproj`) > 전체 sln fallback(느림, 경고 출력). `forge-scope.json` 은 `default_sln` 과 동일한 config 파일.

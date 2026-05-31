@@ -69,8 +69,8 @@ class SlnResolveError(RuntimeError):
     """sln 경로 해석 실패 (다수/부재 등)."""
 
 
-def _read_default_sln_from_config(root: Path) -> str | None:
-    """consumer repo의 forge-scope.json에서 default_sln 읽기. 부재/파싱 실패 시 None."""
+def _read_forge_config_str(root: Path, key: str) -> str | None:
+    """consumer repo의 forge-scope.json에서 문자열 키 읽기. 부재/파싱 실패/비문자열 시 None."""
     cfg = root / "forge-scope.json"
     if not cfg.is_file():
         return None
@@ -79,8 +79,25 @@ def _read_default_sln_from_config(root: Path) -> str | None:
     except (json.JSONDecodeError, OSError) as e:
         log.warning("forge-scope.json 파싱 실패(무시): %s", e)
         return None
-    val = data.get("default_sln")
+    val = data.get(key)
     return val if isinstance(val, str) and val.strip() else None
+
+
+def _read_default_sln_from_config(root: Path) -> str | None:
+    """consumer repo의 forge-scope.json에서 default_sln 읽기. 부재/파싱 실패 시 None."""
+    return _read_forge_config_str(root, "default_sln")
+
+
+def _validate_target_rel(root: Path, raw: str) -> str:
+    """test 타깃 csproj 상대경로 검증 — root 하위 + 존재. rel(posix) 반환. 위반 시 ValueError."""
+    p = (root / raw).resolve()
+    try:
+        p.relative_to(root.resolve())
+    except ValueError as e:
+        raise ValueError(f"repo root 밖을 가리킵니다: {raw}") from e
+    if not p.exists():
+        raise ValueError(f"경로 없음: {raw}")
+    return p.relative_to(root).as_posix()
 
 
 def resolve_sln_path(
@@ -1420,10 +1437,12 @@ class DeterministicPlanBuilder:
     호출을 완전히 제거한다.
     """
 
-    def __init__(self, cfg: PhaseConfig, *, preset: str, sln_path: Path | None = None):
+    def __init__(self, cfg: PhaseConfig, *, preset: str, sln_path: Path | None = None,
+                 test_target: str | None = None):
         self._cfg = cfg
         self._preset = preset
         self._sln_path = sln_path
+        self._cli_test_target = test_target  # --test-target (검증된 rel) 또는 None
 
     def build(self, user_prompts: list[str], doc_paths: list[Path]) -> dict:
         if self._preset == "contract-tdd":
@@ -1569,6 +1588,16 @@ class DeterministicPlanBuilder:
 
     def _acceptance_commands(self) -> list[str]:
         root = self._cfg.root
+        # CLI --test-target > config test_target > 단일 Src/Tests csproj 로 스코프 축소.
+        # dotnet test 가 빌드를 겸하므로 별도 풀 sln dotnet build 는 두지 않는다.
+        scoped = self._scoped_test_target()
+        if scoped:
+            return [f"dotnet test {scoped} --no-restore"]
+        test_projects = sorted(root.glob("Src/Tests/**/*.csproj"))
+        if len(test_projects) == 1:
+            rel = test_projects[0].relative_to(root).as_posix()
+            return [f"dotnet test {rel} --no-restore"]
+        # 스코프 불가 → 전체 sln(test 가 빌드 겸함, 별도 build 제거). 느릴 수 있어 경고.
         sln = self._sln_path
         if sln is None:
             try:
@@ -1577,10 +1606,12 @@ class DeterministicPlanBuilder:
                 sln = None
         if sln is not None:
             rel = sln.relative_to(root).as_posix()
-            return [
-                f"dotnet build {rel} --no-restore -q",
-                f"dotnet test {rel} --no-build -q",
-            ]
+            log.warning(
+                "test 스코프 타깃을 좁히지 못해 전체 sln(%s)을 빌드/테스트합니다 — 느릴 수 있습니다. "
+                "forge-scope.json 의 test_target 키로 대상 테스트 프로젝트를 지정하면 빨라집니다.",
+                rel,
+            )
+            return [f"dotnet test {rel} --no-restore"]
         if (root / "package.json").exists():
             return ["npm test"]
         if (root / "pyproject.toml").exists() or (root / "pytest.ini").exists():
@@ -1607,16 +1638,34 @@ class DeterministicPlanBuilder:
             )
         return self._sln_path.relative_to(self._cfg.root).as_posix()
 
-    def _solution_build_command(self) -> str:
-        return f"dotnet build {self._solution_path_rel()} --no-restore"
+    def _config_test_target(self) -> str | None:
+        """forge-scope.json test_target — 검증 후 rel. 무효 시 warn+None."""
+        raw = _read_forge_config_str(self._cfg.root, "test_target")
+        if not raw:
+            return None
+        try:
+            return _validate_target_rel(self._cfg.root, raw)
+        except ValueError as e:
+            log.warning("forge-scope.json test_target 무시 — %s", e)
+            return None
+
+    def _scoped_test_target(self) -> str | None:
+        """test 스코프 타깃: CLI --test-target > forge-scope.json test_target. 둘 다 없으면 None."""
+        return self._cli_test_target or self._config_test_target()
 
     def _test_target(self) -> str:
-        """테스트 빌드 타깃: 가장 작은 유효 범위를 자동 선택.
+        """테스트 빌드 타깃: CLI override > config > 단일 Src/Tests csproj > 전체 sln.
 
-        1순위: `Src/Tests/` 하위에 정확히 1개의 `*.csproj`가 있으면 그 경로.
-               대규모 sln에서 미참조 프로젝트의 빌드를 스킵해 30~50% 시간 절감.
-        2순위: 그 외 (테스트 프로젝트 0개·2개 이상) → 전체 sln. 안전한 fallback.
+        풀 솔루션 빌드는 대규모 sln에서 매우 느리다. test 타깃을 좁히면 그 테스트가
+        참조하는 production 프로젝트만 transitive 빌드되어 30~50%+ 절감된다.
+        1순위: CLI --test-target (작업 문서 기반 추론, 휘발성).
+        2순위: forge-scope.json test_target (사용자 명시).
+        3순위: `Src/Tests/` 하위 단일 `*.csproj` 자동 감지.
+        4순위: 전체 sln (안전 fallback — 느릴 수 있음).
         """
+        scoped = self._scoped_test_target()
+        if scoped:
+            return scoped
         test_projects = sorted(self._cfg.root.glob("Src/Tests/**/*.csproj"))
         if len(test_projects) == 1:
             return test_projects[0].relative_to(self._cfg.root).as_posix()
@@ -2054,12 +2103,21 @@ class ForgeScope:
 
     def __init__(self, args: argparse.Namespace):
         self._args = args
-        # phase 시작 시 .worktrees/<phase>/ 격리 워크트리를 보장한다. 이후 모든
+        # 기본: phase 시작 시 .worktrees/<phase>/ 격리 워크트리를 보장한다. 이후 모든
         # 컴포넌트(PhaseConfig·GitOperations·GuardrailLoader·ClaudeInvoker)는
         # 메인 repo가 아닌 워크트리 root를 기준으로 동작한다.
-        self._wt = WorktreeManager(ROOT, args.phase_dir, force=args.force)
-        worktree_root = self._wt.ensure()
-        self._verify_worktree_bootstrap(worktree_root, args.phase_dir)
+        # --no-worktree: 워크트리를 만들지 않고 메인 repo(ROOT)에서 직접 실행한다.
+        # 산출물·step 코드·commit이 현재 브랜치에 직접 기록되며 격리가 없다.
+        self._no_worktree = bool(getattr(args, "no_worktree", False))
+        if self._no_worktree:
+            self._wt = None
+            worktree_root = ROOT
+            self._verify_inplace_bootstrap(worktree_root)
+            _qprint(f"  Worktree: 생성 안 함 — 메인 repo에서 직접 실행 ({ROOT})")
+        else:
+            self._wt = WorktreeManager(ROOT, args.phase_dir, force=args.force)
+            worktree_root = self._wt.ensure()
+            self._verify_worktree_bootstrap(worktree_root, args.phase_dir)
         self._cfg = PhaseConfig(args.phase_dir, root=worktree_root)
         self._validator = ScopeValidator(worktree_root)
         trust = _is_trusted(args.trust)
@@ -2129,6 +2187,25 @@ class ForgeScope:
             "            CLAUDE.md PHASE_SCHEMA.md FORGE_SCOPE.md docs/.templates/ .gitignore\n"
             "    git commit -m 'chore: bootstrap forge-scope'\n"
             "    # 이후 forge-scope 재실행",
+            file=sys.stderr,
+        )
+        sys.exit(EXIT_ERR)
+
+    @staticmethod
+    def _verify_inplace_bootstrap(root: Path) -> None:
+        """--no-worktree 사전 검사 — ROOT에 필수 가드레일(CLAUDE.md) 존재 확인.
+
+        워크트리 모드 _verify_worktree_bootstrap 의 fail-fast 패리티. in-place 는 메인
+        repo가 곧 작업 트리라 복사는 하지 않고 존재만 확인한다. 없으면 가드레일 없이
+        코드가 생성되는 사고를 막기 위해 즉시 중단한다.
+        """
+        if (root / "CLAUDE.md").exists():
+            return
+        print(
+            "ERROR: --no-worktree 모드인데 CLAUDE.md가 없습니다.\n"
+            f"  경로: {root / 'CLAUDE.md'}\n"
+            "  가드레일 없이 코드가 생성되는 것을 막기 위해 중단합니다.\n"
+            "  부트스트랩(단계 2)을 먼저 수행하거나 CLAUDE.md를 생성한 뒤 재실행하세요.",
             file=sys.stderr,
         )
         sys.exit(EXIT_ERR)
@@ -2228,10 +2305,19 @@ class ForgeScope:
                 except SlnResolveError as e:
                     print(f"ERROR: {e}", file=sys.stderr)
                     sys.exit(EXIT_ERR)
+            test_target_rel: str | None = None
+            raw_tt = getattr(self._args, "test_target", None)
+            if raw_tt:
+                try:
+                    test_target_rel = _validate_target_rel(self._cfg.root, raw_tt)
+                except ValueError as e:
+                    print(f"ERROR: --test-target {e}", file=sys.stderr)
+                    sys.exit(EXIT_ERR)
             builder = DeterministicPlanBuilder(
                 self._cfg,
                 preset=preset if preset != "auto" else "single-step",
                 sln_path=sln_path,
+                test_target=test_target_rel,
             )
             plan = builder.build(prompts, doc_paths)
             splitter._validate_plan(plan)
@@ -2466,13 +2552,35 @@ class ForgeScope:
         if self._git.commit_chore(msg):
             _qprint(f"  ✓ {msg}")
         if self._args.push:
-            self._git.push(f"feat-{phase_name}")
+            self._git.push(self._push_branch(phase_name))
         if _QUIET:
             print(f"Phase '{phase_name}' completed.")
         else:
             print(f"\n{'=' * 60}")
             print(f"  Phase '{phase_name}' completed!")
             print(f"{'=' * 60}")
+
+    def _push_branch(self, phase_name: str) -> str:
+        """push 대상 브랜치. 워크트리 모드=feat-<phase>, no-worktree 모드=현재 브랜치."""
+        if not self._no_worktree:
+            return f"feat-{phase_name}"
+        r = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=self._cfg.root,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        branch = r.stdout.strip()
+        if r.returncode != 0 or not branch or branch == "HEAD":
+            print(
+                "ERROR: --no-worktree + --push 이지만 현재 브랜치를 확인할 수 없습니다 "
+                "(detached HEAD 등). 수동으로 push 하세요.",
+                file=sys.stderr,
+            )
+            sys.exit(EXIT_ERR)
+        return branch
 
 
 # ============================================================================
@@ -2550,6 +2658,14 @@ def _build_parser() -> argparse.ArgumentParser:
         help="브랜치 checkout 시 dirty tree 검사 우회.",
     )
     parser.add_argument(
+        "--no-worktree",
+        action="store_true",
+        help=(
+            "워크트리를 생성하지 않고 현재 작업 트리(메인 repo)에서 직접 실행한다. "
+            "산출물·step 코드·commit이 현재 브랜치에 직접 기록된다 (격리 없음)."
+        ),
+    )
+    parser.add_argument(
         "--verbose",
         action="store_true",
         help="DEBUG 레벨 로그를 stderr로 출력.",
@@ -2581,6 +2697,15 @@ def _build_parser() -> argparse.ArgumentParser:
             "contract-tdd 가 사용할 .sln 경로 (repo root 기준). "
             "미지정 시 Src/*.sln (1단계) 또는 Src/*/*.sln (2단계) auto-detect. "
             "다수 발견 시 명시 필요."
+        ),
+    )
+    parser.add_argument(
+        "--test-target",
+        default=None,
+        help=(
+            "검증(dotnet test) 대상 테스트 프로젝트(.csproj, repo root 기준 상대경로). "
+            "풀 솔루션 빌드 회피용 스코프. 우선순위: 이 플래그 > forge-scope.json test_target "
+            "> Src/Tests 단일 자동감지 > 전체 sln. 작업 문서 기준 1회 지정(휘발성)."
         ),
     )
     parser.add_argument(
