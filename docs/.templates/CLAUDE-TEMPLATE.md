@@ -24,16 +24,13 @@
 | **문서 작성 룰** | [`docs/DOCUMENT_GUIDE.md`](docs/DOCUMENT_GUIDE.md) | 문서 작성 SSOT — 식별자/메타/변경 이력/SSOT 인용 패턴/AI 작업 시나리오 |
 | **솔루션 ARCHITECTURE** | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | 솔루션 공통 룰 (레이어 모델·참조 매트릭스·폴더→레이어 매핑·접미사) |
 | **(선택) 솔루션 PRD** | [`docs/PRD.md`](docs/PRD.md) | 솔루션 단일 PRD (다중 S/W 통합 시). per-app PRD 만 사용 시 미배치 — 해당 행 삭제 |
-| **코드 룰 (DDD)** | [`docs/.rules/DDD_ARCHITECTURE_RULES.md`](docs/.rules/DDD_ARCHITECTURE_RULES.md) | C# 레이어 위반 방지 단일 룰 |
-| **코드 룰 (OOP)** | [`docs/.rules/OBJECT_ORIENTED_DESIGN_RULES.md`](docs/.rules/OBJECT_ORIENTED_DESIGN_RULES.md) | SOLID 기반 클래스/함수 책임 분해 룰. 모든 레이어 공통 |
-| **행동 지침** | [`docs/.rules/BEHAVIORAL_GUIDELINES_RULES.md`](docs/.rules/BEHAVIORAL_GUIDELINES_RULES.md) | LLM coding 행동 가이드. 아래 § 행동 지침 `@include` 페어 |
 | **App: {SYSTEM_CODE}** | [`docs/{SYSTEM_CODE}/`](docs/{SYSTEM_CODE}/) | App별 PRD/FC/ARCHITECTURE/FRD/TASK/ADR/ADR-CATALOG SSOT 폴더 |
-| **빈 템플릿 (보존)** | [`docs/.templates/`](docs/.templates/) | Active 11 종 양식 + 4 종 룰/가이드 원본. Legacy 양식은 호환 확인용으로만 보존 |
+| **빈 템플릿 (보존)** | [`docs/.templates/`](docs/.templates/) | Active 11 종 양식 + 가이드 원본. Legacy 양식은 호환 확인용으로만 보존 |
 | {Forge/CI 자동화} | {경로 또는 "해당 없음"} | {도구 역할 한 줄} |
 
 App 다수 시 `App: {SYSTEM_CODE}` 행 복제. 폴더 구조 상세는 [`docs/DOCUMENT_GUIDE.md`](docs/DOCUMENT_GUIDE.md) §1.
 
-### `docs/.templates/` 구성 (Active 양식 11 + 룰/가이드 4)
+### `docs/.templates/` 구성 (Active 양식 11 + 가이드)
 
 | 위치 | 양식 | 용도 |
 |---|---|---|
@@ -48,7 +45,6 @@ App 다수 시 `App: {SYSTEM_CODE}` 행 복제. 폴더 구조 상세는 [`docs/D
 | `.templates/App/FRD/APP-FRD-001-TEMPLATE.md` | App FRD 본문 (기능 요구 문서 1건 base, 코드 상세 금지) | `docs/{SYSTEM_CODE}/FRD/{SYSTEM_CODE}-FRD-{NNN}.md` |
 | `.templates/App/TASK/APP-TASK-001-TEMPLATE.md` | App TASK 본문 (AI 실행용 휘발성 작업 지시서 base. 작업 유형 = feature / refactor / maintenance / migration / setup / investigation. RFD 흡수) | `docs/{SYSTEM_CODE}/TASK/{SYSTEM_CODE}-TASK-{NNN}.md` |
 | `.templates/DOCUMENT_GUIDE.md` | 문서 작성 가이드 | `docs/` 루트로 그대로 복사 (가이드 SSOT) |
-| `.templates/.rules/{DDD_ARCHITECTURE_RULES,OBJECT_ORIENTED_DESIGN_RULES,BEHAVIORAL_GUIDELINES_RULES}.md` | 코드 룰 3 종 | `docs/.rules/` 로 그대로 복사 (룰 SSOT) |
 
 Redirect/Legacy 양식 (`ADR-TEMPLATE.md`, `FC-TEMPLATE.md`, `FRD-TEMPLATE.md`, `README-TEMPLATE.md`, `UI_GUIDE-TEMPLATE.md`) 은 0.2 이전 전역 문서 구조 이식 확인용이다. 신규 문서 작성에는 위 Active 양식만 사용한다.
 
@@ -65,13 +61,13 @@ ADR 명칭은 [`docs/DOCUMENT_GUIDE.md`](docs/DOCUMENT_GUIDE.md) 0.3 기준이�
 ## 진입 순서
 
 - 신규 작성자/AI 는 [`docs/DOCUMENT_GUIDE.md`](docs/DOCUMENT_GUIDE.md) 를 먼저 읽는다 (작성 룰·식별자·SSOT 인용 패턴).
-- 코드 작성 전 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) 절대 금지 매트릭스 + 코드 룰 ([DDD](docs/.rules/DDD_ARCHITECTURE_RULES.md) / [OOP](docs/.rules/OBJECT_ORIENTED_DESIGN_RULES.md) / [Behavioral](docs/.rules/BEHAVIORAL_GUIDELINES_RULES.md)) 확인.
+- 코드 작성 전 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) 절대 금지 매트릭스 확인.
 - **신규 기능 작성 흐름** ([DOCUMENT_GUIDE §2](docs/DOCUMENT_GUIDE.md#2-작성-순서) 준수):
   1. `docs/{SYSTEM_CODE}/{SYSTEM_CODE}-PRD.md` §3.1·§7 갱신
   2. `docs/{SYSTEM_CODE}/{SYSTEM_CODE}-FC.md` 5축 표 행 추가
   3. `docs/{SYSTEM_CODE}/FRD/{SYSTEM_CODE}-FRD-{NNN}.md` 신규 (`.templates/App/FRD/APP-FRD-001-TEMPLATE.md` 복사·placeholder 채움. 코드 상세 금지)
   4. 필요 시 `docs/{SYSTEM_CODE}/ADR/{SYSTEM_CODE}-ADR-{NNN}.md` 등재 (`.templates/App/ADR/APP-ADR-001-TEMPLATE.md` 복사) + `{SYSTEM_CODE}-ADR-CATALOG.md` 동기화
-  5. 구현 착수 전 코드 룰과 최신 코드 기준으로 세부 설계 판단
+  5. 구현 착수 전 최신 코드 기준으로 세부 설계 판단
 - **AI 실행용 작업 지시서 (TASK) 작성 흐름** — 모든 코드 작업 (feature / refactor / maintenance / migration / setup / investigation) 통합:
   1. (사전) 영향 영구 SSOT (PRD/FC/FRD/ADR/ADR-CATALOG/ARCHITECTURE) 를 작성자가 직접 갱신
   2. `docs/{SYSTEM_CODE}/TASK/{SYSTEM_CODE}-TASK-{NNN}.md` 신규 (`.templates/App/TASK/APP-TASK-001-TEMPLATE.md` 복사) — 휘발성 + self-contained. 외부 SSOT 마크다운 링크 인용 금지 (양방향)
@@ -98,19 +94,15 @@ ADR 명칭은 [`docs/DOCUMENT_GUIDE.md`](docs/DOCUMENT_GUIDE.md) 0.3 기준이�
 `docs/.templates/` 양식을 deploy 위치로 promotion 하는 1회성 절차. 본 절차 완료 후 위 인덱스 표 경로가 모두 유효해진다.
 
 1. `docs/.templates/CLAUDE-TEMPLATE.md` → `/CLAUDE.md` 로 복사 (본 파일). placeholder 채움. SOLUTION_CODE 확정.
-2. `docs/.templates/DOCUMENT_GUIDE.md` → `docs/` 루트로 복사 (그대로 SSOT). `docs/.templates/.rules/{BEHAVIORAL_GUIDELINES_RULES,DDD_ARCHITECTURE_RULES,OBJECT_ORIENTED_DESIGN_RULES}.md` → `docs/.rules/` 로 복사 (그대로 SSOT).
+2. `docs/.templates/DOCUMENT_GUIDE.md` → `docs/` 루트로 복사 (그대로 SSOT).
 3. `docs/.templates/ARCHITECTURE-TEMPLATE.md` → `docs/ARCHITECTURE.md` 로 복사·rename. SOLUTION_CODE 등 placeholder 채움.
 4. (선택) `docs/.templates/PRD-TEMPLATE.md` 는 솔루션 단일 PRD 가 필요한 경우에만 `docs/PRD.md` 로 복사. per-app PRD 만 사용 시 미복사.
 5. 첫 App 도입은 위 § 진입 순서 "신규 App 추가" 절차 수행.
-6. `docs/.templates/` 폴더는 **원본 보존** — 추후 신규 App/ADR/FRD/TASK/룰 추가 시 재참조.
-
-## 행동 지침
-
-@docs/.rules/BEHAVIORAL_GUIDELINES_RULES.md
+6. `docs/.templates/` 폴더는 **원본 보존** — 추후 신규 App/ADR/FRD/TASK 추가 시 재참조.
 
 ## 절대 변경 금지
 
-- `docs/.templates/**` — 원본 양식. 사용자 승인 전 수정 금지 (신규 App/ADR/FRD/TASK/룰 부트스트랩 시 재참조).
-- `docs/DOCUMENT_GUIDE.md`, `docs/ARCHITECTURE.md`, `docs/.rules/DDD_ARCHITECTURE_RULES.md`, `docs/.rules/OBJECT_ORIENTED_DESIGN_RULES.md`, `docs/.rules/BEHAVIORAL_GUIDELINES_RULES.md` — 룰/가이드 SSOT. 사용자 승인 전 수정 금지.
+- `docs/.templates/**` — 원본 양식. 사용자 승인 전 수정 금지 (신규 App/ADR/FRD/TASK 부트스트랩 시 재참조).
+- `docs/DOCUMENT_GUIDE.md`, `docs/ARCHITECTURE.md` — 가이드 SSOT. 사용자 승인 전 수정 금지.
 - `/CLAUDE.md`(본 파일), `MEMORY.md` — 사용자 승인 전 수정 금지.
 - {`README.md`, CI 설정, Forge 도구 등 도메인별 보존 항목}.
