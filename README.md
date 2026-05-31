@@ -95,11 +95,11 @@ pip install -U codenavigator
 |---|---|---|
 | `branch-review` | `/claudecode-for-me:branch-review [ref]` | HEAD↔ref diff을 Standards/Spec 2축 병렬 검토 |
 | `codenav-frontmatter-gen` | `/claudecode-for-me:codenav-frontmatter-gen [--limit N] [--apply]` | C# 클래스 description 빈칸을 AI로 일괄 채워 `// ---` frontmatter 블록 삽입 |
-| `doc-driven-review` | `/claudecode-for-me:doc-driven-review <doc-path>... [--worktree <ref>]` | 첨부 문서 기준 working-tree 변경을 Codex CLI로 검증. Missing/Improve/Overengineered + Conformance(%) 보고. forge-scope linked worktree 지원 |
+| `doc-driven-review` | `/claudecode-for-me:doc-driven-review <doc-path>... [--worktree <ref>] [--commit <ref>]` | 첨부 문서 기준 working-tree/커밋 변경을 Codex CLI로 검증. Missing/Improve/Overengineered + Conformance(%) + 인용검증 보고. linked worktree·커밋 노드 지목 지원 |
 | `docs-add-task` | `/claudecode-for-me:docs-add-task [요청]` | v0.7 per-App 신규/기존 자동 판정 — 신규 FRD 생성(NEW) 또는 기존 영향 FRD 갱신(CHANGE), TASK + ADR 항상 생성, FC/PRD/ADR-CATALOG 갱신 |
 | `forge-cancel` | `/claudecode-for-me:forge-cancel <phase>` | forge phase 브랜치·산출물 정리 |
 | `forge-full` | `/claudecode-for-me:forge-full <phase>` | 문서 기반 전체 프로젝트 구현 phase runner |
-| `forge-scope` | `/claudecode-for-me:forge-scope <prompt>` | 단일 FRD·기능·버그픽스용 경량 phase runner |
+| `forge-scope` | `/claudecode-for-me:forge-scope <prompt> [--no-worktree] [--test-target=<csproj>]` | 단일 FRD·기능·버그픽스용 경량 phase runner. 워크트리 미생성(in-place)·빌드 스코프 축소 옵션 |
 | `grill-me` | `/claudecode-for-me:grill-me [주제]` | 1문 1답으로 요구사항 모호점 추적 |
 | `meta-prompter` | `/claudecode-for-me:meta-prompter [요청]` | 거친 요청 → 구조화된 메타 프롬프트 |
 
@@ -111,7 +111,7 @@ pip install -U codenavigator
 | `codenav-bootstrap` | CodeNavigator parser-only 인덱싱 (frontmatter/XML doc만 읽어 SQLite 빌드, AI 호출 없음) |
 | `codenav-frontmatter-gen` | codenav-frontmatter-gen skill 진입 (AI가 .cs에 frontmatter 영구 삽입). `--projects` / `--files` / `--staged` 스코프 인자 |
 | `codenav-install` | 프로젝트 루트의 `tools/codenavigator/` 폴더에 codenavigator (PyPI) 격리 설치 + `codenav.ps1/codenav.sh` launcher + `.gitignore` 자동 작성 + `docs/codenav-guide.md` 작성 + 루트 `CLAUDE.md` 링크 셋업 |
-| `doc-driven-review` | doc-driven-review skill 진입. Codex CLI 위임 read-only 리뷰. `--worktree <branch\|path>` 로 linked worktree 지정 가능 |
+| `doc-driven-review` | doc-driven-review skill 진입. Codex CLI 위임 read-only 리뷰. `--worktree <branch\|path>` linked worktree / `--commit <ref>` 커밋 노드 지목 지원 |
 | `commit-analysis` | 변경 분석 후 `[ADD]`/`[MOD]`/`[FIX]` 자동 판단 한글 커밋 생성 |
 | `docs-add-task` | docs-add-task skill 진입 (NEW=신규 FRD / CHANGE=기존 수정, TASK + ADR 항상) |
 | `forge-cancel` | forge-cancel skill 진입 |
@@ -252,6 +252,9 @@ codenav --root <repo> ui --port 9876
 # 자유 텍스트 prompt (phase-dir 자동 도출, 확인 1회)
 /claudecode-for-me:forge-scope 로그인 기능에 소셜 로그인 옵션 추가
 
+# 워크트리 없이 현재 브랜치에서 직접 (격리·머지 단계 생략)
+/claudecode-for-me:forge-scope 버전 상수 추가 --no-worktree
+
 # 전체 프로젝트 구현
 /claudecode-for-me:forge-full mvp-v2 --prompt="MVP v2 전체 구현" --docs-mode=recursive --trust
 
@@ -269,6 +272,15 @@ codenav --root <repo> ui --port 9876
 - **Mode 2 (doc + prompt)**: 첫 토큰이 `docs/...md` / `/docs/...md`(대소문자 무시) → `--doc` 분리
 - FRD(`docs/FRD/` 하위) → `--preset=frd-implementation --compact-docs` 자동
 - 일반 문서 → `--single-step --compact-docs` 자동
+
+#### forge-scope 전용 옵션
+
+| 옵션 | 설명 |
+|---|---|
+| `--no-worktree` | 워크트리·`feat-<phase>` 브랜치 미생성. 메인 repo **현재 브랜치에서 직접** 실행(격리·머지 단계 없음). 시작 시 작업 트리 dirty면 중단(`--force` 우회). `--push` 는 현재 브랜치 push. 모든 preset과 직교 |
+| `--test-target=<csproj>` | 검증(`dotnet test`) 대상 테스트 프로젝트 1회 지정(휘발성). 풀 솔루션 빌드 회피. 우선순위: 이 플래그 > `forge-scope.json` `test_target` > `Src/Tests` 단일 자동감지 > 전체 sln |
+
+- **빌드 스코프**: 검증은 풀 솔루션 `dotnet build` 대신 **대상 테스트 프로젝트만** `dotnet test`(빌드 겸함)로 좁혀 대규모 sln에서 시간 절감. `forge-scope.json` 에 `default_sln`/`test_target` 키로 고정 가능.
 
 #### forge-full 주요 옵션
 
@@ -341,6 +353,8 @@ phases/
 /claudecode-for-me:doc-driven-review docs/spec.md --wait --scope working-tree
 /claudecode-for-me:doc-driven-review docs/spec.md --worktree feat-cn-foo
 /claudecode-for-me:doc-driven-review docs/spec.md --worktree .worktrees/cn-foo --background
+# 특정 커밋(노드) 지목 — no-worktree forge 산출 검토 등
+/claudecode-for-me:doc-driven-review docs/TASK.md --commit <feat 커밋 sha>
 ```
 
 - **Codex CLI 위임** — 첨부 문서 기준 working-tree + untracked 변경을 codex가 리뷰. read-only.
@@ -348,10 +362,12 @@ phases/
 - **strict 상태 판정**: ✓ 모든 시그니처/literal 일치 · ⚠ 외형 맞지만 일부 누락 · ✗ literal 부재 또는 완전 부재.
 - **Cross-file ripple**: public API 변경 시 patch + UNCHANGED CONTEXT(caller auto-detect) 모두 참조.
 - **Weighted Conformance**: Critical=4 / Major=2 / Minor=1, ✓=full ⚠=0.5× ✗=0. `pct = round(100 × passed / total)`.
+- **커밋 노드 지목**: `--commit <ref>` — 특정 커밋(또는 `A..B` 범위) 변경분만 doc 대조. working-tree/branch·`--base` 우회. no-worktree forge 처럼 변경이 이미 커밋된 경우 그 노드만 검토.
 - **워크트리 지정**: `--worktree <branch|path>` — forge-scope linked worktree 또는 임의 경로 직접 리뷰. `--repo-root` 와 mutex.
 - **scope**: `working-tree` (변경) / `branch` (HEAD↔base diff) / `auto` (변경 있으면 working-tree).
+- **인용 검증**: codex 인용 `file:line` 을 repo에 대조(파일존재+라인수). 미검증 시 `[doc-driven-review] CITATION-CHECK:` 라인 추가(advisory).
 - **결과 파일**: `<repo>/.review/<doc-stem>-review.md`.
-- **모드**: `--wait` (foreground) / `--background` (PID + log 출력). 미지정 시 변경 규모로 자동 추천.
+- **모드**: `--wait` (foreground) / `--background` (PID + log). background는 **detached foreground 재실행** — fg와 동일하게 스키마검증·인용검증·`.review/` 저장까지 수행(비대칭 없음). 오래된 bg 로그·patch 7일 자동 정리.
 - **dry-run**: `--dry-run`으로 codex 호출 없이 prompt만 stdout. `--keep-patch`로 디버깅용 patch 보존.
 
 #### 한계

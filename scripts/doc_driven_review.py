@@ -358,6 +358,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                    default="auto")
     p.add_argument("--base", default=None,
                    help="branch scope 기준점. 기본 origin/main merge-base")
+    p.add_argument("--commit", default=None, metavar="<ref>",
+                   help="특정 커밋(또는 A..B 범위) 지목해 그 변경분만 doc과 대조. "
+                        "단일 ref면 <ref>^..<ref>. --scope/--base 무시. working-tree/branch 우회.")
     p.add_argument("--model", default=None, help="codex --model 통과")
     p.add_argument("--effort",
                    choices=["minimal", "low", "medium", "high", "xhigh"],
@@ -445,6 +448,22 @@ def _git_info_dir(repo_root: Path) -> Path:
     return info
 
 
+ARTIFACT_MAX_AGE_DAYS = 7
+
+
+def prune_old_artifacts(info_dir: Path) -> None:
+    """오래된 bg 로그·stale patch 정리 (mtime 7일 경과). 실패 무시."""
+    import time
+    cutoff = time.time() - ARTIFACT_MAX_AGE_DAYS * 86400
+    for pattern in ("doc-review-bg-*.log", "doc-review-*.patch"):
+        for f in info_dir.glob(pattern):
+            try:
+                if f.stat().st_mtime < cutoff:
+                    f.unlink()
+            except OSError:
+                pass
+
+
 def resolve_worktree(token: str, cwd: Path) -> Path:
     """
     `--worktree <token>` 인자 해석.
@@ -521,6 +540,28 @@ def resolve_base_ref(repo_root: Path, base: Optional[str]) -> str:
         return r.stdout.strip()
 
     raise DocReviewError("base ref 자동 결정 실패. --base 인자로 명시 필요.")
+
+
+def resolve_commit_diff_args(repo_root: Path, revspec: str) -> list[str]:
+    """--commit 값 → git diff 인자. 단일커밋=<ref>^..<ref>(루트커밋은 --root). 범위(A..B)=그대로.
+
+    유효성 미확인 시 BaseRefError.
+    """
+    if ".." in revspec:
+        endpoint = revspec.split("..")[-1] or "HEAD"
+        r = _git(["rev-parse", "--verify", "--quiet", endpoint], cwd=repo_root, check=False)
+        if r.returncode != 0:
+            raise BaseRefError(f"--commit 범위 해석 실패: {revspec}")
+        return [revspec]
+    r = _git(["rev-parse", "--verify", "--quiet", f"{revspec}^{{commit}}"],
+             cwd=repo_root, check=False)
+    if r.returncode != 0:
+        raise BaseRefError(f"--commit 커밋 없음: {revspec}")
+    parent = _git(["rev-parse", "--verify", "--quiet", f"{revspec}^"],
+                  cwd=repo_root, check=False)
+    if parent.returncode == 0:
+        return [f"{revspec}^", revspec]
+    return ["--root", revspec]   # 루트 커밋 (부모 없음)
 
 
 def _has_working_tree_changes(repo_root: Path) -> bool:
@@ -646,6 +687,7 @@ def extract_identifiers_from_changed(
     scope: str,
     base: Optional[str],
     untracked: list[Path],
+    commit_args: Optional[list[str]] = None,
 ) -> set[str]:
     """
     changed + untracked 파일에서 식별자(클래스/네임스페이스/메서드/함수명) 추출.
@@ -653,7 +695,11 @@ def extract_identifiers_from_changed(
     Returns: stopword 제외 후 4자 이상 식별자 집합.
     """
     changed_paths: set[str] = set()
-    if scope == "working-tree":
+    if scope == "commit":
+        r = _git(["diff", "--name-only", *(commit_args or [])], cwd=repo_root, check=False)
+        if r.returncode == 0:
+            changed_paths.update(ln.strip() for ln in r.stdout.splitlines() if ln.strip())
+    elif scope == "working-tree":
         for git_args in (["diff", "--name-only"], ["diff", "--name-only", "--cached"]):
             r = _git(git_args, cwd=repo_root, check=False)
             if r.returncode == 0:
@@ -809,12 +855,15 @@ def compose_patch(
     base: Optional[str],
     untracked: list[Path],
     out_path: Path,
+    commit_args: Optional[list[str]] = None,
 ) -> int:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     total_lines = 0
 
     with open(out_path, "w", encoding="utf-8", errors="replace") as fh:
-        if scope == "working-tree":
+        if scope == "commit":
+            _run_git_diff(repo_root, commit_args or [], fh)
+        elif scope == "working-tree":
             _run_git_diff(repo_root, [], fh)
             _run_git_diff(repo_root, ["--cached"], fh)
         else:
@@ -939,6 +988,51 @@ def format_violation_line(errors: list[str]) -> str:
     return f"[doc-driven-review] OUTPUT-SCHEMA-VIOLATION: {joined}"
 
 
+# ─── Citation verification (인용 file:line 실재 확인) ──────────────────────────
+
+# 인용 path:line 추출 — `file.ext:line` 또는 `file.ext:start-end`
+CITATION_RE = re.compile(r"`?([A-Za-z0-9_./\\-]+\.[A-Za-z0-9]+):(\d+)(?:-(\d+))?`?")
+CITATION_CHECK_MAX = 200  # 병리적 출력 방어
+
+
+def extract_citations(output: str) -> list[tuple[str, int, Optional[int]]]:
+    out: list[tuple[str, int, Optional[int]]] = []
+    for m in CITATION_RE.finditer(output):
+        path = m.group(1).replace("\\", "/")
+        ls = int(m.group(2))
+        le = int(m.group(3)) if m.group(3) else None
+        out.append((path, ls, le))
+        if len(out) >= CITATION_CHECK_MAX:
+            break
+    return out
+
+
+def verify_citations(
+    repo_root: Path, citations: list[tuple[str, int, Optional[int]]]
+) -> list[str]:
+    """인용 file:line 이 repo에 실재하는지 확인. 환각/범위초과 목록 반환(advisory)."""
+    problems: list[str] = []
+    seen: set[tuple[str, int, Optional[int]]] = set()
+    for path, ls, le in citations:
+        key = (path, ls, le)
+        if key in seen:
+            continue
+        seen.add(key)
+        p = repo_root / path
+        if not p.is_file():
+            problems.append(f"{path}:{ls} — 파일 없음")
+            continue
+        try:
+            n = sum(1 for _ in p.open(encoding="utf-8", errors="replace"))
+        except OSError:
+            continue
+        hi = le or ls
+        if hi > n:
+            rng = f"{ls}-{le}" if le else f"{ls}"
+            problems.append(f"{path}:{rng} — 라인 범위 초과(파일 {n}줄)")
+    return problems
+
+
 def write_review_file(
     repo_root: Path,
     docs: list[tuple[Path, str]],
@@ -1025,58 +1119,45 @@ def invoke_codex_foreground(
     return proc.returncode, proc.stdout, proc.stderr
 
 
-def invoke_codex_background(
-    prompt: str,
-    model: Optional[str],
-    effort: Optional[str],
-    repo_root: Path,
-) -> tuple[int, str, str]:
-    cmd = _build_codex_cmd(model, effort)
-    log_dir = _git_info_dir(repo_root)
-    job_id = uuid.uuid4().hex[:8]
-    log_file = log_dir / f"doc-review-bg-{job_id}.log"
+def _spawn_detached_foreground(argv: list[str], repo_root: Path) -> int:
+    """--background: 자기 자신을 foreground로 detached 재실행(출력→log).
 
-    log.debug("background codex cmd: %s → log: %s", cmd, log_file)
+    child가 codex→스키마검증→인용검증→.review 저장 전 과정을 수행하므로
+    background 비대칭이 사라지고 patch도 child가 자기 것을 정리한다(누수 해소).
+    """
+    child_argv = [a for a in argv if a != "--background"]
+    info = _git_info_dir(repo_root)
+    job_id = uuid.uuid4().hex[:8]
+    log_file = info / f"doc-review-bg-{job_id}.log"
+
+    extra: dict = {}
+    if os.name == "nt":
+        extra["creationflags"] = (
+            subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
+        )
+    else:
+        extra["start_new_session"] = True
 
     with open(log_file, "w", encoding="utf-8") as lf:
-        extra: dict = {}
-        if os.name == "nt":
-            extra["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
-        else:
-            extra["start_new_session"] = True
-
         proc = subprocess.Popen(
-            cmd,
-            stdin=subprocess.PIPE,
+            [sys.executable, str(Path(__file__).resolve()), *child_argv],
+            stdin=subprocess.DEVNULL,
             stdout=lf,
             stderr=subprocess.STDOUT,
-            cwd=repo_root,
+            cwd=Path.cwd(),
             text=True,
             encoding="utf-8",
             **extra,
         )
-        proc.stdin.write(prompt)  # type: ignore[union-attr]
-        proc.stdin.close()       # type: ignore[union-attr]
 
-    status_lines = (
-        f"[doc-driven-review] Background 시작됨.\n"
+    print(
+        "[doc-driven-review] Background 시작됨.\n"
         f"PID: {proc.pid}\n"
         f"Log: {log_file}\n"
         f"확인: tail -f {log_file}  (Unix)  또는  Get-Content -Wait {log_file}  (PowerShell)\n"
+        "완료 후 처리된 리뷰 + Conformance + 인용검증이 log 와 .review/ 에 저장됩니다.\n"
     )
-    return EXIT_OK, status_lines, ""
-
-
-def invoke_codex(
-    prompt: str,
-    model: Optional[str],
-    effort: Optional[str],
-    repo_root: Path,
-    background: bool,
-) -> tuple[int, str, str]:
-    if background:
-        return invoke_codex_background(prompt, model, effort, repo_root)
-    return invoke_codex_foreground(prompt, model, effort, repo_root)
+    return EXIT_OK
 
 
 # ─── Patch cleanup ────────────────────────────────────────────────────────────
@@ -1120,6 +1201,16 @@ def main(argv: list[str]) -> int:
             return EXIT_WORKTREE
         return EXIT_ERR
 
+    # 오래된 bg 로그·stale patch 정리 (best-effort)
+    try:
+        prune_old_artifacts(_git_info_dir(repo_root))
+    except Exception:  # noqa: BLE001
+        pass
+
+    # background: 자기 자신을 foreground로 detached 재실행 (비대칭 제거)
+    if args.background:
+        return _spawn_detached_foreground(argv, repo_root)
+
     # 문서 읽기
     try:
         docs = read_attached_docs(args.docs)
@@ -1130,18 +1221,27 @@ def main(argv: list[str]) -> int:
         print(f"오류: {e}", file=sys.stderr)
         return EXIT_ERR
 
-    # scope 결정
-    try:
-        scope, resolved_base = determine_scope(repo_root, args.scope, args.base)
-    except NoChangesError:
-        print("리뷰할 변경 없음. working-tree와 branch 모두 비어있습니다.", file=sys.stderr)
-        return EXIT_NO_CHANGES
-    except BaseRefError as e:
-        print(f"오류: {e}", file=sys.stderr)
-        return EXIT_NO_BASE
-    except DocReviewError as e:
-        print(f"오류: {e}", file=sys.stderr)
-        return EXIT_ERR
+    # scope 결정 — --commit 지목 시 working-tree/branch 우회
+    commit_args: Optional[list[str]] = None
+    if args.commit:
+        try:
+            commit_args = resolve_commit_diff_args(repo_root, args.commit)
+        except BaseRefError as e:
+            print(f"오류: {e}", file=sys.stderr)
+            return EXIT_NO_BASE
+        scope, resolved_base = "commit", args.commit
+    else:
+        try:
+            scope, resolved_base = determine_scope(repo_root, args.scope, args.base)
+        except NoChangesError:
+            print("리뷰할 변경 없음. working-tree와 branch 모두 비어있습니다.", file=sys.stderr)
+            return EXIT_NO_CHANGES
+        except BaseRefError as e:
+            print(f"오류: {e}", file=sys.stderr)
+            return EXIT_NO_BASE
+        except DocReviewError as e:
+            print(f"오류: {e}", file=sys.stderr)
+            return EXIT_ERR
 
     log.info("scope=%s base=%s", scope, resolved_base)
 
@@ -1160,10 +1260,13 @@ def main(argv: list[str]) -> int:
     ts = datetime.now(TZ).strftime("%Y%m%d-%H%M%S")
     rand = uuid.uuid4().hex[:6]
     patch_path = _git_info_dir(repo_root) / f"doc-review-{ts}-{rand}.patch"
-    untracked = list_untracked_text_files(repo_root)
+    # commit scope는 커밋된 노드 대상 → untracked 미포함
+    untracked = [] if scope == "commit" else list_untracked_text_files(repo_root)
 
     try:
-        total_lines = compose_patch(repo_root, scope, resolved_base, untracked, patch_path)
+        total_lines = compose_patch(
+            repo_root, scope, resolved_base, untracked, patch_path, commit_args=commit_args
+        )
         log.info("patch 합성 완료: %d 라인 → %s", total_lines, patch_path)
 
         # 변경 0라인
@@ -1177,10 +1280,18 @@ def main(argv: list[str]) -> int:
         if not args.no_auto_context:
             try:
                 idents = extract_identifiers_from_changed(
-                    repo_root, scope, resolved_base, untracked
+                    repo_root, scope, resolved_base, untracked, commit_args=commit_args
                 )
                 exclude: set[str] = set()
-                if scope == "working-tree":
+                if scope == "commit":
+                    r = _git(["diff", "--name-only", *(commit_args or [])],
+                             cwd=repo_root, check=False)
+                    if r.returncode == 0:
+                        exclude.update(
+                            ln.strip().replace("\\", "/")
+                            for ln in r.stdout.splitlines() if ln.strip()
+                        )
+                elif scope == "working-tree":
                     for gargs in (["diff", "--name-only"],
                                   ["diff", "--name-only", "--cached"]):
                         r = _git(gargs, cwd=repo_root, check=False)
@@ -1215,10 +1326,10 @@ def main(argv: list[str]) -> int:
             cleanup_patch(patch_path, args.keep_patch)
             return EXIT_OK
 
-        # Codex 호출
+        # Codex 호출 (background는 main 초반에 detached fg로 분기됨 → 여기는 항상 fg)
         try:
-            rc, stdout, stderr = invoke_codex(
-                prompt, args.model, args.effort, repo_root, args.background
+            rc, stdout, stderr = invoke_codex_foreground(
+                prompt, args.model, args.effort, repo_root
             )
         except CodexUnavailableError as e:
             print(f"오류: {e}", file=sys.stderr)
@@ -1232,21 +1343,24 @@ def main(argv: list[str]) -> int:
         if stderr.strip():
             log.debug("codex stderr: %s", stderr.strip())
 
-        # background: status 줄만 출력하고 종료
-        if args.background:
-            print(stdout, end="")
-            cleanup_patch(patch_path, True)  # background에서는 patch 보존 (codex가 아직 읽는 중)
-            return EXIT_OK
-
         # 출력 검증
         ok, errors, pct = validate_codex_output(stdout)
+        output = stdout
         if not ok:
             log.warning("스키마 위반: %s", errors)
-            violation_line = format_violation_line(errors)
-            output = stdout.rstrip("\n") + "\n" + violation_line + "\n"
+            output = output.rstrip("\n") + "\n" + format_violation_line(errors) + "\n"
         else:
-            output = stdout
             log.info("검증 통과. Conformance: %s%%", pct)
+
+        # 인용 검증 (file:line 실재 확인 — 환각 차단, advisory)
+        cite_problems = verify_citations(repo_root, extract_citations(stdout))
+        if cite_problems:
+            log.warning("인용 검증 실패 %d건", len(cite_problems))
+            shown = "; ".join(cite_problems[:10])
+            more = "" if len(cite_problems) <= 10 else f" (+{len(cite_problems) - 10} more)"
+            output = output.rstrip("\n") + (
+                f"\n[doc-driven-review] CITATION-CHECK: {len(cite_problems)}건 미검증 — {shown}{more}\n"
+            )
 
         print(output, end="")
 

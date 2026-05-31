@@ -1,7 +1,7 @@
 ---
 name: doc-driven-review
 description: 첨부 문서가 현재 코드 변경점(working-tree + untracked)에 반영됐는지 Codex 위임으로 검증. 누락/개선/오버엔지니어링/일치도(%) 보고. "문서 기준 리뷰", "spec 반영 확인", "이 문서대로 만들었는지 codex로 확인", "doc-driven-review", "DDR" 요청 시 트리거.
-argument-hint: "<doc-path> [추가 doc-path...] [--wait|--background] [--scope working-tree|branch] [--base <ref>] [--model <name>] [--effort <level>]"
+argument-hint: "<doc-path> [추가 doc-path...] [--wait|--background] [--scope working-tree|branch] [--commit <ref>] [--base <ref>] [--model <name>] [--effort <level>]"
 ---
 
 # Doc-Driven Review
@@ -24,7 +24,7 @@ argument-hint: "<doc-path> [추가 doc-path...] [--wait|--background] [--scope w
 `$ARGUMENTS`에서 분리:
 
 - **doc 경로**: `--`로 시작 안 하는 토큰 (보통 `.md` / `.txt` / `.rst` / `.adoc` 확장자)
-- **flags**: `--wait`, `--background`, `--scope <kind>`, `--base <ref>`, `--model <name>`, `--effort <level>`, `--dry-run`, `--keep-patch`, `--verbose`
+- **flags**: `--wait`, `--background`, `--scope <kind>`, `--commit <ref>`, `--base <ref>`, `--model <name>`, `--effort <level>`, `--dry-run`, `--keep-patch`, `--verbose`
 
 doc 경로 0개 → 아래 안내 후 종료:
 ```
@@ -38,6 +38,8 @@ doc 경로 0개 → 아래 안내 후 종료:
 - 합산 200KB 초과 시 경고 + `AskUserQuestion` ("진행" / "중단") — `DocTooBigError`는 Python이 처리하지만 사전에 경고.
 
 ### Step 3 — 실행 모드 결정
+
+> `--commit <ref>` 가 있으면 scope 결정(working-tree/branch)을 건너뛰고 그 커밋 diff 를 대상으로 한다 (`--scope`/`--base` 무시). no-worktree forge 처럼 변경이 이미 커밋된 경우 `feat` 커밋 sha 를 지목해 그 노드만 doc 과 대조.
 
 인자에 `--wait` → **foreground** (Python에 flag 미전달).
 인자에 `--background` → **background** (`--background` Python에 전달).
@@ -61,10 +63,10 @@ python scripts/doc_driven_review.py \
 ```
 
 - `--wait` (또는 결정 후 foreground): `Bash` 일반 호출.
-- `--background` (또는 결정 후 background): `Bash(run_in_background: true)` + 사용자에게 안내:
+- `--background` (또는 결정 후 background): 스크립트가 자기 자신을 **foreground로 detached 재실행**한다 (child가 codex→스키마검증→인용검증→`.review/` 저장 전 과정 수행). `Bash` 일반 호출로 충분 — 스크립트가 즉시 PID+Log 경로를 출력하고 반환한다. 사용자에게 안내:
   ```
   Codex 리뷰가 백그라운드에서 시작됐습니다.
-  완료 후 스크립트가 출력한 Log 경로를 확인하세요.
+  완료 후 처리된 리뷰(스키마검증·Conformance·인용검증 포함)가 Log 경로와 .review/ 에 저장됩니다.
   ```
 
 ### Step 5 — 출력 처리
@@ -106,6 +108,7 @@ Python 스크립트 종료 코드별 대응:
 | `--scope auto\|working-tree\|branch` | `auto` | 리뷰 범위 |
 | `--worktree <branch\|path>` | — | 대상 워크트리 지정. branch명 또는 경로. linked worktree(forge-scope) 사용 시 권장. `--repo-root` 와 mutex |
 | `--base <ref>` | 자동 추정 | branch scope 기준점 |
+| `--commit <ref>` | — | 특정 커밋(또는 `A..B` 범위) 지목. 그 변경분만 doc 대조. working-tree/branch·`--base` 우회. no-worktree forge 산출(현재 브랜치 커밋) 검토에 유용 |
 | `--model <name>` | 기본 | codex 모델 선택 |
 | `--effort minimal\|low\|medium\|high\|xhigh` | 기본 | codex 추론 수준 |
 | `--dry-run` | — | Codex 미호출, 생성 프롬프트만 출력 |
@@ -183,13 +186,21 @@ Conformance: <0-100>%
   - `--no-auto-context`로 비활성
   - Cross-file ripple 분석 시 patch + UNCHANGED CONTEXT 모두 참조
 
+### 인용 검증 (Python 후처리)
+
+- Codex 출력의 인용 `file:line` (Requirements Coverage 코드 위치 + Review Comments Location)을 **Python이 repo에 대조**한다.
+- 파일 부재 또는 라인 범위 초과 시 출력·`.review/` 에 `[doc-driven-review] CITATION-CHECK: N건 미검증 — …` 라인 추가 (advisory, exit code 불변).
+- `MISSING`/`No callers` 등 비-경로 표기는 자동 제외. 정적 검증(파일 존재 + 라인 수)만 — 의미적 정확성은 보장 안 함.
+- background 모드도 동일 후처리 거침(fg와 동등).
+
 ---
 
 ## 한계
 
 - **Codex CLI 의존** — 미설치 시 exit 2.
 - **출력 schema soft enforce** — 프롬프트 엄격화 + Python validator. Codex가 schema 위반하면 verbatim + `[OUTPUT-SCHEMA-VIOLATION: ...]` 라인 추가 (재호출은 사용자 판단).
+- **인용 검증은 정적** — 파일 존재 + 라인 수만 확인. 인용이 의미적으로 옳은지(해당 라인이 실제 그 코드인지)는 미보장.
 - **50,000라인 초과 경고** — 단일 청크 + 경고 출력. 분석 정확도 낮을 수 있음.
-- **`/codex:status` 비호환** — background는 자체 PID + log 파일 추적.
+- **background = detached foreground** — fg와 동일 산출(스키마검증·`.review/`·Conformance·인용검증). 부모는 PID+log 즉시 반환. 오래된 bg 로그·stale patch 는 7일 경과 시 자동 정리. `/codex:status` 비호환 — 자체 PID + log 파일 추적.
 - **read-only** — 자동 수정 안 함.
 - **단일 레포만** — submodule / multi-repo 미지원.
