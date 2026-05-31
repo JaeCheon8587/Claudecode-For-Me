@@ -6,7 +6,7 @@
 |---|---|
 | 문서 ID | DEVELOPMENT_PIPELINE (단일 파일) |
 | 버전 | 0.1 (Draft) |
-| 작성 가정 | 기존 스킬(grill-me/meta-prompter/docs-add-frd/docs-add-task/forge-scope/doc-driven-review) 실존. v0.7 per-App SSOT 체계 전제 |
+| 작성 가정 | 기존 스킬(grill-me/meta-prompter/docs-add-task/forge-scope/doc-driven-review) 실존. v0.7 per-App SSOT 체계 전제 |
 | 관련 문서 | [DOCUMENT_GUIDE](.templates/DOCUMENT_GUIDE.md) · [CLAUDE](../CLAUDE.md) |
 
 ## 변경 이력
@@ -27,11 +27,8 @@
 ```mermaid
 flowchart TD
     A["1. grill-me<br/>요구사항 구체화"] --> B["2. meta-prompter<br/>설계 프롬프트 정제"]
-    B --> C{"3. 신규 기능?"}
-    C -->|신규| D["docs-add-frd<br/>FRD + ADR 생성"]
-    C -->|기존 수정·refactor| E["docs-add-task<br/>TASK + ADR 생성"]
-    D --> F["4. forge-scope<br/>문서 기반 개발"]
-    E --> F
+    B --> C["3. docs-add-task<br/>NEW/CHANGE 자동 분기"]
+    C --> F["4. forge-scope<br/>문서 기반 개발"]
     F --> G["5. doc-driven-review<br/>Codex 문서 기준 검증"]
     G --> H["6. 반영<br/>리뷰 결과 코드/문서 반영"]
     H -.->|향후: 재검토 루프| G
@@ -43,20 +40,20 @@ flowchart TD
 |---|---|---|---|---|
 | 1 | `grill-me` | 거친 아이디어/계획 | 합의된 요구사항 (대화형) | 모호함을 집요한 질문으로 구체화. 논리 공백 지적 |
 | 2 | `meta-prompter` | grill-me 결과 (요구사항) | 한국어 개조식 메타프롬프트 (마크다운 코드블록) | 요구사항을 다음 단계가 안정 수행할 구조화 프롬프트로 정제 |
-| 3a | `docs-add-frd` | **신규 기능** 자연어 프롬프트 | FRD + ADR 파일 생성, App-PRD §3.1/§7 갱신, FC 5축 표 행 추가, ADR-CATALOG Proposed 행 | 신규 기능 설계 문서 in-place 작성 |
-| 3b | `docs-add-task` | **기존 수정/refactor** 자연어 프롬프트 | TASK + ADR 생성, 영향 FRD 자동 식별·갱신, FC 행 상태 갱신, ADR-CATALOG 행 | 기존 기능 변경 작업 지시서 작성 |
+| 3 | `docs-add-task` | 자연어 프롬프트 (신규 또는 기존 수정) | **NEW**: FRD 신규 + TASK + ADR, App-PRD §3.1/§7 갱신, FC 5표 행 추가 / **CHANGE**: TASK + ADR, 영향 FRD 자동 식별·갱신, FC 행 상태 갱신. 양 모드 ADR-CATALOG Proposed 행 | 모드 자동 판정 후 설계 문서 in-place 작성 |
 | 4 | `forge-scope` | doc-path + 프롬프트 | `phases/scoped/<phase-dir>/index.json` + `step{N}.md` + 코드 | 설계 문서 기반 경량 scoped 개발 실행 |
 | 5 | `doc-driven-review` | doc-path (1개 이상) | Missing / Improve / Overengineered / Conformance(%) | Codex 위임 — 문서가 코드 변경점에 반영됐는지 검증 |
 | 6 | (수동) | 리뷰 결과 | 반영된 코드/문서 | Missing 보강, Overengineered 제거, Improve 판단 반영 |
 
 ## 3. 분기 규칙 (step 3)
 
-step3 은 **신규 기능 vs 기존 변경**으로 갈린다. 판정 기준:
+step3 `docs-add-task` 는 **단일 진입점**. 내부에서 **NEW vs CHANGE** 모드로 자동 분기 (`parse-fc` 영향 FRD 식별 기반):
 
-- **신규 기능** → `docs-add-frd`. 해당 App `{App}-FC.md` 5축 표에 대응 기능 행이 **없음**. 새 FRD + ADR 동반 생성.
-- **기존 수정/개선/refactor** → `docs-add-task`. FC 에 이미 기능 행 **존재**. AI 가 FC 파싱해 영향 FRD 다수 자동 식별 후 TASK + ADR 생성.
+- **NEW 모드** (신규 기능) → 해당 App `{App}-FC.md` 5축 표에 대응 기능 행 **없음**. 새 FRD 20절 + TASK + ADR 동반 생성, App-PRD §3.1/§7 갱신, FC 5표 행 추가.
+- **CHANGE 모드** (기존 수정/개선/refactor) → FC 에 이미 기능 행 **존재** (또는 운영성 work_type). AI 가 FC 파싱해 영향 FRD 다수 자동 식별 후 TASK + ADR 생성, 영향 FRD 갱신.
+- 영향 FRD 0건이어도 자동 NEW 강행 X — 사용자 확인 1회.
 
-두 스킬 모두 v0.7 전용, in-place 수정, ADR 1개 강제 동반. TASK 는 휘발성 + 외부 SSOT 인용 금지 ([DOCUMENT_GUIDE §1.2](.templates/DOCUMENT_GUIDE.md) 룰).
+양 모드 모두 v0.7 전용, in-place 수정, **TASK + ADR 항상 동반** (Backlog 모드 예외). TASK 는 휘발성 + 외부 SSOT 인용 금지 ([DOCUMENT_GUIDE §1.2](.templates/DOCUMENT_GUIDE.md) 룰).
 
 ## 4. 데이터 흐름 / SSOT
 

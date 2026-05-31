@@ -89,22 +89,21 @@ pip install -U codenavigator
 
 ## 5. 플러그인 구성요소
 
-### Skill 10종
+### Skill 9종
 
 | Skill | 슬래시 커맨드 | 역할 |
 |---|---|---|
 | `branch-review` | `/claudecode-for-me:branch-review [ref]` | HEAD↔ref diff을 Standards/Spec 2축 병렬 검토 |
 | `codenav-frontmatter-gen` | `/claudecode-for-me:codenav-frontmatter-gen [--limit N] [--apply]` | C# 클래스 description 빈칸을 AI로 일괄 채워 `// ---` frontmatter 블록 삽입 |
 | `doc-driven-review` | `/claudecode-for-me:doc-driven-review <doc-path>... [--worktree <ref>]` | 첨부 문서 기준 working-tree 변경을 Codex CLI로 검증. Missing/Improve/Overengineered + Conformance(%) 보고. forge-scope linked worktree 지원 |
-| `docs-add-frd` | `/claudecode-for-me:docs-add-frd [요청]` | v0.7 per-App 신규 기능 FRD + ADR 생성, PRD/FC/ADR-CATALOG 갱신 |
-| `docs-add-task` | `/claudecode-for-me:docs-add-task [요청]` | v0.7 per-App 기존 기능 수정 TASK + ADR 생성, FC/영향 FRD/ADR-CATALOG 갱신 |
+| `docs-add-task` | `/claudecode-for-me:docs-add-task [요청]` | v0.7 per-App 신규/기존 자동 판정 — 신규 FRD 생성(NEW) 또는 기존 영향 FRD 갱신(CHANGE), TASK + ADR 항상 생성, FC/PRD/ADR-CATALOG 갱신 |
 | `forge-cancel` | `/claudecode-for-me:forge-cancel <phase>` | forge phase 브랜치·산출물 정리 |
 | `forge-full` | `/claudecode-for-me:forge-full <phase>` | 문서 기반 전체 프로젝트 구현 phase runner |
 | `forge-scope` | `/claudecode-for-me:forge-scope <prompt>` | 단일 FRD·기능·버그픽스용 경량 phase runner |
 | `grill-me` | `/claudecode-for-me:grill-me [주제]` | 1문 1답으로 요구사항 모호점 추적 |
 | `meta-prompter` | `/claudecode-for-me:meta-prompter [요청]` | 거친 요청 → 구조화된 메타 프롬프트 |
 
-### Command 13종
+### Command 12종
 
 | Command | 설명 |
 |---|---|
@@ -114,8 +113,7 @@ pip install -U codenavigator
 | `codenav-install` | 프로젝트 루트의 `tools/codenavigator/` 폴더에 codenavigator (PyPI) 격리 설치 + `codenav.ps1/codenav.sh` launcher + `.gitignore` 자동 작성 + `docs/codenav-guide.md` 작성 + 루트 `CLAUDE.md` 링크 셋업 |
 | `doc-driven-review` | doc-driven-review skill 진입. Codex CLI 위임 read-only 리뷰. `--worktree <branch\|path>` 로 linked worktree 지정 가능 |
 | `commit-analysis` | 변경 분석 후 `[ADD]`/`[MOD]`/`[FIX]` 자동 판단 한글 커밋 생성 |
-| `docs-add-frd` | docs-add-frd skill 진입 (신규 기능 FRD + ADR) |
-| `docs-add-task` | docs-add-task skill 진입 (기존 기능 수정 TASK + ADR) |
+| `docs-add-task` | docs-add-task skill 진입 (NEW=신규 FRD / CHANGE=기존 수정, TASK + ADR 항상) |
 | `forge-cancel` | forge-cancel skill 진입 |
 | `forge-full` | forge-full skill 진입 |
 | `forge-scope` | forge-scope skill 진입 |
@@ -195,18 +193,19 @@ codenav --root <repo> ui --port 9876
 
 상세는 [codenavigator README](https://github.com/JaeCheon8587/codenavigator#readme) 및 [frontmatter 규약](https://github.com/JaeCheon8587/codenavigator/blob/main/docs/frontmatter.md) 참조.
 
-### 6.3 docs-add-frd / docs-add-task (v0.7 per-App SSOT)
+### 6.3 docs-add-task (v0.7 per-App SSOT, NEW/CHANGE 통합)
 
 ```
-/claudecode-for-me:docs-add-frd 주문 검색 기능 추가
-/claudecode-for-me:docs-add-task 주문 검색에 cursor 페이지네이션 추가
+/claudecode-for-me:docs-add-task 주문 검색 기능 추가              # NEW — 신규 기능
+/claudecode-for-me:docs-add-task 주문 검색에 cursor 페이지네이션 추가  # CHANGE — 기존 수정
 ```
 
 - **v0.7 per-App 전용** — `docs/.templates/App/` 양식 (20 section FRD, 5 표 FC, ADR/ADR-CATALOG/TASK)
 - **In-place 수정** — source repo 직접 쓰기. preview 없음.
-- **ADR 항상 강제** — FRD 또는 TASK 1개 = ADR 1개 동반 (결정 없으면 placeholder 자동)
-- **/docs-add-frd**: 신규 기능 — FRD + ADR 생성, App-PRD §3.1·§7 갱신, FC 5표 행 추가, ADR-CATALOG Proposed +1
-- **/docs-add-task**: 기존 기능 수정/refactor — TASK + ADR 생성, AI 가 FC 보고 영향 FRD 다수 자동 식별, 영향 FRD 변경 이력 + section 갱신, FC 상태 갱신, ADR-CATALOG Proposed +1
+- **모드 자동 판정** — `parse-fc` 영향 FRD 식별 → 0건+신규=**NEW**, ≥1건/운영성=**CHANGE**. 0건이어도 사용자 확인 1회 (자동 NEW 강행 X).
+- **TASK + ADR 항상 생성** — 양 모드 공통 (Backlog 모드만 예외). 결정 없으면 placeholder 자동.
+- **NEW 모드** (신규 기능): FRD 20절 신규 생성 + TASK + ADR, App-PRD §3.1·§7 갱신, FC 5표 행 추가, ADR-CATALOG Proposed +1
+- **CHANGE 모드** (기존 수정/refactor): TASK + ADR 생성, AI 가 FC 보고 영향 FRD 다수 자동 식별, 영향 FRD 변경 이력 + section 갱신, FC 상태 갱신, ADR-CATALOG Proposed +1
 - **TASK 양방향 인용 금지** (v0.7) — TASK 본문 ↔ 영구 SSOT 마크다운 링크 X
 - **자기 검증** — 쓰기 후 `python scripts/docs_helpers.py check --repo .` 자동
 - Python helper (read-only): `python scripts/docs_helpers.py {list-apps|next-id|parse-fc|parse-frd|git-user|check}`
@@ -469,7 +468,6 @@ Claudecode-For-Me/
 │   ├── branch-review/
 │   ├── codenav-frontmatter-gen/
 │   ├── doc-driven-review/
-│   ├── docs-add-frd/
 │   ├── docs-add-task/
 │   ├── forge-cancel/
 │   ├── forge-full/
@@ -486,7 +484,6 @@ Claudecode-For-Me/
 │   ├── codenav-install.md
 │   ├── commit-analysis.md
 │   ├── doc-driven-review.md
-│   ├── docs-add-frd.md
 │   ├── docs-add-task.md
 │   ├── forge-cancel.md
 │   ├── forge-full.md
@@ -518,7 +515,7 @@ Claudecode-For-Me/
 | install 직후 슬래시 자동완성에 안 보임 | 매니페스트는 세션 시작 시 1회 로드 | 세션 종료 → 재시작 |
 | update 후 신규 스킬 호출 불가 | 동일 — 캐시는 갱신됐으나 세션은 구버전 보유 | 세션 재시작 |
 | `/claudecode-for-me:forge-*` 실행 즉시 종료 | `FORGE_TRUST` 미설정 | `FORGE_TRUST=1` 또는 `--trust` |
-| `docs-add-frd` / `docs-add-task` "App 0건" | `/CLAUDE.md` Backend Services Overview 표 + `docs/<App>/` 부재 | App 행 추가 + 폴더 부트스트랩 |
+| `docs-add-task` "App 0건" | `/CLAUDE.md` Backend Services Overview 표 + `docs/<App>/` 부재 | App 행 추가 + 폴더 부트스트랩 |
 | `codenav frontmatter gen` 결과 `generated=0` | `claude` CLI 부재 또는 stdout JSON 키 mismatch | `where claude` 확인. v1.15.0+ 는 `result`/`response` 둘 다 처리 |
 | `codenav frontmatter gen` "git working tree is dirty" 거부 | 안전장치 | commit/stash 또는 `--allow-dirty` |
 | `codenav ui --port 8765` 실행 시 `WinError 10013` | Windows excluded port range (8601-8900 등) | 다른 포트 사용 (예: `--port 9876`). `netsh interface ipv4 show excludedportrange protocol=tcp` 로 확인 |
