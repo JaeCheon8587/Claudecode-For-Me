@@ -34,6 +34,7 @@ import os
 import re
 import shutil
 import signal
+import stat as _stat
 import subprocess
 import threading
 import time
@@ -606,6 +607,32 @@ class ClaudeInvoker:
             return cls.DEFAULT_TIMEOUT_SEC
 
 
+def _is_dir_link(p: Path) -> bool:
+    """junction(Windows reparse) 또는 symlink면 True."""
+    try:
+        if p.is_symlink():
+            return True
+        if os.name == "nt":
+            attrs = p.lstat().st_file_attributes  # type: ignore[attr-defined]
+            return bool(attrs & _stat.FILE_ATTRIBUTE_REPARSE_POINT)
+    except (OSError, AttributeError):
+        return False
+    return False
+
+
+def _make_dir_link(src: Path, dst: Path) -> None:
+    """dst → src 디렉토리 링크. Windows=junction(mklink /J, 관리자 불필요), Unix=symlink."""
+    if os.name == "nt":
+        r = subprocess.run(
+            ["cmd", "/c", "mklink", "/J", str(dst), str(src)],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+        )
+        if r.returncode != 0:
+            raise OSError(r.stderr.strip() or r.stdout.strip() or "mklink /J 실패")
+    else:
+        os.symlink(src, dst, target_is_directory=True)
+
+
 # ============================================================================
 # WorktreeManager — phase별 .worktrees/<phase>/ 격리 작업 트리 보장
 # ============================================================================
@@ -709,19 +736,51 @@ class WorktreeManager:
             errors="replace",
         )
 
+    def _submodule_entries(self) -> list[tuple[str, str]]:
+        """워크트리 .gitmodules 에서 (submodule name, path) 목록."""
+        gm = self._worktree_path / ".gitmodules"
+        r = self._git("config", "-f", str(gm), "--get-regexp", r"submodule\..*\.path")
+        out: list[tuple[str, str]] = []
+        for line in r.stdout.splitlines():
+            key, _, path = line.partition(" ")
+            # key = submodule.<name>.path
+            name = key[len("submodule."):-len(".path")] if key.startswith("submodule.") else ""
+            if name and path.strip():
+                out.append((name, path.strip()))
+        return out
+
     def _ensure_submodules(self) -> None:
+        """워크트리 서브모듈을 메인 repo의 populate된 서브모듈로 링크(junction/symlink).
+
+        git submodule update 를 쓰지 않는다 — 네트워크/내부망 의존 없이 메인 working files 를
+        공유한다. 링크 후 submodule.<name>.ignore=all 로 status/commit 에서 무시되게 해
+        dirty 가드 트립과 gitlink churn 을 막는다.
+        """
         if not (self._worktree_path / ".gitmodules").exists():
             return
-        r = subprocess.run(
-            ["git", "submodule", "update", "--init", "--recursive"],
-            cwd=self._worktree_path,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-        )
-        if r.returncode != 0:
-            _qprint(f"  Submodule init 경고: {r.stderr.strip()}")
+        for name, rel in self._submodule_entries():
+            src = self._main_root / rel
+            dst = self._worktree_path / rel
+            if not src.is_dir() or not any(src.iterdir()):
+                _qprint(f"  Submodule 링크 skip (메인 미populate): {rel}")
+                continue
+            try:
+                if _is_dir_link(dst):
+                    _qprint(f"  Submodule 링크 재사용: {rel}")
+                else:
+                    if dst.exists():
+                        os.rmdir(dst)  # 빈 gitlink 디렉토리 (내용 있으면 OSError→skip)
+                    dst.parent.mkdir(parents=True, exist_ok=True)
+                    _make_dir_link(src, dst)
+                    _qprint(f"  Submodule 링크: {rel} → 메인")
+                # status/commit 에서 서브모듈 무시 (dirty 가드·gitlink churn 방지)
+                subprocess.run(
+                    ["git", "config", f"submodule.{name}.ignore", "all"],
+                    cwd=self._worktree_path, capture_output=True, text=True,
+                    encoding="utf-8", errors="replace",
+                )
+            except OSError as e:
+                _qprint(f"  Submodule 링크 실패(무시): {rel} — {e}")
 
 
 # ============================================================================

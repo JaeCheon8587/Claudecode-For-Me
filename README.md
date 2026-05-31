@@ -302,6 +302,7 @@ codenav --root <repo> ui --port 9876
 - `--preset=contract-tdd`는 .sln 필요. `--sln=<path>` 명시 또는 `Src/*.sln` / `Src/*/*.sln` 단일 자동 감지. 다수 sln 있으면 명시 강제.
 - step timestamp **KST(UTC+9) 고정**.
 - step.md 5개 헤딩 **한국어 고정**.
+- **워크트리 서브모듈**: `git submodule update`(네트워크) 대신 **메인 repo 서브모듈을 junction/symlink 로 링크** → 오프라인·내부망 동작. `submodule.<name>.ignore=all` 로 커밋/상태 무시(feat 커밋엔 코드만). 메인 미populate면 skip. `forge_cancel` 이 링크 먼저 제거(메인 보존).
 
 #### .gitignore 권장
 

@@ -105,6 +105,8 @@ forge_scope.py는 git worktree 기반으로 동작하므로 git repo 없이는 �
 
 **메인 repo의 작업 트리는 영향을 받지 않는다.** 부모 Claude Code 세션은 메인 repo에 머문다. 완료 후 결과 확인·머지는 워크트리(`.worktrees/<phase-dir>/`)로 이동하거나, 메인에서 `git diff feat-<phase-dir>` / `git merge feat-<phase-dir>`로 수행한다.
 
+> **서브모듈**: 워크트리 서브모듈은 `git submodule update`(네트워크 의존) 대신 **메인 repo 서브모듈을 junction(Windows)/symlink(Unix)로 링크**해 가져온다 → 오프라인·내부망에서도 동작. 링크 후 `submodule.<name>.ignore=all` 설정으로 status/commit 에서 무시(dirty 가드 트립·gitlink churn 방지, feat 커밋엔 코드만). 메인 미populate면 skip. 정리 시 `forge_cancel.py` 가 링크를 먼저 제거(메인 타깃 보존).
+
 워크트리는 phase 완료 후에도 유지된다. 정리는 사용자가 명시적으로 수행한다:
 
 ```bash

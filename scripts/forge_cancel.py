@@ -9,6 +9,7 @@ Usage:
 
 import argparse
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -172,6 +173,37 @@ def _cancel_scoped_inplace(args: argparse.Namespace, scoped_dir: Path) -> int:
     return EXIT_OK
 
 
+def _unlink_submodule_links(worktree: Path) -> None:
+    """워크트리 서브모듈 junction/symlink 를 링크만 제거(메인 타깃 보존).
+
+    rmtree/worktree remove 가 junction 을 따라가 메인 서브모듈을 삭제하는 사고를 막는다.
+    """
+    gm = worktree / ".gitmodules"
+    if not gm.exists():
+        return
+    r = subprocess.run(
+        ["git", "config", "-f", str(gm), "--get-regexp", r"submodule\..*\.path"],
+        cwd=worktree, capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    for line in r.stdout.splitlines():
+        _, _, path = line.partition(" ")
+        path = path.strip()
+        if not path:
+            continue
+        p = worktree / path
+        try:
+            is_link = p.is_symlink() or (
+                os.name == "nt" and bool(p.lstat().st_file_attributes & 0x400)  # REPARSE_POINT
+            )
+        except (OSError, AttributeError):
+            is_link = False
+        if is_link:
+            try:
+                os.rmdir(p) if os.name == "nt" else p.unlink()
+            except OSError:
+                pass
+
+
 def _cancel_scoped(args: argparse.Namespace) -> int:
     branch = f"feat-{args.phase_dir}"
     worktree = _worktree_path(args.phase_dir)
@@ -209,6 +241,8 @@ def _cancel_scoped(args: argparse.Namespace) -> int:
     if registered is not None or worktree.exists():
         target = registered if registered is not None else worktree
         dirty = registered is not None and _worktree_dirty(registered)
+        # 서브모듈 junction/symlink 먼저 제거 — rmtree/worktree remove 가 메인 타깃 따라가 삭제하는 사고 방지
+        _unlink_submodule_links(target)
         if (target / ".gitmodules").exists():
             subprocess.run(
                 ["git", "submodule", "deinit", "-f", "--all"],
