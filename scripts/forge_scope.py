@@ -51,7 +51,7 @@ log = logging.getLogger("forge_scope")
 PHASE_NAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 STEP_NAME_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 STEP_FILE_RE = re.compile(r"^step\d+\.md$")
-DOC_REL_RE = re.compile(r"^docs/[A-Za-z0-9._/-]+\.md$")
+DOC_REL_RE = re.compile(r"^[Dd]ocs/[A-Za-z0-9._/-]+\.md$")
 ALLOWED_STATUS = frozenset({"pending", "completed", "error", "blocked", "interrupted"})
 PROMPT_ARGV_LIMIT = 8_000 if os.name == "nt" else 100_000
 PLACEHOLDER_RE = re.compile(r"\{[^}\n]+\}")
@@ -64,6 +64,20 @@ COMPACT_DOC_BYTES_LIMIT = 24_000
 TZ = timezone(timedelta(hours=9))
 EXIT_OK, EXIT_ERR, EXIT_BLOCKED, EXIT_KBI = 0, 1, 2, 130
 VALID_PRESETS = frozenset({"auto", "frd-implementation", "contract-tdd"})
+
+
+def _docs_dirname(root: Path) -> str:
+    """디스크상의 실제 docs 디렉토리 이름('docs' 또는 'Docs')을 반환.
+
+    대소문자 무시 FS(Windows)에서도 os.scandir는 저장된 실제 이름을 보고하므로 정확하다.
+    둘 다 없으면 기본값 'docs'."""
+    try:
+        for e in os.scandir(root):
+            if e.is_dir() and e.name in ("docs", "Docs"):
+                return e.name
+    except OSError:
+        pass
+    return "docs"
 
 
 class SlnResolveError(RuntimeError):
@@ -375,7 +389,7 @@ class ScopeValidator:
         if root is None:
             root = ROOT
         self._root = root.resolve()
-        self._docs_root = (root / "docs").resolve()
+        self._docs_root = (root / _docs_dirname(root)).resolve()
 
     def validate_many(self, entries: Iterable[str]) -> list[Path]:
         """모든 항목을 검증하여 절대 경로 리스트를 반환한다. 첫 위반 시 ValueError."""
@@ -532,7 +546,7 @@ class ClaudeInvoker:
         return self._execute(cmd, stdin_input)
 
     def _build_cmd(self) -> list[str]:
-        cmd = ["claude", "-p"]
+        cmd = [shutil.which("claude") or "claude", "-p"]
         if self._use_bare and _bare_is_safe():
             cmd.append("--bare")
         if self._trust and not _is_nested_under_claude():
@@ -2220,7 +2234,7 @@ class ForgeScope:
         체크아웃되어 CLAUDE.md/docs 등이 누락된다. ROOT(=main repo)에서 자동으로 복사한 뒤
         여전히 없으면 fail-fast로 사용자에게 알린다.
         """
-        _BOOTSTRAP_PATHS = ["CLAUDE.md", "PHASE_SCHEMA.md", "FORGE_SCOPE.md", "docs"]
+        _BOOTSTRAP_PATHS = ["CLAUDE.md", "PHASE_SCHEMA.md", "FORGE_SCOPE.md", _docs_dirname(ROOT)]
         for rel in _BOOTSTRAP_PATHS:
             src = ROOT / rel
             if not src.exists():
