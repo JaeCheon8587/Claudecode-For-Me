@@ -14,6 +14,7 @@ argument-hint: "<doc-path> [추가 doc-path...] [--wait|--background] [--scope w
 - **Codex CLI 필요** — `codex --version` 동작해야 함. 없으면 Step 5에서 `/codex:setup` 안내.
 - Git 레포 안에서만 동작.
 - Python 3.9+ — forge-* 스킬과 동일 의존.
+- **스크립트 미부트스트랩** — `doc_driven_review.py` 는 forge-* 와 달리 consumer repo `./scripts/` 로 복사하지 않고 플러그인 설치 경로(`${CLAUDE_PLUGIN_ROOT}/scripts/`)에서 in-place 실행한다 (cwd 는 대상 repo 유지). self-contained — 다른 스크립트를 import 하지 않음.
 
 ---
 
@@ -52,8 +53,12 @@ doc 경로 0개 → 아래 안내 후 종료:
 
 ### Step 4 — Python 스크립트 호출
 
+스크립트는 **부트스트랩하지 않는다** (read-only 도구 — consumer repo 를 오염시키지 않음). 실행 직전 경로를 결정한다: dev repo(로컬 `./scripts/` 보유)면 로컬, 아니면 플러그인 설치 경로(`${CLAUDE_PLUGIN_ROOT}`, Claude Code 자동 주입 — forge-* 와 동일 컨벤션):
+
 ```bash
-python scripts/doc_driven_review.py \
+SCRIPT="scripts/doc_driven_review.py"
+[ -f "$SCRIPT" ] || SCRIPT="${CLAUDE_PLUGIN_ROOT}/scripts/doc_driven_review.py"
+python "$SCRIPT" \
   --docs <p1> [<p2>...] \
   [--scope <kind>] \
   [--base <ref>] \
@@ -61,6 +66,8 @@ python scripts/doc_driven_review.py \
   [--effort <level>] \
   [--background]
 ```
+
+- **cwd 는 consumer repo 유지** — 스크립트는 cwd 로 git·repo-root·`--docs`·`--worktree` 를 해석하므로, 스크립트 파일 위치만 플러그인 경로면 된다. (`${CLAUDE_PLUGIN_ROOT}` 미주입 시 로컬 `./scripts/` fallback.)
 
 - `--wait` (또는 결정 후 foreground): `Bash` 일반 호출.
 - `--background` (또는 결정 후 background): 스크립트가 자기 자신을 **foreground로 detached 재실행**한다 (child가 codex→스키마검증→인용검증→`.review/` 저장 전 과정 수행). `Bash` 일반 호출로 충분 — 스크립트가 즉시 PID+Log 경로를 출력하고 반환한다. 사용자에게 안내:
