@@ -527,6 +527,7 @@ class ClaudeInvoker:
         use_session: bool = False,
         use_bare: bool = False,
         model: Optional[str] = None,
+        effort: Optional[str] = None,
     ):
         self._trust = trust
         self._cwd = cwd if cwd is not None else ROOT
@@ -538,6 +539,7 @@ class ClaudeInvoker:
         self._use_session = use_session
         self._use_bare = use_bare
         self._model = model
+        self._effort = effort  # claude --effort (low|medium|high|xhigh|max). None이면 미부여(세션 기본).
         self._first_session_call = True
 
     def call(self, prompt: str) -> tuple[int, str, str]:
@@ -554,6 +556,8 @@ class ClaudeInvoker:
         cmd += ["--output-format", "json"]
         if self._model:
             cmd += ["--model", self._model]
+        if self._effort:
+            cmd += ["--effort", self._effort]
         if self._use_session and self._session_id:
             if self._first_session_call:
                 cmd += ["--session-id", self._session_id]
@@ -2279,17 +2283,21 @@ class ForgeScope:
         # - step_invoker: phase 단위 UUID로 세션 공유. step 0 첫 호출 시 가드레일이
         #   conversation에 캐시되고, step 1+에서 -r로 이어 받아 cache_read 적중.
         # cwd=worktree_root 명시로 자식 claude가 워크트리에서 파일 I/O 수행.
-        self._splitter_invoker = ClaudeInvoker(trust=trust, use_bare=True, cwd=worktree_root)
+        # splitter·step 모두 Opus 4.8 + effort high 가 기본 (--step-model/--step-effort 로 override).
+        step_model = getattr(args, "step_model", None) or "claude-opus-4-8"
+        step_effort = getattr(args, "step_effort", None) or "high"
+        self._splitter_invoker = ClaudeInvoker(
+            trust=trust, use_bare=True, cwd=worktree_root,
+            model=step_model, effort=step_effort,
+        )
         self._phase_session_id = str(uuid.uuid4())
-        # step 실행은 명세된 step.md를 따라 코드 작성하는 작업이라 Sonnet 4.6으로 충분.
-        # Opus 대비 약 1/5 단가. splitter는 전체 설계 정확성이 필요하므로 Opus 유지.
-        step_model = getattr(args, "step_model", None) or "claude-sonnet-4-6"
         self._step_invoker = ClaudeInvoker(
             trust=trust,
             session_id=self._phase_session_id,
             use_session=True,
             use_bare=True,
             model=step_model,
+            effort=step_effort,
             cwd=worktree_root,
         )
         compact_docs = (
@@ -2741,7 +2749,8 @@ class ForgeScope:
                 trust=_is_trusted(self._args.trust),
                 use_bare=True,
                 cwd=self._cfg.root,
-                model=getattr(self._args, "step_model", None) or "claude-sonnet-4-6",
+                model=getattr(self._args, "step_model", None) or "claude-opus-4-8",
+                effort=getattr(self._args, "step_effort", None) or "high",
             )
             for sha in feats:
                 diff = self._git.commit_diff(sha, 12_000)
@@ -2949,8 +2958,14 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--step-model",
-        default="claude-sonnet-4-6",
-        help=("step 실행에 사용할 Claude 모델 이름 (default: claude-sonnet-4-6). splitter는 항상 기본 Opus로 실행됨."),
+        default="claude-opus-4-8",
+        help=("splitter·step·commit-msg 실행에 사용할 Claude 모델 이름 (default: claude-opus-4-8)."),
+    )
+    parser.add_argument(
+        "--step-effort",
+        default="high",
+        choices=["low", "medium", "high", "xhigh", "max"],
+        help=("Claude --effort 레벨 (default: high). 지능↔토큰 트레이드오프 다이얼."),
     )
     parser.add_argument(
         "--quiet",

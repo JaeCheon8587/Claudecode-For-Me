@@ -84,7 +84,8 @@ python scripts/forge_scope.py <phase_dir> [options]
 | 플래그 | 타입 | 기본값 | 설명 |
 |---|---|---|---|
 | `--quiet` | bool | `false` | 부모 세션 stdout 누적 차단. 진행 표시기·헤더·step별 usage·plan 표 출력을 억제하고 phase 완료 한 줄 + 에러만 출력. **Claude Code 부모 세션에서 spawn할 때 필수.** |
-| `--step-model` | str | `claude-sonnet-4-6` | step 실행에 사용할 Claude 모델 이름. 더 싸게 돌리려면 `claude-haiku-4-5-20251001`. splitter는 본 옵션과 무관하게 항상 기본 Opus로 동작(splitter 우회 preset에서는 어차피 호출 안 됨). |
+| `--step-model` | str | `claude-opus-4-8` | splitter·step·commit-msg 실행에 사용할 Claude 모델 이름. 더 싸게 돌리려면 `claude-sonnet-4-6`/`claude-haiku-4-5-20251001`. |
+| `--step-effort` | str | `high` | Claude `--effort` 레벨 (`low`/`medium`/`high`/`xhigh`/`max`). 지능↔토큰 트레이드오프 다이얼. |
 | `--compact-docs` | bool | (자동) | §2.3 참고. 토큰 절감 항목으로도 분류. |
 
 ### 2.6 git 부수 동작

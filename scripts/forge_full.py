@@ -40,6 +40,9 @@ PLACEHOLDER_RE = re.compile(r"\{[^}\n]+\}")
 VALID_PRESETS = frozenset({"auto", "contract-tdd"})
 VALID_docs_MODES = frozenset({"root", "recursive", "explicit"})
 DEFAULT_MAX_GUARDRAIL_BYTES = 120_000
+# forge-full splitter·step 모두 Opus 4.8 + effort high 고정 (지능 최우선).
+FULL_CLAUDE_MODEL = "claude-opus-4-8"
+FULL_CLAUDE_EFFORT = "high"
 REQUIRED_STEP_HEADINGS = (
     "## 읽어야 할 파일",
     "## 작업",
@@ -548,7 +551,8 @@ class FullStepSplitter:
         )
 
     def _call_claude(self, prompt: str) -> str:
-        cmd = ["claude", "-p", "--dangerously-skip-permissions", "--output-format", "json"]
+        cmd = ["claude", "-p", "--dangerously-skip-permissions", "--output-format", "json",
+               "--model", FULL_CLAUDE_MODEL, "--effort", FULL_CLAUDE_EFFORT]
         stdin_input = prompt if len(prompt) > PROMPT_ARGV_LIMIT else None
         if stdin_input is None:
             cmd.append(prompt)
@@ -988,7 +992,8 @@ class StepExecutor:
 
     def _build_claude_invocation(self, prompt: str):
         """C7: 긴 prompt는 stdin, 짧은 prompt는 argv. (cmd, stdin_input) 튜플 반환."""
-        base_cmd = ["claude", "-p", "--dangerously-skip-permissions", "--output-format", "json"]
+        base_cmd = ["claude", "-p", "--dangerously-skip-permissions", "--output-format", "json",
+                    "--model", FULL_CLAUDE_MODEL, "--effort", FULL_CLAUDE_EFFORT]
         if len(prompt) > PROMPT_ARGV_LIMIT:
             return base_cmd, prompt
         return base_cmd + [prompt], None

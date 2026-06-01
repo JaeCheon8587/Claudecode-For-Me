@@ -2,7 +2,7 @@
 
 > **Claude Code Plugin** · v2.5.1 · 커스텀 스킬 9종 + 슬래시 커맨드 12종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
-`/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
+`/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
 ---
 
@@ -89,13 +89,14 @@ pip install -U codenavigator
 
 ## 5. 플러그인 구성요소
 
-### Skill 9종
+### Skill 10종
 
 | Skill | 슬래시 커맨드 | 역할 |
 |---|---|---|
 | `branch-review` | `/claudecode-for-me:branch-review [ref]` | HEAD↔ref diff을 Standards/Spec 2축 병렬 검토 |
 | `codenav-frontmatter-gen` | `/claudecode-for-me:codenav-frontmatter-gen [--limit N] [--apply]` | C# 클래스 description 빈칸을 AI로 일괄 채워 `// ---` frontmatter 블록 삽입 |
 | `doc-driven-review` | `/claudecode-for-me:doc-driven-review <doc-path>... [--worktree <ref>] [--commit <ref>]` | 첨부 문서 기준 working-tree/커밋 변경을 Codex CLI로 검증. Missing/Improve/Overengineered + Conformance(%) + 인용검증 보고. linked worktree·커밋 노드 지목 지원 |
+| `ddr-loop` | `/claudecode-for-me:ddr-loop <doc-path>... [--worktree <ref>\|--commit <ref>] [--max-iter N] [--threshold P] [--commit-each]` | DDR(Codex 검증) ↔ fix(claude 수정) 수렴 루프. 임계(기본 95%) 또는 cap(기본 10회)까지 반복. 검증자=Codex / 수정자=Claude 분리 |
 | `docs-add-task` | `/claudecode-for-me:docs-add-task [요청]` | v0.7 per-App 신규/기존 자동 판정 — 신규 FRD 생성(NEW) 또는 기존 영향 FRD 갱신(CHANGE), TASK + ADR 항상 생성, FC/PRD/ADR-CATALOG 갱신 |
 | `forge-cancel` | `/claudecode-for-me:forge-cancel <phase>` | forge phase 브랜치·산출물 정리 |
 | `forge-full` | `/claudecode-for-me:forge-full <phase>` | 문서 기반 전체 프로젝트 구현 phase runner |
@@ -103,7 +104,7 @@ pip install -U codenavigator
 | `grill-me` | `/claudecode-for-me:grill-me [주제]` | 1문 1답으로 요구사항 모호점 추적 |
 | `meta-prompter` | `/claudecode-for-me:meta-prompter [요청]` | 거친 요청 → 구조화된 메타 프롬프트 |
 
-### Command 12종
+### Command 13종
 
 | Command | 설명 |
 |---|---|
@@ -112,6 +113,7 @@ pip install -U codenavigator
 | `codenav-frontmatter-gen` | codenav-frontmatter-gen skill 진입 (AI가 .cs에 frontmatter 영구 삽입). `--projects` / `--files` / `--staged` 스코프 인자 |
 | `codenav-install` | 프로젝트 루트의 `tools/codenavigator/` 폴더에 codenavigator (PyPI) 격리 설치 + `codenav.ps1/codenav.sh` launcher + `.gitignore` 자동 작성 + `docs/codenav-guide.md` 작성 + 루트 `CLAUDE.md` 링크 셋업 |
 | `doc-driven-review` | doc-driven-review skill 진입. Codex CLI 위임 read-only 리뷰. `--worktree <branch\|path>` linked worktree / `--commit <ref>` 커밋 노드 지목 지원 |
+| `ddr-loop` | ddr-loop skill 진입. DDR 검증↔claude 수정 수렴 루프. `--threshold`(기본 95%)/`--max-iter`(기본 10) cap. `--commit-each` 라운드 커밋 |
 | `commit-analysis` | 변경 분석 후 `[ADD]`/`[MOD]`/`[FIX]` 자동 판단 한글 커밋 생성 |
 | `docs-add-task` | docs-add-task skill 진입 (NEW=신규 FRD / CHANGE=기존 수정, TASK + ADR 항상) |
 | `forge-cancel` | forge-cancel skill 진입 |
@@ -280,7 +282,10 @@ codenav --root <repo> ui --port 9876
 | `--no-worktree` | 워크트리·`feat-<phase>` 브랜치 미생성. 메인 repo **현재 브랜치에서 직접** 실행(격리·머지 단계 없음). 시작 시 작업 트리 dirty면 중단(`--force` 우회). `--push` 는 현재 브랜치 push. 모든 preset과 직교 |
 | `--test-target=<csproj>` | 검증(`dotnet test`) 대상 테스트 프로젝트 1회 지정(휘발성). 풀 솔루션 빌드 회피. 우선순위: 이 플래그 > `forge-scope.json` `test_target` > `Src/Tests` 단일 자동감지 > 전체 sln |
 | `--no-ai-commit-msg` | phase 완료 후 feat(코드) 커밋 메시지를 AI로 repo 스타일 재작성하는 **기본 동작을 끈다**. 워크트리 모드 한정 |
+| `--step-model` | splitter·step·commit-msg 모델. 기본 `claude-opus-4-8` |
+| `--step-effort` | Claude `--effort` (`low\|medium\|high\|xhigh\|max`). 기본 `high` |
 
+- **모델·effort**: forge-scope 의 splitter/step/commit-msg claude 호출은 기본 **Opus 4.8 + effort high** (지능 최우선, `--step-model`/`--step-effort` 로 override). forge-full 은 **Opus 4.8 + high 고정**.
 - **빌드 스코프**: 검증은 풀 솔루션 `dotnet build` 대신 **대상 테스트 프로젝트만** `dotnet test`(빌드 겸함)로 좁혀 대규모 sln에서 시간 절감. `forge-scope.json` 에 `default_sln`/`test_target` 키로 고정 가능.
 - **AI 커밋 메시지 재작성** (기본 on): phase 완료 시 `feat` 커밋의 diff를 AI에 주고 repo 기존 커밋 subject 스타일로 메시지를 재작성한다. squash 안 함 — 커밋별 메시지만 교체하며 tree·author·date 보존, `chore` housekeeping 커밋은 템플릿 유지. 끄기: `--no-ai-commit-msg`. (워크트리 모드만 동작)
 
@@ -379,6 +384,36 @@ phases/
 - Codex CLI 필수. 미설치 시 exit 2. `/codex:setup` 안내.
 - patch + background log는 main repo `.git/info/` 공유 (파일명 unique로 동시 실행 안전).
 - submodule / multi-repo 미지원.
+
+---
+
+### 6.9 ddr-loop
+
+```
+/claudecode-for-me:ddr-loop docs/FRD/F003.md --worktree feat-login-feature
+/claudecode-for-me:ddr-loop docs/spec.md --threshold 90 --max-iter 5
+/claudecode-for-me:ddr-loop docs/TASK.md --commit <feat 커밋 sha> --commit-each
+/claudecode-for-me:ddr-loop docs/spec.md --dry-run
+```
+
+DDR은 read-only 검증기라 단독으로는 "검증 땡, 끝"이다. `ddr-loop`은 그 위에 **검증↔개선 수렴 루프**를 씌운다.
+
+- **루프**: `DDR(Codex 검증) → conformance < 임계? → fix(claude 수정) → 재검증` 을 임계(기본 95%) 또는 cap(기본 10회)까지 반복.
+- **검증자=Codex / 수정자=Claude 분리** — 한 모델이 짠 코드를 같은 모델이 채점하는 self-grading 마스킹 방지.
+- **재사용**: 검증은 `doc_driven_review.py` subprocess, 수정은 `forge_scope.py` 의 `ClaudeInvoker`(`claude -p`). 원본 스크립트 불변.
+- **스코프**: `--worktree <branch|path>`(forge 워크트리, 격리) / `--commit <ref>` / 미지정(현재 브랜치). DDR 스코프 플래그 그대로 통과.
+- **conformance 추출**: DDR stdout 의 `Conformance: N%` 마지막 매치(마지막 줄은 `Review saved:`).
+- **커밋**: 기본 미커밋 누적(DDR `auto` scope 가 포착) → `commit-analysis`/머지로 마무리. `--commit-each` 면 라운드별 `fix: ddr-loop iter N` 커밋.
+- **종료 리포트**: conformance 궤적(`62% → 79% → 90% → 96%`) + 수렴/cap 표시. cap 미달이면 남은 Top Priorities findings 인용.
+- **exit code**: 0=임계 도달 / 7=cap 도달·임계 미달 / 2=codex 미설치 / 3=리뷰할 변경 없음.
+- **fix 모델/effort**: 기본 `claude-sonnet-4-6` + `--effort high`. `--fix-model` / `--fix-effort`(low\|medium\|high\|xhigh\|max) 로 변경.
+- **`--dry-run`**: DDR 1회만 돌리고 fix 없이 conformance 출력.
+
+#### 한계
+
+- codex + claude CLI 둘 다 필수.
+- 수렴 보장 없음 — 해소 불가 항목은 cap 까지 돌고 exit 7. 정체 조기중단 없음(cap 이 backstop).
+- 단일 repo. `.review/` 보호는 fix 프롬프트 지시 의존(강제 아님).
 
 ---
 

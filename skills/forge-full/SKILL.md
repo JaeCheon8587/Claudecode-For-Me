@@ -86,6 +86,8 @@ forge_full.py의 브랜치 자동 생성(feat-<phase>) 및 커밋 기능이 실�
 `$ARGUMENTS` 를 그대로 `forge_full.py` 에 전달한다.
 `$ARGUMENTS` 가 비어 있으면 `--help` 를 전달해 사용법을 출력한다.
 
+> **모델·effort**: splitter·step claude 호출은 **Opus 4.8 + `--effort high` 고정** (지능 최우선, 상수 `FULL_CLAUDE_MODEL`/`FULL_CLAUDE_EFFORT`).
+
 ### 환경변수
 
 child 프로세스에 다음 환경변수를 상속시킨다 (부모 세션에 없으면 무시):

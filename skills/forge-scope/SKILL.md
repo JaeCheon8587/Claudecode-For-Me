@@ -249,6 +249,7 @@ python ./scripts/forge_scope.py <phase-dir> --trust --yes --quiet \
 | `--test-target` | 검증 대상 테스트 `.csproj` 1회 지정(휘발성, repo root 기준 상대경로). parent AI가 작업 문서 보고 추론. 우선순위 최상(>config>자동>풀sln). 풀 솔루션 빌드 회피. 무효 경로면 즉시 ERROR. |
 | `--push` | 실행 후 원격 push. |
 | `--strict` | placeholder 패턴 발견 시 실패. |
-| `--step-model` | step 실행 모델. 기본 `claude-sonnet-4-6`. |
+| `--step-model` | splitter·step·commit-msg 실행 모델. 기본 `claude-opus-4-8`. |
+| `--step-effort` | Claude `--effort` 레벨 (`low\|medium\|high\|xhigh\|max`). 기본 `high`. 지능↔토큰 다이얼. |
 
 > **빌드 스코프**: 검증은 풀 솔루션 `dotnet build` 대신 **대상 테스트 프로젝트만** `dotnet test`(빌드 겸함)로 좁힌다. 타깃 우선순위: `--test-target=<csproj>` CLI(작업 문서 기반 추론, 휘발성) > `forge-scope.json` 의 `test_target` 키 > 자동 감지(`Src/Tests/` 하위 단일 `*.csproj`) > 전체 sln fallback(느림, 경고 출력). `forge-scope.json` 은 `default_sln` 과 동일한 config 파일.
