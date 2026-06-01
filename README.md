@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v2.0.0 · 커스텀 스킬 10종 + 슬래시 커맨드 13종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v2.5.0 · 커스텀 스킬 9종 + 슬래시 커맨드 12종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,12 +11,12 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `2.0.0` |
+| 버전 | `2.5.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
 | 네임스페이스 | `/claudecode-for-me:<name>` |
-| 구성요소 | Skill 10 · Command 13 · Python runner 5 (`scripts/`) |
+| 구성요소 | Skill 9 · Command 12 · Python runner 5 (`scripts/`) |
 | 외부 연동 도구 | [`codenavigator`](https://github.com/JaeCheon8587/codenavigator) (PyPI) — codenav-bootstrap / codenav-frontmatter-gen 슬래시가 호출 |
 
 플러그인은 **글로벌 캐시**에 설치되므로 한 번 설치 후 모든 프로젝트의 **새 세션**에서 자동 노출된다. 프로젝트별 재설치 불필요.
@@ -279,8 +279,10 @@ codenav --root <repo> ui --port 9876
 |---|---|
 | `--no-worktree` | 워크트리·`feat-<phase>` 브랜치 미생성. 메인 repo **현재 브랜치에서 직접** 실행(격리·머지 단계 없음). 시작 시 작업 트리 dirty면 중단(`--force` 우회). `--push` 는 현재 브랜치 push. 모든 preset과 직교 |
 | `--test-target=<csproj>` | 검증(`dotnet test`) 대상 테스트 프로젝트 1회 지정(휘발성). 풀 솔루션 빌드 회피. 우선순위: 이 플래그 > `forge-scope.json` `test_target` > `Src/Tests` 단일 자동감지 > 전체 sln |
+| `--no-ai-commit-msg` | phase 완료 후 feat(코드) 커밋 메시지를 AI로 repo 스타일 재작성하는 **기본 동작을 끈다**. 워크트리 모드 한정 |
 
 - **빌드 스코프**: 검증은 풀 솔루션 `dotnet build` 대신 **대상 테스트 프로젝트만** `dotnet test`(빌드 겸함)로 좁혀 대규모 sln에서 시간 절감. `forge-scope.json` 에 `default_sln`/`test_target` 키로 고정 가능.
+- **AI 커밋 메시지 재작성** (기본 on): phase 완료 시 `feat` 커밋의 diff를 AI에 주고 repo 기존 커밋 subject 스타일로 메시지를 재작성한다. squash 안 함 — 커밋별 메시지만 교체하며 tree·author·date 보존, `chore` housekeeping 커밋은 템플릿 유지. 끄기: `--no-ai-commit-msg`. (워크트리 모드만 동작)
 
 #### forge-full 주요 옵션
 
@@ -321,7 +323,8 @@ phases/
 - 탐색 영역: Purpose / Scope / Success Criteria / Assumptions / Key Decisions / Constraints / Dependencies / Stakeholders / Failure Modes / Alternatives / Priorities / Execution
 - **논리 모순 시 명시 지적**, 해소될 때까지 해당 가지 잔류
 - 3~4 교환마다 영역별 완료 트래커
-- 종료 시 Requirements Summary (영역별 + Key Decisions Q&A + Open Items + Next Steps) 후 확정 리뷰
+- 종료 시 **인터뷰 기반 기승전결 정리본**(기 배경 / 승 전개 / 전 핵심 결정·전환점 / 결 확정 요구사항 + Open Items + 구체화 수준) 후 확정 리뷰
+- 산출물은 정리본까지 — **구현 plan·`ExitPlanMode` 미수행**. 다음 단계(meta-prompter 등)는 사용자가 정리본을 받아 진행
 
 ### 6.6 meta-prompter
 

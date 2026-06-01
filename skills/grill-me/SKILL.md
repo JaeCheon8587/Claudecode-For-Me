@@ -97,52 +97,42 @@ Use sparingly — only when genuine weak spots emerge, not as filler.
 
 ---
 
-## Phase 4: Requirements Summary 생성 및 리뷰
+## Phase 4: 인터뷰 정리본 (기승전결) 생성 및 리뷰
 
-When all areas are resolved or the user wants to wrap up, produce a structured summary.
+When all areas are resolved or the user wants to wrap up, produce the deliverable.
 
-1. **Summary 초안을 텍스트로 출력하여 유저에게 보여준다.**
+이 스킬의 산출물은 **세션의 질의·응답 내용을 기반으로 기승전결이 갖춰진 정리본**이다. 단순 불릿 요약이나 Q&A 덤프가 아니라, 인터뷰에서 오간 내용을 하나의 흐름으로 엮은 문서다.
+
+1. **정리본 초안을 텍스트로 출력하여 유저에게 보여준다.**
 2. **`AskUserQuestion`으로 리뷰를 요청한다** — "이대로 확정할까요?" 선택지: 확정 / 수정 필요
 3. 유저가 수정을 요청하면 반영 후 다시 보여준다. 승인할 때까지 반복한다.
 
 ### 출력 포맷
 
 ```
-## Requirements Summary
+## {주제} 요구사항 정리
 
-**Topic:** [one sentence]
+### 기 — 배경·출발점
+[무엇을 구체화하려 했는지, 초기의 모호하거나 비어 있던 상태. 왜 이 논의가 시작됐나.]
 
-### By Area
+### 승 — 전개
+[질의를 통해 드러난 영역과 굳어진 요구사항을 흐름으로 서술. 각 요점은 실제 Q&A에 근거.]
 
-**Purpose**
-- [confirmed understanding]
+### 전 — 핵심 결정·전환점
+[논의 중 드러난 모순·재질문·방향 전환과 그 해소. 되돌리기 어려운 핵심 결정.
+ 질문이 답을 바꾼 지점, 가정이 뒤집힌 지점을 명시.]
 
-**Scope**
-- [confirmed boundaries]
-
-**Success Criteria**
-- [confirmed measurable outcomes]
-
-**Constraints**
-- [confirmed limits]
-
-[... include only areas that were actually explored ...]
-
-### Key Decisions Q&A
-
-**Q. [question that led to a key decision]**
-A. [agreed answer + brief rationale]
-
-### Open Items ⚠️
-- [anything still unresolved or needing further discussion]
-
-### Next Steps
-[2–3 sentences: how concretized this idea/task is now, and what should happen next]
+### 결 — 확정 요구사항·미결
+[합의된 최종 요구사항을 정리. 이어서:]
+- **Open Items ⚠️**: [미해결/추가 논의 필요 항목 — 없으면 "없음"]
+- **현재 구체화 수준**: [얼마나 구체화됐고 무엇이 남았는지 1–2문장]
 ```
 
 ### 작성 규칙
 
-- 세션 중 **실제로 논의된 내용만** 기술한다. 추측으로 채우지 않는다.
+- 산문 흐름이되 핵심 요구사항은 식별 가능하게 (불릿·강조 혼용 허용).
+- 기승전결 각 절은 **세션에서 실제로 다룬 질의·응답 내용으로만** 채운다. 추측으로 채우지 않는다.
+- 인터뷰에서 다루지 않은 절은 짧게 처리하거나 생략한다.
 - 미해결 항목이 없으면 "없음"으로 표기한다.
 
 ---
@@ -163,4 +153,11 @@ The session is complete when:
 - No logical contradictions remain unresolved, AND
 - The last 2 exchanges have not surfaced any new unresolved gaps
 
-The user can end early at any time with "stop", "wrap up", or "that's enough" — Claude will immediately generate the summary.
+The user can end early at any time with "stop", "wrap up", or "that's enough" — Claude will immediately generate the 정리본.
+
+## 산출물 경계 (중요)
+
+- 이 스킬의 산출물은 **인터뷰 기반 기승전결 정리본**이다. 그것으로 끝낸다.
+- **구현 plan을 작성하지 않는다.** `ExitPlanMode`를 호출하지 않는다. 구현·코드 작성·파일 수정으로 넘어가지 않는다.
+- plan 모드에서 호출되었더라도, 구현 plan 대신 정리본을 최종 산출물로 출력하고 종료한다.
+- 다음 단계(meta-prompter 등 파이프라인 후속)는 **사용자가** 정리본을 받아 진행한다. grill-me는 정리본을 넘기고 멈춘다.
