@@ -837,7 +837,74 @@ class GitOperations:
             sys.exit(EXIT_ERR)
         _qprint(f"  ✓ Pushed to origin/{branch}")
 
-    def _run(self, *args) -> subprocess.CompletedProcess:
+    # ---- 커밋 메시지 재작성용 read/rewrite 헬퍼 (cwd=워크트리) ----
+
+    def head_sha(self) -> Optional[str]:
+        r = self._run("rev-parse", "HEAD")
+        return r.stdout.strip() if r.returncode == 0 and r.stdout.strip() else None
+
+    def commits_since(self, base: str) -> list[str]:
+        """base..HEAD 커밋 해시를 oldest→newest 순으로 반환. 실패/없음 시 빈 리스트."""
+        r = self._run("rev-list", "--reverse", f"{base}..HEAD")
+        if r.returncode != 0:
+            return []
+        return [h for h in r.stdout.split() if h]
+
+    def commit_subject(self, sha: str) -> str:
+        return self._run("show", "-s", "--format=%s", sha).stdout.strip()
+
+    def commit_body(self, sha: str) -> str:
+        return self._run("show", "-s", "--format=%B", sha).stdout
+
+    def commit_diff(self, sha: str, max_bytes: int) -> str:
+        """단일 커밋의 stat+patch. max_bytes로 절단."""
+        r = self._run("show", "--stat", "-p", "--format=", sha)
+        return (r.stdout or "")[:max_bytes]
+
+    def recent_subjects(self, ref: str, n: int) -> list[str]:
+        """ref 이하 최근 n개 커밋 subject (스타일 예시용)."""
+        r = self._run("log", f"-n{n}", "--format=%s", ref)
+        if r.returncode != 0:
+            return []
+        return [s for s in r.stdout.splitlines() if s.strip()]
+
+    def rebuild_messages(self, base: str, new_msgs: dict) -> bool:
+        """base..HEAD를 동일 tree로 재생성하되 new_msgs[sha]가 있으면 메시지를 교체한다.
+
+        author/committer ident+date를 보존한다. 모든 커밋 재구성에 성공한 뒤에만
+        현재 브랜치를 새 tip으로 이동한다(중간 실패 시 원본 무손상).
+        """
+        shas = self.commits_since(base)
+        if not shas:
+            return False
+        parent = base
+        for sha in shas:
+            tree = self._run("rev-parse", f"{sha}^{{tree}}").stdout.strip()
+            if not tree:
+                return False
+            msg = new_msgs.get(sha) or self.commit_body(sha)
+            ident = self._run(
+                "show", "-s", "--format=%an%n%ae%n%aI%n%cn%n%ce%n%cI", sha
+            ).stdout.splitlines()
+            env = {}
+            if len(ident) >= 6:
+                an, ae, ai, cn, ce, ci = ident[:6]
+                env = {
+                    "GIT_AUTHOR_NAME": an, "GIT_AUTHOR_EMAIL": ae, "GIT_AUTHOR_DATE": ai,
+                    "GIT_COMMITTER_NAME": cn, "GIT_COMMITTER_EMAIL": ce, "GIT_COMMITTER_DATE": ci,
+                }
+            r = self._run("commit-tree", tree, "-p", parent, "-m", msg, env=env)
+            new = r.stdout.strip()
+            if r.returncode != 0 or not new:
+                log.warning("commit-tree 실패 (%s): %s", sha[:8], r.stderr.strip())
+                return False
+            parent = new
+        return self._run("reset", "--hard", parent).returncode == 0
+
+    def _run(self, *args, env: Optional[dict] = None) -> subprocess.CompletedProcess:
+        run_env = None
+        if env:
+            run_env = {**os.environ, **env}
         return subprocess.run(
             ["git"] + list(args),
             cwd=self._cwd,
@@ -845,6 +912,7 @@ class GitOperations:
             text=True,
             encoding="utf-8",
             errors="replace",
+            env=run_env,
         )
 
 
@@ -929,6 +997,18 @@ class IndexStore:
         if "created_at" not in idx:
             idx["created_at"] = self.stamp()
             self.save(idx)
+
+    def ensure_git_base(self, sha: Optional[str]) -> None:
+        """phase 시작 시점의 HEAD를 1회 기록(커밋 메시지 재작성의 base ref). 재실행 시 보존."""
+        if not sha:
+            return
+        idx = self.load()
+        if "git_base" not in idx:
+            idx["git_base"] = sha
+            self.save(idx)
+
+    def get_git_base(self) -> Optional[str]:
+        return self.load().get("git_base")
 
     def ensure_started_at(self, step_num: int) -> None:
         idx = self.load()
@@ -2308,6 +2388,9 @@ class ForgeScope:
             )
             sys.exit(EXIT_ERR)
         store.ensure_created_at()
+        # 커밋 메시지 AI 재작성용 base ref(첫 step 커밋 전 HEAD)를 1회 기록. 워크트리 모드만.
+        if not self._no_worktree:
+            store.ensure_git_base(self._git.head_sha())
 
         executor = StepExecutor(
             self._cfg,
@@ -2624,6 +2707,7 @@ class ForgeScope:
         msg = f"chore({phase_name}): mark phase completed"
         if self._git.commit_chore(msg):
             _qprint(f"  ✓ {msg}")
+        self._maybe_rewrite_commit_messages(store, phase_name)
         if self._args.push:
             self._git.push(self._push_branch(phase_name))
         if _QUIET:
@@ -2632,6 +2716,70 @@ class ForgeScope:
             print(f"\n{'=' * 60}")
             print(f"  Phase '{phase_name}' completed!")
             print(f"{'=' * 60}")
+
+    def _maybe_rewrite_commit_messages(self, store: IndexStore, phase_name: str) -> None:
+        """phase 완료 후 feat(코드) 커밋 메시지를 AI로 repo 스타일 재작성한다.
+
+        기본 동작(--no-ai-commit-msg로 끔). 워크트리 모드만. chore housekeeping 커밋은
+        템플릿 유지. 실패해도 완료 흐름을 막지 않는다(원본 커밋 보존).
+        """
+        if self._no_worktree or getattr(self._args, "no_ai_commit_msg", False):
+            return
+        try:
+            base = store.get_git_base()
+            if not base:
+                return
+            shas = self._git.commits_since(base)
+            if not shas:
+                return
+            feats = [s for s in shas if self._git.commit_subject(s).startswith("feat(")]
+            if not feats:
+                return
+            style = self._git.recent_subjects(base, 15)
+            new_msgs: dict = {}
+            invoker = ClaudeInvoker(
+                trust=_is_trusted(self._args.trust),
+                use_bare=True,
+                cwd=self._cfg.root,
+                model=getattr(self._args, "step_model", None) or "claude-sonnet-4-6",
+            )
+            for sha in feats:
+                diff = self._git.commit_diff(sha, 12_000)
+                if not diff.strip():
+                    continue
+                msg = self._gen_commit_message(invoker, diff, style)
+                if msg:
+                    new_msgs[sha] = msg
+            if not new_msgs:
+                return
+            if self._git.rebuild_messages(base, new_msgs):
+                _qprint(f"  ✓ 커밋 메시지 {len(new_msgs)}개 AI 재작성 완료")
+            else:
+                log.warning("커밋 메시지 재작성 실패 — 원본 커밋 유지")
+        except Exception as e:  # noqa: BLE001 — 완료 흐름 비차단
+            log.warning("커밋 메시지 재작성 중 예외(무시): %s", e)
+
+    @staticmethod
+    def _gen_commit_message(invoker: "ClaudeInvoker", diff: str, style: list[str]) -> Optional[str]:
+        examples = "\n".join(f"- {s}" for s in style[:15]) or "(없음)"
+        prompt = (
+            "다음 git 변경(diff)에 대한 커밋 메시지 1개를 생성하라.\n"
+            "아래 이 저장소의 기존 커밋 subject 스타일을 그대로 따르라(접두사·언어·형식):\n"
+            f"{examples}\n\n"
+            "규칙: 커밋 메시지 본문만 출력. 설명·코드펜스(```)·따옴표 금지. "
+            "첫 줄은 50자 내외 제목, 필요 시 빈 줄 후 본문.\n\n"
+            f"--- diff ---\n{diff}\n"
+        )
+        try:
+            rc, stdout, _ = invoker.call(prompt)
+            if rc != 0 or not stdout.strip():
+                return None
+            text = StepSplitter._extract_result_text(stdout)
+            text = StepSplitter._strip_fences(text).strip()
+            text = text.strip("`'\" \n")
+            return text or None
+        except Exception:  # noqa: BLE001
+            return None
 
     def _push_branch(self, phase_name: str) -> str:
         """push 대상 브랜치. 워크트리 모드=feat-<phase>, no-worktree 모드=현재 브랜치."""
@@ -2736,6 +2884,14 @@ def _build_parser() -> argparse.ArgumentParser:
         help=(
             "워크트리를 생성하지 않고 현재 작업 트리(메인 repo)에서 직접 실행한다. "
             "산출물·step 코드·commit이 현재 브랜치에 직접 기록된다 (격리 없음)."
+        ),
+    )
+    parser.add_argument(
+        "--no-ai-commit-msg",
+        action="store_true",
+        help=(
+            "phase 완료 후 feat(코드) 커밋 메시지를 AI로 repo 스타일 재작성하는 기본 동작을 끈다. "
+            "워크트리 모드에서만 동작하며, chore housekeeping 커밋은 항상 템플릿을 유지한다."
         ),
     )
     parser.add_argument(
