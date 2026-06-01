@@ -99,7 +99,7 @@ pip install -U codenavigator
 | `docs-add-task` | `/claudecode-for-me:docs-add-task [요청]` | v0.7 per-App 신규/기존 자동 판정 — 신규 FRD 생성(NEW) 또는 기존 영향 FRD 갱신(CHANGE), TASK + ADR 항상 생성, FC/PRD/ADR-CATALOG 갱신 |
 | `forge-cancel` | `/claudecode-for-me:forge-cancel <phase>` | forge phase 브랜치·산출물 정리 |
 | `forge-full` | `/claudecode-for-me:forge-full <phase>` | 문서 기반 전체 프로젝트 구현 phase runner |
-| `forge-scope` | `/claudecode-for-me:forge-scope <prompt> [--no-worktree] [--test-target=<csproj>]` | 단일 FRD·기능·버그픽스용 경량 phase runner. 워크트리 미생성(in-place)·빌드 스코프 축소 옵션 |
+| `forge-scope` | `/claudecode-for-me:forge-scope <prompt> [--no-worktree] [--test-target=<csproj>] [--no-ai-commit-msg]` | 단일 FRD·기능·버그픽스용 경량 phase runner. 워크트리 미생성(in-place)·빌드 스코프 축소·완료 후 AI 커밋 메시지 재작성(기본 on) |
 | `grill-me` | `/claudecode-for-me:grill-me [주제]` | 1문 1답으로 요구사항 모호점 추적 |
 | `meta-prompter` | `/claudecode-for-me:meta-prompter [요청]` | 거친 요청 → 구조화된 메타 프롬프트 |
 
