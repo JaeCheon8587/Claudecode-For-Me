@@ -11,7 +11,7 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `2.6.0` |
+| 버전 | `2.7.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
@@ -89,7 +89,7 @@ pip install -U codenavigator
 
 ## 5. 플러그인 구성요소
 
-### Skill 10종
+### Skill 11종
 
 | Skill | 슬래시 커맨드 | 역할 |
 |---|---|---|
@@ -103,8 +103,9 @@ pip install -U codenavigator
 | `forge-scope` | `/claudecode-for-me:forge-scope <prompt> [--no-worktree] [--test-target=<csproj>] [--no-ai-commit-msg]` | 단일 FRD·기능·버그픽스용 경량 phase runner. 워크트리 미생성(in-place)·빌드 스코프 축소·완료 후 AI 커밋 메시지 재작성(기본 on) |
 | `grill-me` | `/claudecode-for-me:grill-me [주제]` | 1문 1답으로 요구사항 모호점 추적 |
 | `meta-prompter` | `/claudecode-for-me:meta-prompter [요청]` | 거친 요청 → 구조화된 메타 프롬프트 |
+| `requirement-spec` | `/claudecode-for-me:requirement-spec [주제]` | grill-me→meta-prompter→codex 검증을 자동 체인. 요구사항 도출·개발 지시서 `.requirements/requirement-{slug}.md` 산출 후 정리본 대비 반영도(%) 자기검증 |
 
-### Command 13종
+### Command 14종
 
 | Command | 설명 |
 |---|---|
@@ -121,6 +122,7 @@ pip install -U codenavigator
 | `forge-scope` | forge-scope skill 진입 |
 | `grill-me` | grill-me skill 진입 |
 | `meta-prompter` | meta-prompter skill 진입 |
+| `requirement-spec` | requirement-spec skill 진입. grill-me→meta-prompter→codex 검증 자동 체인 메타 스킬 |
 
 ---
 
@@ -328,7 +330,8 @@ phases/
 - 탐색 영역: Purpose / Scope / Success Criteria / Assumptions / Key Decisions / Constraints / Dependencies / Stakeholders / Failure Modes / Alternatives / Priorities / Execution
 - **논리 모순 시 명시 지적**, 해소될 때까지 해당 가지 잔류
 - 3~4 교환마다 영역별 완료 트래커
-- 종료 시 **인터뷰 기반 기승전결 정리본**(기 배경 / 승 전개 / 전 핵심 결정·전환점 / 결 확정 요구사항 + Open Items + 구체화 수준) 후 확정 리뷰
+- 종료 시 **인터뷰 기반 정리본**(배경 / 전개 / 전환 / 결론 + Open Items + 구체화 수준) 후 확정 리뷰
+- 확정 시 정리본을 **`.requirements/grill-me-{slug}.md` 자동 저장**(slug=영어 kebab, 동명 시 번호 suffix)
 - 산출물은 정리본까지 — **구현 plan·`ExitPlanMode` 미수행**. 다음 단계(meta-prompter 등)는 사용자가 정리본을 받아 진행
 
 ### 6.6 meta-prompter
@@ -344,7 +347,21 @@ phases/
 - **채팅 출력 전용**: 마크다운 코드블록 1개로 wrap, `.md` 저장 안 함
 - 개조식 종결 강제, 출력 끝 `[에이전트 행동 규칙]` 4문구 자동 부착
 
-### 6.7 commit-analysis
+### 6.7 requirement-spec (메타 스킬 — grill-me→meta-prompter→codex 파이프라인)
+
+```
+/claudecode-for-me:requirement-spec 사칙연산 계산기 개발
+```
+
+- **메타 스킬**: grill-me(6.5)·meta-prompter(6.6)를 자동 인라인 체인으로 엮고 codex 자기검증을 붙임. 1회 호출 → 6단계 자동(사용자 상호작용은 grill-me 인터뷰 + 최종 리뷰만)
+- **파이프라인**: `요구사항 도출(grill-me) → 개발 지시서 정제(meta-prompter) → .requirements/requirement-{slug}.md 저장 → codex 검증 → 보완 1회 반영`
+- **slug 일관**: 두 산출물이 동일 slug 공유 — `grill-me-{slug}.md`(정리본) ↔ `requirement-{slug}.md`(지시서)
+- **codex 자기검증**: grill-me 정리본=GROUND TRUTH 기준 체크리스트 생성 → 지시서 반영도 대조 → `Coverage: N%` + 보완점. 모델 `gpt-5.5`, reasoning effort 레벨 `high` (`-c model_reasoning_effort="high"`)
+- **Phase 게이트**: 각 Phase 전이 조건 미충족 시 다음 Phase 진입 금지
+- **codex 미설치 시** 검증만 생략(`/codex:setup` 안내), 지시서는 보존
+- 산출물은 지시서까지 — **구현 코드 미작성·`ExitPlanMode` 미호출**
+
+### 6.8 commit-analysis
 
 ```
 /claudecode-for-me:commit-analysis
@@ -355,7 +372,7 @@ phases/
 - Co-Authored-By / "Generated with Claude Code" 문구 제외
 - 한글 커밋 메시지
 
-### 6.8 doc-driven-review
+### 6.9 doc-driven-review
 
 ```
 /claudecode-for-me:doc-driven-review docs/spec-feature.md
@@ -387,7 +404,7 @@ phases/
 
 ---
 
-### 6.9 ddr-loop
+### 6.10 ddr-loop
 
 ```
 /claudecode-for-me:ddr-loop docs/FRD/F003.md --worktree feat-login-feature
