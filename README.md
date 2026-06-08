@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v2.5.1 · 커스텀 스킬 9종 + 슬래시 커맨드 12종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v2.7.0 · 커스텀 스킬 11종 + 슬래시 커맨드 14종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -16,7 +16,7 @@
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
 | 네임스페이스 | `/claudecode-for-me:<name>` |
-| 구성요소 | Skill 10 · Command 13 · Python runner 6 (`scripts/`) |
+| 구성요소 | Skill 11 · Command 14 · Python runner 6 (`scripts/`) |
 | 외부 연동 도구 | [`codenavigator`](https://github.com/JaeCheon8587/codenavigator) (PyPI) — codenav-bootstrap / codenav-frontmatter-gen 슬래시가 호출 |
 
 플러그인은 **글로벌 캐시**에 설치되므로 한 번 설치 후 모든 프로젝트의 **새 세션**에서 자동 노출된다. 프로젝트별 재설치 불필요.
@@ -89,7 +89,7 @@ pip install -U codenavigator
 
 ## 5. 플러그인 구성요소
 
-### Skill 10종
+### Skill 11종
 
 | Skill | 슬래시 커맨드 | 역할 |
 |---|---|---|
@@ -103,8 +103,9 @@ pip install -U codenavigator
 | `forge-scope` | `/claudecode-for-me:forge-scope <prompt> [--no-worktree] [--test-target=<csproj>] [--no-ai-commit-msg]` | 단일 FRD·기능·버그픽스용 경량 phase runner. 워크트리 미생성(in-place)·빌드 스코프 축소·완료 후 AI 커밋 메시지 재작성(기본 on) |
 | `grill-me` | `/claudecode-for-me:grill-me [주제]` | 1문 1답으로 요구사항 모호점 추적 |
 | `meta-prompter` | `/claudecode-for-me:meta-prompter [요청]` | 거친 요청 → 구조화된 메타 프롬프트 |
+| `safe-pull` | `/claudecode-for-me:safe-pull [원격/브랜치]` | git pull 전 fetch(비파괴)로 변경·충돌·사이드이펙트 브리핑 후 AskUserQuestion 컨펌 게이트 |
 
-### Command 13종
+### Command 14종
 
 | Command | 설명 |
 |---|---|
@@ -121,6 +122,7 @@ pip install -U codenavigator
 | `forge-scope` | forge-scope skill 진입 |
 | `grill-me` | grill-me skill 진입 |
 | `meta-prompter` | meta-prompter skill 진입 |
+| `safe-pull` | safe-pull skill 진입. fetch 후 브리핑 → 컨펌 게이트 → pull |
 
 ---
 
@@ -417,6 +419,33 @@ DDR은 read-only 검증기라 단독으로는 "검증 땡, 끝"이다. `ddr-loop
 
 ---
 
+### 6.10 safe-pull
+
+```
+/claudecode-for-me:safe-pull                  # 현재 브랜치 추적 upstream 자동
+/claudecode-for-me:safe-pull origin main      # 명시 원격/브랜치
+```
+
+`git pull`은 한 번 실행하면 워킹트리·HEAD·히스토리가 즉시 바뀜. safe-pull은 **비파괴 단계(fetch)까지만 먼저 실행**해 "지금 → 풀 후" 변경을 브리핑하고, 충돌을 실제 머지 없이 예측한 뒤, AskUserQuestion 컨펌을 받은 경우에만 `git pull`을 실행한다.
+
+- **Step 0 안전 게이트** — 비저장소 / detached HEAD / remote 없음 / upstream 없음 / dirty working tree 중 하나라도 걸리면 원인·해결책 설명 후 중단. 자동 보정·자동 stash 안 함.
+- **Step 1 fetch** (`--tags --prune`) — 비파괴라 컨펌 전 실행. 새 릴리스 태그·유령 ref 정리 포함.
+- **Step 2 브리핑 계산** — ahead/behind, FF가능/diverged/이미최신 판정, 들어올 커밋 로그, 변경 파일 분류(A/M/D/R), 핵심 파일(lock·의존성·CI·스키마) diff 발췌(파일당 ~40줄, 전체 ~200줄 cap).
+- **Step 3 충돌 예측** (깃 관점) — FF면 충돌 0 확정. diverged면 `git merge-tree --write-tree`(git 2.38+)로 실제 머지 없이 예측, 미지원 시 양쪽 변경 파일 교집합을 "충돌 가능 후보(확정 아님)"로 표시.
+- **Step 4 사이드이펙트** — 머지 커밋 생성 여부, submodule 포인터 변경, 빌드/의존성 재설치 필요, 새 태그(이미 fetch로 반영), 원격 force-push 흔적 경고.
+- **Step 5 브리핑 출력** — 고정 한국어 개조식 템플릿(요약 / 들어올 커밋 / 변경 파일 / 새 태그 / diff 발췌 / 충돌 예측 / 사이드이펙트 / 풀 후 상태).
+- **Step 6 컨펌** — AskUserQuestion: 진행(merge) / 중단 / rebase로 대신(diverged 한정). `behind==0`이면 컨펌 생략, "풀 불필요" 종료.
+- **Step 7 pull** — 진행/rebase 선택 시에만 `git pull`(또는 `--rebase`). 충돌 발생 시 해결 흐름 안내(자동 해결 안 함).
+- **외부 도구 0** — 순수 `git`만. PowerShell/Bash 양쪽 동작(`'@{u}'` 작은따옴표 처리).
+
+#### 한계
+
+- 자동 보정 없음 — Step 0 걸리면 사용자가 직접 처리(의도적). 자동 stash 배제(pop 충돌 새 위험 회피).
+- 충돌 예측 정밀도는 git 버전 의존 — < 2.38은 교집합 fallback(확정 아님).
+- merge 기본(로컬 SHA 보존). rebase는 diverged 한정 옵션.
+
+---
+
 ## 7. 외부 연동 도구: codenavigator
 
 C# 코드베이스 시맨틱 인덱스 + AI 자동 description 생성 도구. **별도 PyPI 패키지로 분리** (v1.16.0 부터). 본 플러그인은 슬래시 커맨드(`codenav-bootstrap`, `codenav-frontmatter-gen`)로 도구를 호출할 뿐, 코드는 동행하지 않음.
@@ -528,7 +557,8 @@ Claudecode-For-Me/
 │   ├── forge-full/
 │   ├── forge-scope/
 │   ├── grill-me/
-│   └── meta-prompter/
+│   ├── meta-prompter/
+│   └── safe-pull/
 ├── commands/                    # 슬래시 커맨드 (명시 호출)
 │   ├── codenav-templates/       # /codenav-install 이 워크스페이스로 복사하는 자산
 │   │   ├── CODENAV-GUIDE-TEMPLATE.md
@@ -544,7 +574,8 @@ Claudecode-For-Me/
 │   ├── forge-full.md
 │   ├── forge-scope.md
 │   ├── grill-me.md
-│   └── meta-prompter.md
+│   ├── meta-prompter.md
+│   └── safe-pull.md
 ├── docs/                       # v0.7 문서 시스템 자산
 │   └── .templates/             # PRD/FC/FRD/ADR/ARCHITECTURE/CLAUDE/README 양식 + App/ + .rules/ (코드 룰 3종)
 ├── scripts/                     # Python 헬퍼·러너
