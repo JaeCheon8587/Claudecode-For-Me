@@ -27,6 +27,7 @@ except (AttributeError, OSError):
     pass
 
 import argparse
+import atexit
 import contextlib
 import json
 import logging
@@ -64,6 +65,9 @@ COMPACT_DOC_BYTES_LIMIT = 24_000
 TZ = timezone(timedelta(hours=9))
 EXIT_OK, EXIT_ERR, EXIT_BLOCKED, EXIT_KBI = 0, 1, 2, 130
 VALID_PRESETS = frozenset({"auto", "frd-implementation", "contract-tdd"})
+# child claude가 실제 쓰는 빌트인 tool 최소 집합 (lean 모드). 파일 읽기/수정/쓰기 +
+# bash(dotnet/git/rg) + grep/glob. MCP/skill은 lean 플래그로 별도 차단된다.
+DEFAULT_CHILD_TOOLS = "Bash,Edit,Read,Write,Grep,Glob"
 
 
 def _docs_dirname(root: Path) -> str:
@@ -113,6 +117,26 @@ def _validate_target_rel(root: Path, raw: str) -> str:
     if not p.exists():
         raise ValueError(f"경로 없음: {raw}")
     return p.relative_to(root).as_posix()
+
+
+def resolve_ac_test_target(root: Path, cli_test_target: str | None) -> str | None:
+    """single-step AC(`dotnet test`)와 warmup restore가 공유하는 테스트 타깃(rel csproj posix).
+
+    우선순위: CLI --test-target > forge-scope.json test_target > 단일 Src/Tests/**/*.csproj.
+    스코프 불가/무효 경로면 None → 호출부가 풀 sln fallback. warmup·AC가 같은 함수를
+    쓰므로 warmup 스코프 ⊇ AC build 스코프가 보장되어 `--no-restore`가 깨지지 않는다.
+    """
+    raw = cli_test_target or _read_forge_config_str(root, "test_target")
+    if raw:
+        try:
+            return _validate_target_rel(root, raw)
+        except ValueError as e:
+            log.warning("test_target 무시 — %s", e)
+            return None
+    test_projects = sorted(root.glob("Src/Tests/**/*.csproj"))
+    if len(test_projects) == 1:
+        return test_projects[0].relative_to(root).as_posix()
+    return None
 
 
 def resolve_sln_path(
@@ -202,6 +226,11 @@ def _qprint(*args, **kwargs) -> None:
     if _QUIET:
         return
     print(*args, **kwargs)
+
+
+def _fmt_tokens(n: int) -> str:
+    """output_tokens를 짧게 표기. 1000 이상은 '1.2k'."""
+    return f"{n / 1000:.1f}k" if n >= 1000 else str(n)
 
 
 def _truncate_text(text: str, limit: int) -> str:
@@ -528,6 +557,9 @@ class ClaudeInvoker:
         use_bare: bool = False,
         model: Optional[str] = None,
         effort: Optional[str] = None,
+        lean: bool = True,
+        child_tools: str = DEFAULT_CHILD_TOOLS,
+        exclude_dynamic_sys_prompt: bool = False,
     ):
         self._trust = trust
         self._cwd = cwd if cwd is not None else ROOT
@@ -540,6 +572,10 @@ class ClaudeInvoker:
         self._use_bare = use_bare
         self._model = model
         self._effort = effort  # claude --effort (low|medium|high|xhigh|max). None이면 미부여(세션 기본).
+        # lean: API key 유무와 무관하게 MCP 함대/skill cold-load를 차단(--full-fleet로 끔).
+        self._lean = lean
+        self._child_tools = child_tools
+        self._exclude_dynamic_sys_prompt = exclude_dynamic_sys_prompt
         self._first_session_call = True
 
     def call(self, prompt: str) -> tuple[int, str, str]:
@@ -553,6 +589,17 @@ class ClaudeInvoker:
             cmd.append("--bare")
         if self._trust and not _is_nested_under_claude():
             cmd.append("--dangerously-skip-permissions")
+        # Lean startup — API key 유무와 무관(절대 _bare_is_safe() 경유 금지).
+        # OAuth regime(--bare 미적용)에서도 MCP 함대·plugin skill cold-load를 차단해
+        # 호출당 startup 세금을 제거한다. --bare와 공존해도 중복 차감일 뿐 무해.
+        if self._lean:
+            cmd += [
+                "--mcp-config", "{}", "--strict-mcp-config",
+                "--disable-slash-commands",
+                "--tools", self._child_tools,
+            ]
+        if self._exclude_dynamic_sys_prompt:
+            cmd.append("--exclude-dynamic-system-prompt-sections")
         cmd += ["--output-format", "json"]
         if self._model:
             cmd += ["--model", self._model]
@@ -1745,15 +1792,11 @@ class DeterministicPlanBuilder:
 
     def _acceptance_commands(self) -> list[str]:
         root = self._cfg.root
-        # CLI --test-target > config test_target > 단일 Src/Tests csproj 로 스코프 축소.
+        # 공유 해석기(warmup과 동일): CLI --test-target > config > 단일 Src/Tests csproj.
         # dotnet test 가 빌드를 겸하므로 별도 풀 sln dotnet build 는 두지 않는다.
-        scoped = self._scoped_test_target()
-        if scoped:
-            return [f"dotnet test {scoped} --no-restore"]
-        test_projects = sorted(root.glob("Src/Tests/**/*.csproj"))
-        if len(test_projects) == 1:
-            rel = test_projects[0].relative_to(root).as_posix()
-            return [f"dotnet test {rel} --no-restore"]
+        target = resolve_ac_test_target(root, self._cli_test_target)
+        if target:
+            return [f"dotnet test {target} --no-restore"]
         # 스코프 불가 → 전체 sln(test 가 빌드 겸함, 별도 build 제거). 느릴 수 있어 경고.
         sln = self._sln_path
         if sln is None:
@@ -2089,6 +2132,8 @@ class StepExecutor:
         # 첫 호출에서만 가드레일·작업 규칙 전체를 prompt에 박는다.
         # 이후 호출은 동일 세션을 -r로 이어 받으므로 재주입 불필요 → 캐시 적중.
         self._is_first_call = True
+        # 마지막 claude 호출의 output_tokens — ForgeScope의 timings 진단에서 읽는다.
+        self.last_output_tokens = 0
 
     def run(self, step: dict) -> None:
         """단일 step을 retry 포함하여 실행. 완료/실패/blocked 시 sys.exit으로 종료할 수 있음."""
@@ -2183,6 +2228,7 @@ class StepExecutor:
             inp = usage.get("input_tokens", 0) or 0
             out = usage.get("output_tokens", 0) or 0
             _qprint(f"    usage: in={inp} out={out} cache_read={cr} cache_create={cw}")
+        self.last_output_tokens = (usage or {}).get("output_tokens", 0) or 0
         self._persist_step_output(
             step_num,
             {
@@ -2260,6 +2306,13 @@ class ForgeScope:
 
     def __init__(self, args: argparse.Namespace):
         self._args = args
+        # --- 계측: 구간별 wall-clock. atexit으로 종료 경로(성공/blocked/error/KBI) 모두에서
+        #     1줄 [timings] 요약을 best-effort 출력한다. ---
+        self._t0 = time.monotonic()
+        self._timings: list[tuple[str, float]] = []        # (label, seconds)
+        self._step_usage: list[tuple[int, int]] = []        # (step_num, output_tokens)
+        self._timings_printed = False
+        atexit.register(self._emit_timings_summary)
         # 기본: phase 시작 시 .worktrees/<phase>/ 격리 워크트리를 보장한다. 이후 모든
         # 컴포넌트(PhaseConfig·GitOperations·GuardrailLoader·ClaudeInvoker)는
         # 메인 repo가 아닌 워크트리 root를 기준으로 동작한다.
@@ -2273,7 +2326,8 @@ class ForgeScope:
             _qprint(f"  Worktree: 생성 안 함 — 메인 repo에서 직접 실행 ({ROOT})")
         else:
             self._wt = WorktreeManager(ROOT, args.phase_dir, force=args.force)
-            worktree_root = self._wt.ensure()
+            with self._timed("worktree"):
+                worktree_root = self._wt.ensure()
             self._verify_worktree_bootstrap(worktree_root, args.phase_dir)
         self._cfg = PhaseConfig(args.phase_dir, root=worktree_root)
         self._validator = ScopeValidator(worktree_root)
@@ -2286,9 +2340,12 @@ class ForgeScope:
         # splitter·step 모두 Opus 4.8 + effort high 가 기본 (--step-model/--step-effort 로 override).
         step_model = getattr(args, "step_model", None) or "claude-opus-4-8"
         step_effort = getattr(args, "step_effort", None) or "high"
+        lean = not bool(getattr(args, "full_fleet", False))
+        child_tools = getattr(args, "child_tools", None) or DEFAULT_CHILD_TOOLS
         self._splitter_invoker = ClaudeInvoker(
             trust=trust, use_bare=True, cwd=worktree_root,
             model=step_model, effort=step_effort,
+            lean=lean, child_tools=child_tools,
         )
         self._phase_session_id = str(uuid.uuid4())
         self._step_invoker = ClaudeInvoker(
@@ -2299,6 +2356,10 @@ class ForgeScope:
             model=step_model,
             effort=step_effort,
             cwd=worktree_root,
+            lean=lean,
+            child_tools=child_tools,
+            # 세션 -r 재사용 시 동적 섹션을 첫 user 메시지로 빼 prompt-cache 적중률↑.
+            exclude_dynamic_sys_prompt=True,
         )
         compact_docs = (
             bool(getattr(args, "compact_docs", False))
@@ -2329,6 +2390,11 @@ class ForgeScope:
                 continue
             dst = worktree_root / rel
             if src.is_dir():
+                # 재실행 시 이미 채워진 docs 디렉토리는 재복사하지 않는다(디스크 churn 회피).
+                # 첫 워크트리 생성(gitignored docs 누락) 시에만 복사한다. 메인 docs가
+                # 갱신됐다면 forge_cancel 후 재생성으로 반영한다.
+                if dst.exists() and any(dst.iterdir()):
+                    continue
                 shutil.copytree(src, dst, dirs_exist_ok=True)
             elif not dst.exists():
                 shutil.copy2(src, dst)
@@ -2371,6 +2437,38 @@ class ForgeScope:
         )
         sys.exit(EXIT_ERR)
 
+    @contextlib.contextmanager
+    def _timed(self, label: str):
+        """구간 wall-clock을 self._timings에 기록. 예외/sys.exit 시에도 finally로 기록."""
+        t = time.monotonic()
+        try:
+            yield
+        finally:
+            self._timings.append((label, time.monotonic() - t))
+
+    def _emit_timings_summary(self) -> None:
+        """[timings] 1줄 요약을 stderr로 출력. atexit 등록 — 모든 종료 경로에서 1회만."""
+        if self._timings_printed or not self._timings:
+            return
+        self._timings_printed = True
+        usage_by_step = dict(self._step_usage)
+        parts = []
+        for label, secs in self._timings:
+            tok = ""
+            if label.startswith("step"):
+                try:
+                    n = int(label[4:])
+                except ValueError:
+                    n = None
+                if n is not None and n in usage_by_step:
+                    tok = f"(out={_fmt_tokens(usage_by_step[n])})"
+            parts.append(f"{label}={secs:.1f}s{tok}")
+        total = time.monotonic() - self._t0
+        print("[timings] " + " ".join(parts) + f" total={total:.1f}s", file=sys.stderr)
+        if getattr(self._args, "timings", False):
+            for label, secs in self._timings:
+                print(f"  [timings] {label:<14}{secs:8.1f}s", file=sys.stderr)
+
     def run(self) -> int:
         self._check_external_dirty()
         self._check_frd_consistency()
@@ -2386,9 +2484,11 @@ class ForgeScope:
         self._print_header(phase_name, total)
         self._check_blockers(store)
         # 브랜치/작업 트리는 ForgeScope.__init__의 WorktreeManager가 이미 보장함.
-        self._warmup_dotnet()
+        with self._timed("warmup"):
+            self._warmup_dotnet()
         try:
-            guardrails = self._guardrail_loader.load(store.get_docs_scope())
+            with self._timed("guardrail"):
+                guardrails = self._guardrail_loader.load(store.get_docs_scope())
         except (ValueError, FileNotFoundError) as e:
             print(
                 f"ERROR: 가드레일 로딩 실패 — index.json의 docs_scope를 확인하세요: {e}",
@@ -2639,25 +2739,35 @@ class ForgeScope:
     def _warmup_dotnet(self) -> None:
         """첫 step의 NuGet restore + Roslyn warmup 비용을 사전에 한 번에 끝낸다.
 
-        contract-tdd 4-step에서 step 0가 cold start로 14분 이상 걸리는 회귀 사례 차단.
-        sln이 없거나 다수면 silent skip(다른 프로젝트 호환). restore 실패는 fatal 아님.
+        single-step/frd는 AC(`dotnet test <target> --no-restore`)와 **동일 타깃만** restore해
+        풀 sln cold restore를 제거한다. contract-tdd는 step3 회귀가 풀 sln --no-restore 이므로
+        풀 sln restore를 유지한다(cold start 14분 회귀 차단). 스코프 csproj restore는 전이
+        project ref 패키지까지 받아 동일 타깃 test build를 충족한다.
+
+        sln/타깃이 없으면 silent skip(다른 프로젝트 호환). restore 실패는 fatal 아님.
         """
-        try:
-            sln = resolve_sln_path(
-                getattr(self._args, "sln", None),
-                self._cfg.root,
-                strict=False,
-            )
-        except SlnResolveError:
-            return
-        if sln is None:
-            return
-        rel = sln.relative_to(self._cfg.root).as_posix()
-        _qprint(f"  Warmup: dotnet restore {rel}")
+        root = self._cfg.root
+        preset = getattr(self._args, "preset", "auto")
+        target = None
+        if preset != "contract-tdd":
+            target = resolve_ac_test_target(root, getattr(self._args, "test_target", None))
+        if target:
+            cmd = ["dotnet", "restore", str(root / target)]
+            label = target
+        else:
+            try:
+                sln = resolve_sln_path(getattr(self._args, "sln", None), root, strict=False)
+            except SlnResolveError:
+                return
+            if sln is None:
+                return
+            cmd = ["dotnet", "restore", str(sln)]
+            label = sln.relative_to(root).as_posix()
+        _qprint(f"  Warmup: dotnet restore {label}")
         try:
             result = subprocess.run(
-                ["dotnet", "restore", str(sln)],
-                cwd=self._cfg.root,
+                cmd,
+                cwd=root,
                 capture_output=True,
                 text=True,
                 encoding="utf-8",
@@ -2707,7 +2817,9 @@ class ForgeScope:
                 _qprint("\n  All steps completed!")
                 return
             store.ensure_started_at(pending["step"])
-            executor.run(pending)
+            with self._timed(f"step{pending['step']}"):
+                executor.run(pending)
+            self._step_usage.append((pending["step"], executor.last_output_tokens))
 
     def _finalize(self, store: IndexStore, phase_name: str) -> None:
         store.finalize()
@@ -2715,7 +2827,8 @@ class ForgeScope:
         msg = f"chore({phase_name}): mark phase completed"
         if self._git.commit_chore(msg):
             _qprint(f"  ✓ {msg}")
-        self._maybe_rewrite_commit_messages(store, phase_name)
+        with self._timed("commit-msg"):
+            self._maybe_rewrite_commit_messages(store, phase_name)
         if self._args.push:
             self._git.push(self._push_branch(phase_name))
         if _QUIET:
@@ -2728,10 +2841,10 @@ class ForgeScope:
     def _maybe_rewrite_commit_messages(self, store: IndexStore, phase_name: str) -> None:
         """phase 완료 후 feat(코드) 커밋 메시지를 AI로 repo 스타일 재작성한다.
 
-        기본 동작(--no-ai-commit-msg로 끔). 워크트리 모드만. chore housekeeping 커밋은
+        옵트인(--ai-commit-msg, 기본 OFF). 워크트리 모드만. chore housekeeping 커밋은
         템플릿 유지. 실패해도 완료 흐름을 막지 않는다(원본 커밋 보존).
         """
-        if self._no_worktree or getattr(self._args, "no_ai_commit_msg", False):
+        if self._no_worktree or not getattr(self._args, "ai_commit_msg", False):
             return
         try:
             base = store.get_git_base()
@@ -2751,6 +2864,8 @@ class ForgeScope:
                 cwd=self._cfg.root,
                 model=getattr(self._args, "step_model", None) or "claude-opus-4-8",
                 effort=getattr(self._args, "step_effort", None) or "high",
+                lean=not bool(getattr(self._args, "full_fleet", False)),
+                child_tools=getattr(self._args, "child_tools", None) or DEFAULT_CHILD_TOOLS,
             )
             for sha in feats:
                 diff = self._git.commit_diff(sha, 12_000)
@@ -2896,12 +3011,18 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
-        "--no-ai-commit-msg",
+        "--ai-commit-msg",
         action="store_true",
         help=(
-            "phase 완료 후 feat(코드) 커밋 메시지를 AI로 repo 스타일 재작성하는 기본 동작을 끈다. "
-            "워크트리 모드에서만 동작하며, chore housekeeping 커밋은 항상 템플릿을 유지한다."
+            "phase 완료 후 feat(코드) 커밋 메시지를 AI로 repo 스타일 재작성한다(추가 claude 호출 1회). "
+            "워크트리 모드에서만 동작하며 chore housekeeping 커밋은 항상 템플릿 유지. 기본 OFF."
         ),
+    )
+    parser.add_argument(
+        # 하위호환: 기본값이 이미 OFF이므로 no-op. 과거 호출자 무중단용.
+        "--no-ai-commit-msg",
+        action="store_true",
+        help=argparse.SUPPRESS,
     )
     parser.add_argument(
         "--verbose",
@@ -2966,6 +3087,31 @@ def _build_parser() -> argparse.ArgumentParser:
         default="high",
         choices=["low", "medium", "high", "xhigh", "max"],
         help=("Claude --effort 레벨 (default: high). 지능↔토큰 트레이드오프 다이얼."),
+    )
+    parser.add_argument(
+        "--full-fleet",
+        action="store_true",
+        help=(
+            "child claude에 MCP 서버·plugin skill 전체 로드를 허용한다. "
+            "기본은 lean(MCP 0개 + skill off + 최소 --tools)으로 호출당 startup 세금을 "
+            "제거한다. 디버깅/특수 도구가 필요할 때만 사용."
+        ),
+    )
+    parser.add_argument(
+        "--child-tools",
+        default=DEFAULT_CHILD_TOOLS,
+        help=(
+            f"lean 모드에서 child claude에 허용할 빌트인 tool 목록(콤마/공백 구분). "
+            f"기본 {DEFAULT_CHILD_TOOLS}."
+        ),
+    )
+    parser.add_argument(
+        "--timings",
+        action="store_true",
+        help=(
+            "phase 구간별 wall-clock 상세 테이블을 출력한다. "
+            "(미지정이어도 완료 시 [timings] 요약 한 줄은 항상 출력된다.)"
+        ),
     )
     parser.add_argument(
         "--quiet",

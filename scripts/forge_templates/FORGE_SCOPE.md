@@ -87,6 +87,8 @@ python scripts/forge_scope.py <phase_dir> [options]
 | `--step-model` | str | `claude-opus-4-8` | splitter·step·commit-msg 실행에 사용할 Claude 모델 이름. 더 싸게 돌리려면 `claude-sonnet-4-6`/`claude-haiku-4-5-20251001`. |
 | `--step-effort` | str | `high` | Claude `--effort` 레벨 (`low`/`medium`/`high`/`xhigh`/`max`). 지능↔토큰 트레이드오프 다이얼. |
 | `--compact-docs` | bool | (자동) | §2.3 참고. 토큰 절감 항목으로도 분류. |
+| `--full-fleet` | bool | `false` | child claude에 MCP 서버·plugin skill 전체 로드 허용. **기본은 lean** — `--strict-mcp-config`(MCP 0개)·`--disable-slash-commands`·최소 `--tools` 를 API key 유무와 무관하게 부착해 호출당 startup 세금 제거(OAuth 구독 사용자도 적용). 디버깅 시에만 해제. |
+| `--child-tools` | str | `Bash,Edit,Read,Write,Grep,Glob` | lean 모드에서 child claude에 허용할 빌트인 tool 목록(콤마구분). step body가 다른 도구를 요구하면 확장. |
 
 ### 2.6 git 부수 동작
 
@@ -94,6 +96,7 @@ python scripts/forge_scope.py <phase_dir> [options]
 |---|---|---|---|
 | `--push` | bool | `false` | phase 완료 후 `git push -u origin feat-<phase>` 자동 실행. |
 | `--force` | bool | `false` | 워크트리 dirty tree(commit 안 된 변경) 검사 우회. 재실행 시 워크트리 내 수동 변경을 step commit이 흡수하도록 허용. 작업 손실 위험이 있으므로 신중히. |
+| `--ai-commit-msg` | bool | `false` | phase 완료 후 `feat` 커밋 메시지를 AI로 repo 스타일 재작성(추가 claude 호출 1회, 워크트리 모드 한정). 기본 OFF — 켜면 지연·토큰이 늘어난다. |
 
 ### 2.7 운영/디버깅
 
@@ -101,6 +104,7 @@ python scripts/forge_scope.py <phase_dir> [options]
 |---|---|---|---|
 | `--strict` | bool | `false` | 가드레일 문서에 `{placeholder}` 패턴이 남아 있으면 실패. 문서 미완성 상태로 자동 진행을 막고 싶을 때. |
 | `--verbose` | bool | `false` | DEBUG 레벨 로그를 stderr로 출력. 본 옵션은 `--quiet`과 직교(quiet은 stdout만 억제, verbose는 stderr만 늘림). |
+| `--timings` | bool | `false` | phase 구간별 wall-clock 상세 테이블 출력. 미지정이어도 종료 시 `[timings] worktree=.. warmup=.. step0=..(out=..) commit-msg=.. total=..` 요약 1줄을 stderr로 출력. step `out`(output_tokens)이 작은데 elapsed가 크면 모델이 아니라 .NET 빌드/IO 병목. |
 
 ---
 
