@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v2.7.0 · 커스텀 스킬 11종 + 슬래시 커맨드 14종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v2.9.0 · 커스텀 스킬 12종 + 슬래시 커맨드 15종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,12 +11,12 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `2.6.0` |
+| 버전 | `2.9.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
 | 네임스페이스 | `/claudecode-for-me:<name>` |
-| 구성요소 | Skill 11 · Command 14 · Python runner 6 (`scripts/`) |
+| 구성요소 | Skill 12 · Command 15 · Python runner 6 (`scripts/`) |
 | 외부 연동 도구 | [`codenavigator`](https://github.com/JaeCheon8587/codenavigator) (PyPI) — codenav-bootstrap / codenav-frontmatter-gen 슬래시가 호출 |
 
 플러그인은 **글로벌 캐시**에 설치되므로 한 번 설치 후 모든 프로젝트의 **새 세션**에서 자동 노출된다. 프로젝트별 재설치 불필요.
@@ -67,6 +67,22 @@ pip install -U codenavigator
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
 
+### v2.9.0 — safe-pull 스킬 추가
+
+`git pull` 안전 게이트 스킬 신설. fetch(비파괴)까지만 먼저 실행해 "지금 → 풀 후" 변경·충돌·사이드이펙트를 브리핑하고, AskUserQuestion 컨펌 뒤에만 pull. 외부 도구 0(순수 git). backward-compatible — 신규 스킬만 추가, 기존 동작 불변.
+
+### v2.8.0 — forge-scope 성능 최적화 (고정 오버헤드 절감)
+
+`forge-scope`/`ddr-loop`의 child `claude` 호출 고정 오버헤드를 깎았다. 모델/effort 기본값(Opus 4.8 + high)·git 커밋 방식은 불변.
+
+- **lean child claude (기본)**: child `claude -p` 에 `--strict-mcp-config`(MCP 0개)·`--disable-slash-commands`·최소 `--tools` 를 **API key 유무와 무관하게** 부착 → 매 호출 MCP 함대·plugin cold-load 세금 제거(OAuth 구독 사용자에 특히 큼). 전체 로드는 `--full-fleet`, 허용 tool은 `--child-tools`. ddr-loop fix 호출에도 적용.
+- **AI 커밋 메시지 재작성 기본 OFF**: 옵트인 `--ai-commit-msg`. 단일 step phase에서 매번 붙던 추가 Opus 호출 1회 제거(claude 호출 2→1). 기존 `--no-ai-commit-msg` 는 no-op로 무중단.
+- **dotnet warmup restore 스코프 축소**: 풀 sln → AC가 테스트할 그 csproj만 restore(single-step/frd). contract-tdd는 회귀 때문에 풀 sln 유지.
+- **`--timings`**: 종료 시 `[timings] worktree=.. warmup=.. step0=..(out=..) commit-msg=.. total=..` 1줄 출력(`--quiet`여도). step `out`(output_tokens) 작은데 elapsed 크면 모델 아닌 .NET 빌드/IO 병목.
+- **docs 재복사 스킵**: 워크트리 재실행 시 이미 채워진 docs 디렉토리 재복사 안 함.
+
+backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작 변경은 commit-msg(기본 OFF)뿐. 데이터 계약·경로 불변이라 재부트스트랩 불필요.
+
 ### v2.0.0 — 경로 컨벤션 통일 (Breaking)
 
 전 리소스의 디렉토리 케이싱을 소문자로 통일했다. major 승격 사유:
@@ -89,7 +105,7 @@ pip install -U codenavigator
 
 ## 5. 플러그인 구성요소
 
-### Skill 11종
+### Skill 12종
 
 | Skill | 슬래시 커맨드 | 역할 |
 |---|---|---|
@@ -100,12 +116,13 @@ pip install -U codenavigator
 | `docs-add-task` | `/claudecode-for-me:docs-add-task [요청]` | v0.7 per-App 신규/기존 자동 판정 — 신규 FRD 생성(NEW) 또는 기존 영향 FRD 갱신(CHANGE), TASK + ADR 항상 생성, FC/PRD/ADR-CATALOG 갱신 |
 | `forge-cancel` | `/claudecode-for-me:forge-cancel <phase>` | forge phase 브랜치·산출물 정리 |
 | `forge-full` | `/claudecode-for-me:forge-full <phase>` | 문서 기반 전체 프로젝트 구현 phase runner |
-| `forge-scope` | `/claudecode-for-me:forge-scope <prompt> [--no-worktree] [--test-target=<csproj>] [--no-ai-commit-msg]` | 단일 FRD·기능·버그픽스용 경량 phase runner. 워크트리 미생성(in-place)·빌드 스코프 축소·완료 후 AI 커밋 메시지 재작성(기본 on) |
+| `forge-scope` | `/claudecode-for-me:forge-scope <prompt> [--no-worktree] [--test-target=<csproj>] [--ai-commit-msg] [--full-fleet] [--timings]` | 단일 FRD·기능·버그픽스용 경량 phase runner. 워크트리 미생성(in-place)·빌드 스코프 축소·lean child claude(MCP/skill 미로드)·AI 커밋 메시지 재작성(옵트인) |
 | `grill-me` | `/claudecode-for-me:grill-me [주제]` | 1문 1답으로 요구사항 모호점 추적 |
 | `meta-prompter` | `/claudecode-for-me:meta-prompter [요청]` | 거친 요청 → 구조화된 메타 프롬프트 |
+| `requirement-spec` | `/claudecode-for-me:requirement-spec [주제]` | grill-me→meta-prompter→codex 검증을 자동 체인. 요구사항 도출·개발 지시서 `.requirements/requirement-{slug}.md` 산출 후 정리본 대비 반영도(%) 자기검증 |
 | `safe-pull` | `/claudecode-for-me:safe-pull [원격/브랜치]` | git pull 전 fetch(비파괴)로 변경·충돌·사이드이펙트 브리핑 후 AskUserQuestion 컨펌 게이트 |
 
-### Command 14종
+### Command 15종
 
 | Command | 설명 |
 |---|---|
@@ -122,6 +139,7 @@ pip install -U codenavigator
 | `forge-scope` | forge-scope skill 진입 |
 | `grill-me` | grill-me skill 진입 |
 | `meta-prompter` | meta-prompter skill 진입 |
+| `requirement-spec` | requirement-spec skill 진입. grill-me→meta-prompter→codex 검증 자동 체인 메타 스킬 |
 | `safe-pull` | safe-pull skill 진입. fetch 후 브리핑 → 컨펌 게이트 → pull |
 
 ---
@@ -282,14 +300,19 @@ codenav --root <repo> ui --port 9876
 | 옵션 | 설명 |
 |---|---|
 | `--no-worktree` | 워크트리·`feat-<phase>` 브랜치 미생성. 메인 repo **현재 브랜치에서 직접** 실행(격리·머지 단계 없음). 시작 시 작업 트리 dirty면 중단(`--force` 우회). `--push` 는 현재 브랜치 push. 모든 preset과 직교 |
-| `--test-target=<csproj>` | 검증(`dotnet test`) 대상 테스트 프로젝트 1회 지정(휘발성). 풀 솔루션 빌드 회피. 우선순위: 이 플래그 > `forge-scope.json` `test_target` > `Src/Tests` 단일 자동감지 > 전체 sln |
-| `--no-ai-commit-msg` | phase 완료 후 feat(코드) 커밋 메시지를 AI로 repo 스타일 재작성하는 **기본 동작을 끈다**. 워크트리 모드 한정 |
+| `--test-target=<csproj>` | 검증(`dotnet test`) 대상 테스트 프로젝트 1회 지정(휘발성). 풀 솔루션 빌드 회피. warmup `dotnet restore`도 이 타깃으로 좁힌다(single-step/frd). 우선순위: 이 플래그 > `forge-scope.json` `test_target` > `Src/Tests` 단일 자동감지 > 전체 sln |
+| `--ai-commit-msg` | phase 완료 후 feat(코드) 커밋 메시지를 AI로 repo 스타일 재작성한다(추가 claude 호출 1회). 워크트리 모드 한정. **기본 OFF** |
+| `--full-fleet` | child claude에 MCP 서버·plugin skill 전체 로드 허용. 기본은 **lean**(MCP 0개 + skill off + 최소 `--tools`)으로 호출당 startup 세금 제거. 디버깅용 |
+| `--child-tools` | lean 모드 child claude 빌트인 tool 허용목록(콤마구분). 기본 `Bash,Edit,Read,Write,Grep,Glob` |
+| `--timings` | phase 구간별 wall-clock 상세 출력. (미지정이어도 완료 시 `[timings]` 요약 1줄은 항상 stderr 출력) |
 | `--step-model` | splitter·step·commit-msg 모델. 기본 `claude-opus-4-8` |
 | `--step-effort` | Claude `--effort` (`low\|medium\|high\|xhigh\|max`). 기본 `high` |
 
 - **모델·effort**: forge-scope 의 splitter/step/commit-msg claude 호출은 기본 **Opus 4.8 + effort high** (지능 최우선, `--step-model`/`--step-effort` 로 override). forge-full 은 **Opus 4.8 + high 고정**.
-- **빌드 스코프**: 검증은 풀 솔루션 `dotnet build` 대신 **대상 테스트 프로젝트만** `dotnet test`(빌드 겸함)로 좁혀 대규모 sln에서 시간 절감. `forge-scope.json` 에 `default_sln`/`test_target` 키로 고정 가능.
-- **AI 커밋 메시지 재작성** (기본 on): phase 완료 시 `feat` 커밋의 diff를 AI에 주고 repo 기존 커밋 subject 스타일로 메시지를 재작성한다. squash 안 함 — 커밋별 메시지만 교체하며 tree·author·date 보존, `chore` housekeeping 커밋은 템플릿 유지. 끄기: `--no-ai-commit-msg`. (워크트리 모드만 동작)
+- **lean child claude** (기본): child `claude -p` 호출에 `--strict-mcp-config`(MCP 0개)·`--disable-slash-commands`·최소 `--tools` 를 항상 부착해 **API key 유무와 무관하게** MCP 함대·plugin cold-load 세금을 제거한다(OAuth 구독 사용자도 적용). 전체 로드는 `--full-fleet`. ddr-loop fix 호출에도 동일 적용(`--full-fleet`/`--child-tools` 지원).
+- **빌드 스코프**: 검증은 풀 솔루션 `dotnet build` 대신 **대상 테스트 프로젝트만** `dotnet test`(빌드 겸함)로 좁혀 대규모 sln에서 시간 절감. warmup `dotnet restore`도 동일 타깃으로 좁힌다(single-step/frd; contract-tdd는 회귀 때문에 풀 sln 유지). `forge-scope.json` 에 `default_sln`/`test_target` 키로 고정 가능.
+- **AI 커밋 메시지 재작성** (기본 **off**): `--ai-commit-msg` 옵트인 시 phase 완료 후 `feat` 커밋 diff를 AI에 주고 repo 기존 subject 스타일로 메시지를 재작성한다. squash 안 함 — 커밋별 메시지만 교체하며 tree·author·date 보존, `chore` housekeeping 커밋은 템플릿 유지. (워크트리 모드만 동작)
+- **계측**: 완료/중단 시 `[timings] worktree=.. warmup=.. step0=..(out=..) commit-msg=.. total=..` 요약을 출력한다. step의 `out`(output_tokens)이 작은데 elapsed가 크면 모델이 아니라 .NET 빌드/IO 병목임을 뜻한다.
 
 #### forge-full 주요 옵션
 
@@ -330,7 +353,8 @@ phases/
 - 탐색 영역: Purpose / Scope / Success Criteria / Assumptions / Key Decisions / Constraints / Dependencies / Stakeholders / Failure Modes / Alternatives / Priorities / Execution
 - **논리 모순 시 명시 지적**, 해소될 때까지 해당 가지 잔류
 - 3~4 교환마다 영역별 완료 트래커
-- 종료 시 **인터뷰 기반 기승전결 정리본**(기 배경 / 승 전개 / 전 핵심 결정·전환점 / 결 확정 요구사항 + Open Items + 구체화 수준) 후 확정 리뷰
+- 종료 시 **인터뷰 기반 정리본**(배경 / 전개 / 전환 / 결론 + Open Items + 구체화 수준) 후 확정 리뷰
+- 확정 시 정리본을 **`.requirements/grill-me-{slug}.md` 자동 저장**(slug=영어 kebab, 동명 시 번호 suffix)
 - 산출물은 정리본까지 — **구현 plan·`ExitPlanMode` 미수행**. 다음 단계(meta-prompter 등)는 사용자가 정리본을 받아 진행
 
 ### 6.6 meta-prompter
@@ -346,7 +370,21 @@ phases/
 - **채팅 출력 전용**: 마크다운 코드블록 1개로 wrap, `.md` 저장 안 함
 - 개조식 종결 강제, 출력 끝 `[에이전트 행동 규칙]` 4문구 자동 부착
 
-### 6.7 commit-analysis
+### 6.7 requirement-spec (메타 스킬 — grill-me→meta-prompter→codex 파이프라인)
+
+```
+/claudecode-for-me:requirement-spec 사칙연산 계산기 개발
+```
+
+- **메타 스킬**: grill-me(6.5)·meta-prompter(6.6)를 자동 인라인 체인으로 엮고 codex 자기검증을 붙임. 1회 호출 → 6단계 자동(사용자 상호작용은 grill-me 인터뷰 + 최종 리뷰만)
+- **파이프라인**: `요구사항 도출(grill-me) → 개발 지시서 정제(meta-prompter) → .requirements/requirement-{slug}.md 저장 → codex 검증 → 보완 1회 반영`
+- **slug 일관**: 두 산출물이 동일 slug 공유 — `grill-me-{slug}.md`(정리본) ↔ `requirement-{slug}.md`(지시서)
+- **codex 자기검증**: grill-me 정리본=GROUND TRUTH 기준 체크리스트 생성 → 지시서 반영도 대조 → `Coverage: N%` + 보완점. 모델 `gpt-5.5`, reasoning effort 레벨 `high` (`-c model_reasoning_effort="high"`)
+- **Phase 게이트**: 각 Phase 전이 조건 미충족 시 다음 Phase 진입 금지
+- **codex 미설치 시** 검증만 생략(`/codex:setup` 안내), 지시서는 보존
+- 산출물은 지시서까지 — **구현 코드 미작성·`ExitPlanMode` 미호출**
+
+### 6.8 commit-analysis
 
 ```
 /claudecode-for-me:commit-analysis
@@ -357,7 +395,7 @@ phases/
 - Co-Authored-By / "Generated with Claude Code" 문구 제외
 - 한글 커밋 메시지
 
-### 6.8 doc-driven-review
+### 6.9 doc-driven-review
 
 ```
 /claudecode-for-me:doc-driven-review docs/spec-feature.md
@@ -389,7 +427,7 @@ phases/
 
 ---
 
-### 6.9 ddr-loop
+### 6.10 ddr-loop
 
 ```
 /claudecode-for-me:ddr-loop docs/FRD/F003.md --worktree feat-login-feature
@@ -409,6 +447,7 @@ DDR은 read-only 검증기라 단독으로는 "검증 땡, 끝"이다. `ddr-loop
 - **종료 리포트**: conformance 궤적(`62% → 79% → 90% → 96%`) + 수렴/cap 표시. cap 미달이면 남은 Top Priorities findings 인용.
 - **exit code**: 0=임계 도달 / 7=cap 도달·임계 미달 / 2=codex 미설치 / 3=리뷰할 변경 없음.
 - **fix 모델/effort**: 기본 `claude-sonnet-4-6` + `--effort high`. `--fix-model` / `--fix-effort`(low\|medium\|high\|xhigh\|max) 로 변경.
+- **lean child claude (기본)**: fix `claude -p` 호출도 forge-scope 와 동일하게 MCP 0개·skill off·최소 `--tools` 부착(API key 무관). 전체 로드는 `--full-fleet`, 허용 tool은 `--child-tools`.
 - **`--dry-run`**: DDR 1회만 돌리고 fix 없이 conformance 출력.
 
 #### 한계
@@ -419,7 +458,7 @@ DDR은 read-only 검증기라 단독으로는 "검증 땡, 끝"이다. `ddr-loop
 
 ---
 
-### 6.10 safe-pull
+### 6.11 safe-pull
 
 ```
 /claudecode-for-me:safe-pull                  # 현재 브랜치 추적 upstream 자동
@@ -551,6 +590,7 @@ Claudecode-For-Me/
 ├── skills/                      # Claude Code 스킬 (자연어 트리거)
 │   ├── branch-review/
 │   ├── codenav-frontmatter-gen/
+│   ├── ddr-loop/
 │   ├── doc-driven-review/
 │   ├── docs-add-task/
 │   ├── forge-cancel/
@@ -558,6 +598,7 @@ Claudecode-For-Me/
 │   ├── forge-scope/
 │   ├── grill-me/
 │   ├── meta-prompter/
+│   ├── requirement-spec/
 │   └── safe-pull/
 ├── commands/                    # 슬래시 커맨드 (명시 호출)
 │   ├── codenav-templates/       # /codenav-install 이 워크스페이스로 복사하는 자산
@@ -568,6 +609,7 @@ Claudecode-For-Me/
 │   ├── codenav-frontmatter-gen.md
 │   ├── codenav-install.md
 │   ├── commit-analysis.md
+│   ├── ddr-loop.md
 │   ├── doc-driven-review.md
 │   ├── docs-add-task.md
 │   ├── forge-cancel.md
@@ -575,11 +617,13 @@ Claudecode-For-Me/
 │   ├── forge-scope.md
 │   ├── grill-me.md
 │   ├── meta-prompter.md
+│   ├── requirement-spec.md
 │   └── safe-pull.md
 ├── docs/                       # v0.7 문서 시스템 자산
 │   └── .templates/             # PRD/FC/FRD/ADR/ARCHITECTURE/CLAUDE/README 양식 + App/ + .rules/ (코드 룰 3종)
 ├── scripts/                     # Python 헬퍼·러너
 │   ├── doc_driven_review.py
+│   ├── ddr_loop.py
 │   ├── docs_helpers.py
 │   ├── forge_full.py
 │   ├── forge_scope.py

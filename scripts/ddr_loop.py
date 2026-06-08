@@ -61,7 +61,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from forge_scope import ClaudeInvoker  # noqa: E402  fix 수정자 (claude -p)
+from forge_scope import ClaudeInvoker, DEFAULT_CHILD_TOOLS  # noqa: E402  fix 수정자 (claude -p)
 from doc_driven_review import (  # noqa: E402  타깃 해석 재사용
     find_repo_root,
     resolve_worktree,
@@ -118,6 +118,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                    help=f"fix claude --effort 레벨. 기본 {DEFAULT_FIX_EFFORT}")
     p.add_argument("--trust", action="store_true",
                    help="fix claude 에 --dangerously-skip-permissions 부여")
+    p.add_argument("--full-fleet", action="store_true", dest="full_fleet",
+                   help="fix child claude에 MCP/skill 전체 로드 허용(기본 lean).")
+    p.add_argument("--child-tools", default=DEFAULT_CHILD_TOOLS, dest="child_tools",
+                   help=f"lean 모드 fix child claude 빌트인 tool 목록. 기본 {DEFAULT_CHILD_TOOLS}.")
     p.add_argument("--quiet", action="store_true")
     p.add_argument("--verbose", "-v", action="store_true")
     p.add_argument("--dry-run", action="store_true", dest="dry_run")
@@ -315,6 +319,10 @@ def main(argv: list[str]) -> int:
         effort=args.fix_effort,
         session_id=str(uuid.uuid4()),
         use_session=True,
+        lean=not args.full_fleet,
+        child_tools=args.child_tools,
+        # 라운드 간 세션 재사용 → 동적 섹션 분리로 prompt-cache 적중률↑.
+        exclude_dynamic_sys_prompt=True,
     )
 
     traj: list[Optional[int]] = []

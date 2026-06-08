@@ -246,10 +246,16 @@ python ./scripts/forge_scope.py <phase-dir> --trust --yes --quiet \
 | `--quiet` | 진행 표시기 억제. Claude Code spawn 시 항상 포함. |
 | `--force` | 워크트리 dirty 검사 우회 (재실행 시 워크트리 안 수동 변경 흡수 허용). |
 | `--no-worktree` | 워크트리·`feat-<phase>` 브랜치 미생성. 메인 repo 현재 브랜치에서 직접 실행(격리·머지 단계 없음). 시작 시 작업 트리 dirty면 중단(`--force` 우회). `--push` 는 현재 브랜치 push. 모든 preset/모드와 직교. |
-| `--test-target` | 검증 대상 테스트 `.csproj` 1회 지정(휘발성, repo root 기준 상대경로). parent AI가 작업 문서 보고 추론. 우선순위 최상(>config>자동>풀sln). 풀 솔루션 빌드 회피. 무효 경로면 즉시 ERROR. |
+| `--test-target` | 검증 대상 테스트 `.csproj` 1회 지정(휘발성, repo root 기준 상대경로). parent AI가 작업 문서 보고 추론. 우선순위 최상(>config>자동>풀sln). 풀 솔루션 빌드 회피 + warmup restore도 동일 타깃으로 축소(single-step/frd). 무효 경로면 즉시 ERROR. |
+| `--ai-commit-msg` | phase 완료 후 feat 커밋 메시지를 AI로 재작성(추가 claude 호출 1회, 워크트리 모드 한정). **기본 OFF**. |
+| `--full-fleet` | child claude에 MCP/skill 전체 로드 허용. 기본은 lean(MCP 0개+skill off+최소 tools)으로 호출당 startup 세금 제거. |
+| `--child-tools` | lean 모드 child claude 빌트인 tool 허용목록(콤마구분). 기본 `Bash,Edit,Read,Write,Grep,Glob`. |
+| `--timings` | 구간별 wall-clock 상세 출력. (미지정이어도 `[timings]` 요약 1줄은 항상 stderr 출력.) |
 | `--push` | 실행 후 원격 push. |
 | `--strict` | placeholder 패턴 발견 시 실패. |
 | `--step-model` | splitter·step·commit-msg 실행 모델. 기본 `claude-opus-4-8`. |
 | `--step-effort` | Claude `--effort` 레벨 (`low\|medium\|high\|xhigh\|max`). 기본 `high`. 지능↔토큰 다이얼. |
 
-> **빌드 스코프**: 검증은 풀 솔루션 `dotnet build` 대신 **대상 테스트 프로젝트만** `dotnet test`(빌드 겸함)로 좁힌다. 타깃 우선순위: `--test-target=<csproj>` CLI(작업 문서 기반 추론, 휘발성) > `forge-scope.json` 의 `test_target` 키 > 자동 감지(`Src/Tests/` 하위 단일 `*.csproj`) > 전체 sln fallback(느림, 경고 출력). `forge-scope.json` 은 `default_sln` 과 동일한 config 파일.
+> **빌드 스코프**: 검증은 풀 솔루션 `dotnet build` 대신 **대상 테스트 프로젝트만** `dotnet test`(빌드 겸함)로 좁힌다. 타깃 우선순위: `--test-target=<csproj>` CLI(작업 문서 기반 추론, 휘발성) > `forge-scope.json` 의 `test_target` 키 > 자동 감지(`Src/Tests/` 하위 단일 `*.csproj`) > 전체 sln fallback(느림, 경고 출력). warmup `dotnet restore` 도 같은 타깃으로 좁혀 풀 sln cold restore 를 제거한다(contract-tdd 는 회귀 때문에 풀 sln 유지). `forge-scope.json` 은 `default_sln` 과 동일한 config 파일.
+
+> **lean child claude**: child `claude -p` 호출에 `--strict-mcp-config`(MCP 0개)·`--disable-slash-commands`·최소 `--tools` 를 **API key 유무와 무관하게** 항상 부착해 MCP 함대·plugin cold-load 세금을 제거한다(OAuth 구독 사용자도 적용). 전체 로드는 `--full-fleet`, 허용 tool 변경은 `--child-tools`. parent agent 가 자동으로 첨가할 필요 없음(스크립트 기본값).
