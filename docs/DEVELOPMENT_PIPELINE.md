@@ -5,28 +5,30 @@
 | 항목 | 값 |
 |---|---|
 | 문서 ID | DEVELOPMENT_PIPELINE (단일 파일) |
-| 버전 | 0.1 (Draft) |
-| 작성 가정 | 기존 스킬(grill-me/meta-prompter/docs-add-task/forge-scope/doc-driven-review) 실존. v0.7 per-App SSOT 체계 전제 |
+| 버전 | 0.2 (Draft) |
+| 작성 가정 | 기존 스킬(grill-me/acceptance-design/meta-prompter/docs-add-task/forge-scope/doc-driven-review) 실존. v0.7 per-App SSOT 체계 전제 |
 | 관련 문서 | [DOCUMENT_GUIDE](.templates/DOCUMENT_GUIDE.md) · [CLAUDE](../CLAUDE.md) |
 
 ## 변경 이력
 | 버전 | 일자 | 변경 요약 | 작성자 |
 |---|---|---|---|
 | 0.1 | 2026-05-31 | 초안 — 6단계 파이프라인 정의, step3 분기, 향후 보완 backlog | jaecheon.jeong |
+| 0.2 | 2026-06-09 | step 1.5 acceptance-design(완료조건·엣지·오류·검증 4축 설계) 삽입 | jaecheon.jeong |
 
 ## 0. 목적
 
 흩어진 스킬을 하나의 개발 흐름으로 묶는다. 목표:
 
 - **단일 진실원천**: 설계 문서(FRD/TASK)를 1급 산출물로 두고 개발·검증이 같은 문서를 참조
-- **책임 분리**: 단계마다 단일 책임 (캐묻기 / 정제 / 문서산출 / 개발 / 검증 / 반영)
+- **책임 분리**: 단계마다 단일 책임 (캐묻기 / 완료조건·검증설계 / 정제 / 문서산출 / 개발 / 검증 / 반영)
 - **검증 가능**: 개발 결과를 문서 기준으로 기계 검증 (Conformance%)
 
 ## 1. 파이프라인 개요
 
 ```mermaid
 flowchart TD
-    A["1. grill-me<br/>요구사항 구체화"] --> B["2. meta-prompter<br/>설계 프롬프트 정제"]
+    A["1. grill-me<br/>요구사항 구체화"] --> A2["1.5 acceptance-design<br/>완료조건·검증 4축 설계"]
+    A2 --> B["2. meta-prompter<br/>설계 프롬프트 정제"]
     B --> C["3. docs-add-task<br/>NEW/CHANGE 자동 분기"]
     C --> F["4. forge-scope<br/>문서 기반 개발"]
     F --> G["5. doc-driven-review<br/>Codex 문서 기준 검증"]
@@ -39,7 +41,8 @@ flowchart TD
 | 단계 | 스킬/커맨드 | 입력 | 출력 | 책임 |
 |---|---|---|---|---|
 | 1 | `grill-me` | 거친 아이디어/계획 | 합의된 요구사항 (대화형) | 모호함을 집요한 질문으로 구체화. 논리 공백 지적 |
-| 2 | `meta-prompter` | grill-me 결과 (요구사항) | 한국어 개조식 메타프롬프트 (마크다운 코드블록) | 요구사항을 다음 단계가 안정 수행할 구조화 프롬프트로 정제 |
+| 1.5 | `acceptance-design` | grill-me 정리본 (doc) | 완료조건·엣지케이스·오류케이스·검증방법 4축 설계본 (대화형) | doc 기준 "끝의 정의"와 검증을 같이 설계 |
+| 2 | `meta-prompter` | grill-me 결과 + 4축 설계본 | 한국어 개조식 메타프롬프트 (마크다운 코드블록) | 요구사항을 다음 단계가 안정 수행할 구조화 프롬프트로 정제 |
 | 3 | `docs-add-task` | 자연어 프롬프트 (신규 또는 기존 수정) | **NEW**: FRD 신규 + TASK + ADR, App-PRD §3.1/§7 갱신, FC 5표 행 추가 / **CHANGE**: TASK + ADR, 영향 FRD 자동 식별·갱신, FC 행 상태 갱신. 양 모드 ADR-CATALOG Proposed 행 | 모드 자동 판정 후 설계 문서 in-place 작성 |
 | 4 | `forge-scope` | doc-path + 프롬프트 | `phases/scoped/<phase-dir>/index.json` + `step{N}.md` + 코드 | 설계 문서 기반 경량 scoped 개발 실행 |
 | 5 | `doc-driven-review` | doc-path (1개 이상) | Missing / Improve / Overengineered / Conformance(%) | Codex 위임 — 문서가 코드 변경점에 반영됐는지 검증 |

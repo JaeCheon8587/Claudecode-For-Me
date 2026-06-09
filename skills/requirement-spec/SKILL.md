@@ -1,13 +1,13 @@
 ---
 name: requirement-spec
-description: 요구사항을 대화로 도출하고 개발 지시서로 정제한 뒤 codex로 자기검증하는 메타 스킬. grill-me로 요구사항 도출 → meta-prompter로 개발 지시서 정제 → .requirements/requirement-{slug}.md 저장 → codex로 grill-me 정리본 대비 반영도(%) 검증 → 보완점 1회 반영. "요구사항 지시서 만들어줘", "요구사항부터 같이 정리해서 작업지시서까지", "요구사항 도출하고 검증까지", "requirement-spec" 요청 시 트리거.
+description: 요구사항을 대화로 도출하고 완료조건·검증을 설계한 뒤 개발 지시서로 정제하고 codex로 자기검증하는 메타 스킬. grill-me로 요구사항 도출 → acceptance-design으로 완료조건·엣지·오류·검증 4축 설계 → meta-prompter로 개발 지시서 정제 → .requirements/requirement-{slug}.md 저장 → codex로 정리본+설계본 대비 반영도(%) 검증 → 보완점 1회 반영. "요구사항 지시서 만들어줘", "요구사항부터 같이 정리해서 작업지시서까지", "요구사항 도출하고 검증까지", "requirement-spec" 요청 시 트리거.
 argument-hint: "[요구사항 도출할 주제]"
 ---
 
 # Requirement Spec
 
 요구사항 도출부터 개발 지시서 산출·자기검증까지를 **한 번의 호출로 자동 진행**하는 메타 스킬.
-기존 스킬(`grill-me`, `meta-prompter`)을 인라인 실행으로 엮고, codex 위임 검증을 붙인 오케스트레이터다.
+기존 스킬(`grill-me`, `acceptance-design`, `meta-prompter`)을 인라인 실행으로 엮고, codex 위임 검증을 붙인 오케스트레이터다.
 
 **최종 산출물**: `.requirements/requirement-{slug}.md` — 다른 AI 에이전트가 그대로 수행할 수 있는 개발 지시서.
 `{slug}`는 grill-me 결과물(`.requirements/grill-me-{slug}.md`)과 **동일**하다.
@@ -16,7 +16,7 @@ argument-hint: "[요구사항 도출할 주제]"
 
 ## 동작 원칙
 
-- **자동 인라인 체인**: Phase 1~6을 자동으로 이어 간다. **사용자 상호작용은 grill-me 인터뷰(Phase 1)와 최종 리뷰(Phase 5)에서만** 발생한다.
+- **자동 인라인 체인**: Phase 1~6을 자동으로 이어 간다. **사용자 상호작용은 grill-me 인터뷰(Phase 1)·acceptance-design 인터뷰(Phase 1.5)·최종 리뷰(Phase 5)에서만** 발생한다.
 - **인라인 실행**: 다른 스킬을 호출할 때는 해당 `SKILL.md`를 읽어 **그 지침을 이 대화에서 그대로 수행**한다(별도 프로세스·핸드오프 아님).
 - **산출물 경계**: 지시서 저장/갱신까지가 이 스킬의 끝이다. **구현 코드를 작성하지 않고, `ExitPlanMode`를 호출하지 않는다.** (단, 정리본·지시서를 `.requirements/`에 저장하는 파일 쓰기는 허용.)
 - **Phase 게이트(전역)**: 각 Phase는 게이트다. 해당 Phase의 **전이 조건(완료 조건)을 충족하기 전에는 절대로 다음 Phase로 넘어가지 않는다.** 건너뛰기·앞당기기 금지. 각 Phase 머리의 ⛔ 게이트 문구를 매번 확인한다.
@@ -29,7 +29,7 @@ argument-hint: "[요구사항 도출할 주제]"
 
 스킬 활성화 시:
 1. 주제를 1~2문장으로 확인한다.
-2. 파이프라인을 1줄로 선언한다: *"요구사항 도출(grill-me) → 개발 지시서 정제(meta-prompter) → 저장 → codex 검증 → 보완. grill-me 인터뷰 외에는 자동 진행한다."*
+2. 파이프라인을 1줄로 선언한다: *"요구사항 도출(grill-me) → 완료조건·검증 4축 설계(acceptance-design) → 개발 지시서 정제(meta-prompter) → 저장 → codex 검증 → 보완. grill-me·acceptance-design 인터뷰 외에는 자동 진행한다."*
 3. `$ARGUMENTS`를 Phase 1의 grill-me 주제로 넘긴다.
 
 ---
@@ -47,11 +47,25 @@ grill-me가 사용자 중단으로 정리본을 확정하지 못하면 **파이�
 
 ---
 
+## Phase 1.5 — 완료조건·검증 4축 설계 (acceptance-design 인라인)
+
+> ⛔ **게이트**: acceptance-design 인터뷰가 끝나고 `.requirements/{slug}-acceptance.md`가 저장되기 **전에는 절대** Phase 2로 넘어가지 않는다.
+
+- `skills/acceptance-design/SKILL.md`를 읽어 **그 지침을 그대로** 수행한다(인터뷰 Phase 0~4 전부, 4축 질문 + 확정 리뷰 포함).
+- **타겟 doc = Phase 1 정리본**(`.requirements/grill-me-{slug}.md`). acceptance-design의 Phase 0 doc 읽기 단계에 이 경로를 그대로 입력으로 넘긴다(별도 doc 경로를 사용자에게 묻지 않는다).
+- **slug 고정**: acceptance-design 기본 slug(doc stem)을 쓰지 않고, **Phase 1에서 확보한 `{slug}`를 재사용**해 `.requirements/{slug}-acceptance.md`로 저장한다. (세 산출물이 동일 `{slug}` 공유.)
+- 산출 = `.requirements/{slug}-acceptance.md` (완료조건·엣지케이스·오류케이스·검증방법 4축 설계본).
+
+**전이 조건**: `.requirements/{slug}-acceptance.md`가 존재해야 다음으로 간다.
+acceptance-design이 사용자 중단으로 설계본을 확정하지 못하면 **파이프라인을 중단**한다(지시서 생성 안 함).
+
+---
+
 ## Phase 2 — 개발 지시서 정제 (meta-prompter 인라인)
 
 > ⛔ **게이트**: meta-prompter 메타프롬프트 코드블록이 산출되기 **전에는 절대** Phase 3으로 넘어가지 않는다. 필수 항목 질문이 남아 있으면 답을 받은 뒤에만 진행.
 
-- `skills/meta-prompter/SKILL.md`를 읽어 수행한다. **입력 = Phase 1 정리본 전문**(`.requirements/grill-me-{slug}.md` 내용).
+- `skills/meta-prompter/SKILL.md`를 읽어 수행한다. **입력 = Phase 1 정리본 전문 + Phase 1.5 4축 설계본 전문**(`.requirements/grill-me-{slug}.md` + `.requirements/{slug}-acceptance.md` 내용). 정리본은 무엇을·왜, 설계본은 완료조건·엣지·오류·검증을 공급한다.
 - meta-prompter가 작업 유형 분류 → 템플릿 선정 → 메타프롬프트 생성을 수행한다.
 - meta-prompter의 필수 항목이 정리본에서 채워지지 않으면 그 규칙대로 ≤3개를 묶어 한 번에 질문한다(정리본이 대부분 커버하므로 질문 0건을 기대).
 - 산출 = 코드블록 1개(메타헤더 + 본문 + `[에이전트 행동 규칙]` 가드레일 4문구, **개조식** 종결).
@@ -69,7 +83,7 @@ grill-me가 사용자 중단으로 정리본을 확정하지 못하면 **파이�
   ```
   # 요구사항 개발 지시서: {주제}
 
-  > 출처(GROUND TRUTH): .requirements/grill-me-{slug}.md
+  > 출처(GROUND TRUTH): .requirements/grill-me-{slug}.md + .requirements/{slug}-acceptance.md
   > 생성: requirement-spec 파이프라인
 
   ---
@@ -84,7 +98,7 @@ grill-me가 사용자 중단으로 정리본을 확정하지 못하면 **파이�
 
 > ⛔ **게이트**: codex 결과 회수(Coverage 추출 또는 raw 확보)가 끝나기 **전에는 절대** Phase 5로 넘어가지 않는다. codex 미설치/오류 분기일 때는 Phase 5~6을 건너뛰고 즉시 종료한다(그 외 경로로 진행 금지).
 
-grill-me 정리본을 기준(GROUND TRUTH), requirement 지시서를 검증 대상(ARTIFACT)으로 두고 codex에 위임한다.
+grill-me 정리본 + acceptance 4축 설계본을 기준(GROUND TRUTH), requirement 지시서를 검증 대상(ARTIFACT)으로 두고 codex에 위임한다.
 
 ### 가용성 체크
 - `codex --version`을 시도한다. 실패하면:
@@ -104,22 +118,25 @@ grill-me 정리본을 기준(GROUND TRUTH), requirement 지시서를 검증 대�
   - 장시간(최대 ~30분) 걸릴 수 있다.
 
 ### codex 프롬프트 템플릿
-`{grill_me_path}`, `{requirement_path}`를 실제 경로로 치환해 전달한다:
+`{grill_me_path}`, `{acceptance_path}`, `{requirement_path}`를 실제 경로로 치환해 전달한다:
 
 ```
 # ROLE
-You are a requirements auditor. The grill-me 정리본 is the GROUND TRUTH (확정 요구사항).
-The requirement 지시서 is the ARTIFACT to audit. Judge how completely the 지시서 reflects the 정리본.
+You are a requirements auditor. The grill-me 정리본 + acceptance 4축 설계본 together are the GROUND TRUTH (확정 요구사항·완료조건·검증 설계).
+The requirement 지시서 is the ARTIFACT to audit. Judge how completely the 지시서 reflects the GROUND TRUTH.
 Do not invent requirements not present in the GROUND TRUTH.
 
-# GROUND TRUTH (read this file directly)
+# GROUND TRUTH — 요구사항 정리본 (read this file directly)
 {grill_me_path}
+
+# GROUND TRUTH — 완료조건·엣지·오류·검증 4축 설계본 (read this file directly)
+{acceptance_path}
 
 # ARTIFACT (read this file directly)
 {requirement_path}
 
 # TASK
-1. GROUND TRUTH에서 확정 요구사항·핵심 결정·Open Items를 빠짐없이 추출해 체크리스트로 만든다.
+1. GROUND TRUTH(정리본+설계본)에서 확정 요구사항·핵심 결정·완료조건·엣지케이스·오류케이스·검증방법·Open Items를 빠짐없이 추출해 체크리스트로 만든다.
 2. 각 항목이 ARTIFACT(지시서)에 반영됐는지 판정한다: ✓ 반영 / ⚠ 부분 / ✗ 누락.
 3. Coverage %를 아래 RUBRIC으로 계산한다.
 4. 보완 필요 항목과 "지시서의 어디를 어떻게 고쳐야 하는지"를 구체적으로 제시한다.
@@ -193,6 +210,7 @@ Coverage: <integer 0-100>%
 | 상황 | 처리 |
 |---|---|
 | grill-me 미확정/사용자 중단 | 파이프라인 중단, 지시서 생성 안 함 |
+| acceptance-design 미확정/사용자 중단 | 파이프라인 중단, 지시서 생성 안 함 (정리본은 보존) |
 | meta-prompter 필수 항목 누락 | meta-prompter 규칙대로 ≤3개 묶음 질문 |
 | codex 미설치 | `/codex:setup` 안내, Phase 5~6 스킵, 지시서 보존하고 종료 |
 | codex timeout/실행 오류 | 에러 노출, 지시서 보존, 검증 생략 종료 |
@@ -202,4 +220,5 @@ Coverage: <integer 0-100>%
 ## slug 일관성 규칙
 
 - `{slug}`는 grill-me가 실제로 저장한 파일명(`.requirements/grill-me-{slug}.md`)에서 파생한다 — 별도로 다시 만들지 않는다.
-- 두 산출물은 항상 같은 `{slug}`를 공유한다: `grill-me-{slug}.md`(정리본) ↔ `requirement-{slug}.md`(지시서).
+- 세 산출물은 항상 같은 `{slug}`를 공유한다: `grill-me-{slug}.md`(정리본) ↔ `{slug}-acceptance.md`(4축 설계본) ↔ `requirement-{slug}.md`(지시서).
+- Phase 1.5는 acceptance-design 기본 slug(doc stem)을 무시하고 이 `{slug}`를 강제 적용한다.

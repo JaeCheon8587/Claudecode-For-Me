@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v2.9.0 · 커스텀 스킬 12종 + 슬래시 커맨드 15종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v2.10.0 · 커스텀 스킬 13종 + 슬래시 커맨드 16종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,12 +11,12 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `2.9.0` |
+| 버전 | `2.10.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
 | 네임스페이스 | `/claudecode-for-me:<name>` |
-| 구성요소 | Skill 12 · Command 15 · Python runner 6 (`scripts/`) |
+| 구성요소 | Skill 13 · Command 16 · Python runner 6 (`scripts/`) |
 | 외부 연동 도구 | [`codenavigator`](https://github.com/JaeCheon8587/codenavigator) (PyPI) — codenav-bootstrap / codenav-frontmatter-gen 슬래시가 호출 |
 
 플러그인은 **글로벌 캐시**에 설치되므로 한 번 설치 후 모든 프로젝트의 **새 세션**에서 자동 노출된다. 프로젝트별 재설치 불필요.
@@ -67,6 +67,12 @@ pip install -U codenavigator
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
 
+### v2.10.0 — acceptance-design 스킬 추가 + requirement-spec 파이프라인 통합
+
+타겟 문서 기준 **완료조건·엣지케이스·오류케이스·검증방법** 4축을 사용자와 같이 설계하는 스킬 신설. grill-me 질문 루프(1문1답 AskUserQuestion·pushback·모순 지적)를 재사용하되 시작 시 doc를 ground truth로 읽고 질문 범위를 4축으로 고정. 확정 시 `.requirements/{slug}-acceptance.md` 저장.
+
+추가로 `requirement-spec` 메타 스킬에 **Phase 1.5(acceptance-design)** 를 grill-me 다음 단계로 삽입. 파이프라인이 `grill-me → acceptance-design → meta-prompter → 저장 → codex 검증 → 보완`으로 확장됨. meta-prompter 입력과 codex GROUND TRUTH가 정리본 + 4축 설계본 둘 다를 포함해 지시서에 완료조건·검증이 실린다. 세 산출물(`grill-me-{slug}.md`·`{slug}-acceptance.md`·`requirement-{slug}.md`)이 동일 slug 공유.
+
 ### v2.9.0 — safe-pull 스킬 추가
 
 `git pull` 안전 게이트 스킬 신설. fetch(비파괴)까지만 먼저 실행해 "지금 → 풀 후" 변경·충돌·사이드이펙트를 브리핑하고, AskUserQuestion 컨펌 뒤에만 pull. 외부 도구 0(순수 git). backward-compatible — 신규 스킬만 추가, 기존 동작 불변.
@@ -105,10 +111,11 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 
 ## 5. 플러그인 구성요소
 
-### Skill 12종
+### Skill 13종
 
 | Skill | 슬래시 커맨드 | 역할 |
 |---|---|---|
+| `acceptance-design` | `/claudecode-for-me:acceptance-design <doc-path>` | 타겟 문서를 ground truth로 읽고 완료조건·엣지케이스·오류케이스·검증방법 4축을 1문1답으로 같이 설계. grill-me 질문 루프 재사용. 확정 시 `.requirements/{slug}-acceptance.md` 저장 |
 | `branch-review` | `/claudecode-for-me:branch-review [ref]` | HEAD↔ref diff을 Standards/Spec 2축 병렬 검토 |
 | `codenav-frontmatter-gen` | `/claudecode-for-me:codenav-frontmatter-gen [--limit N] [--apply]` | C# 클래스 description 빈칸을 AI로 일괄 채워 `// ---` frontmatter 블록 삽입 |
 | `doc-driven-review` | `/claudecode-for-me:doc-driven-review <doc-path>... [--worktree <ref>] [--commit <ref>]` | 첨부 문서 기준 working-tree/커밋 변경을 Codex CLI로 검증. Missing/Improve/Overengineered + Conformance(%) + 인용검증 보고. linked worktree·커밋 노드 지목 지원 |
@@ -119,13 +126,14 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `forge-scope` | `/claudecode-for-me:forge-scope <prompt> [--no-worktree] [--test-target=<csproj>] [--ai-commit-msg] [--full-fleet] [--timings]` | 단일 FRD·기능·버그픽스용 경량 phase runner. 워크트리 미생성(in-place)·빌드 스코프 축소·lean child claude(MCP/skill 미로드)·AI 커밋 메시지 재작성(옵트인) |
 | `grill-me` | `/claudecode-for-me:grill-me [주제]` | 1문 1답으로 요구사항 모호점 추적 |
 | `meta-prompter` | `/claudecode-for-me:meta-prompter [요청]` | 거친 요청 → 구조화된 메타 프롬프트 |
-| `requirement-spec` | `/claudecode-for-me:requirement-spec [주제]` | grill-me→meta-prompter→codex 검증을 자동 체인. 요구사항 도출·개발 지시서 `.requirements/requirement-{slug}.md` 산출 후 정리본 대비 반영도(%) 자기검증 |
+| `requirement-spec` | `/claudecode-for-me:requirement-spec [주제]` | grill-me→acceptance-design→meta-prompter→codex 검증을 자동 체인. 요구사항 도출·완료조건 4축 설계·개발 지시서 `.requirements/requirement-{slug}.md` 산출 후 정리본+설계본 대비 반영도(%) 자기검증 |
 | `safe-pull` | `/claudecode-for-me:safe-pull [원격/브랜치]` | git pull 전 fetch(비파괴)로 변경·충돌·사이드이펙트 브리핑 후 AskUserQuestion 컨펌 게이트 |
 
-### Command 15종
+### Command 16종
 
 | Command | 설명 |
 |---|---|
+| `acceptance-design` | acceptance-design skill 진입. 타겟 doc 기준 4축(완료조건·엣지케이스·오류케이스·검증방법) 설계, `.requirements/{slug}-acceptance.md` 저장 |
 | `branch-review` | branch-review skill 진입 |
 | `codenav-bootstrap` | CodeNavigator parser-only 인덱싱 (frontmatter/XML doc만 읽어 SQLite 빌드, AI 호출 없음) |
 | `codenav-frontmatter-gen` | codenav-frontmatter-gen skill 진입 (AI가 .cs에 frontmatter 영구 삽입). `--projects` / `--files` / `--staged` 스코프 인자 |
@@ -139,7 +147,7 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `forge-scope` | forge-scope skill 진입 |
 | `grill-me` | grill-me skill 진입 |
 | `meta-prompter` | meta-prompter skill 진입 |
-| `requirement-spec` | requirement-spec skill 진입. grill-me→meta-prompter→codex 검증 자동 체인 메타 스킬 |
+| `requirement-spec` | requirement-spec skill 진입. grill-me→acceptance-design→meta-prompter→codex 검증 자동 체인 메타 스킬 |
 | `safe-pull` | safe-pull skill 진입. fetch 후 브리핑 → 컨펌 게이트 → pull |
 
 ---
@@ -370,16 +378,17 @@ phases/
 - **채팅 출력 전용**: 마크다운 코드블록 1개로 wrap, `.md` 저장 안 함
 - 개조식 종결 강제, 출력 끝 `[에이전트 행동 규칙]` 4문구 자동 부착
 
-### 6.7 requirement-spec (메타 스킬 — grill-me→meta-prompter→codex 파이프라인)
+### 6.7 requirement-spec (메타 스킬 — grill-me→acceptance-design→meta-prompter→codex 파이프라인)
 
 ```
 /claudecode-for-me:requirement-spec 사칙연산 계산기 개발
 ```
 
-- **메타 스킬**: grill-me(6.5)·meta-prompter(6.6)를 자동 인라인 체인으로 엮고 codex 자기검증을 붙임. 1회 호출 → 6단계 자동(사용자 상호작용은 grill-me 인터뷰 + 최종 리뷰만)
-- **파이프라인**: `요구사항 도출(grill-me) → 개발 지시서 정제(meta-prompter) → .requirements/requirement-{slug}.md 저장 → codex 검증 → 보완 1회 반영`
-- **slug 일관**: 두 산출물이 동일 slug 공유 — `grill-me-{slug}.md`(정리본) ↔ `requirement-{slug}.md`(지시서)
-- **codex 자기검증**: grill-me 정리본=GROUND TRUTH 기준 체크리스트 생성 → 지시서 반영도 대조 → `Coverage: N%` + 보완점. 모델 `gpt-5.5`, reasoning effort 레벨 `high` (`-c model_reasoning_effort="high"`)
+- **메타 스킬**: grill-me(6.5)·acceptance-design(6.12)·meta-prompter(6.6)를 자동 인라인 체인으로 엮고 codex 자기검증을 붙임. 1회 호출 → 자동 진행(사용자 상호작용은 grill-me 인터뷰 + acceptance-design 인터뷰 + 최종 리뷰만)
+- **파이프라인**: `요구사항 도출(grill-me) → 완료조건·엣지·오류·검증 4축 설계(acceptance-design) → 개발 지시서 정제(meta-prompter) → .requirements/requirement-{slug}.md 저장 → codex 검증 → 보완 1회 반영`
+- **Phase 1.5**: acceptance-design의 타겟 doc = grill-me 정리본(`grill-me-{slug}.md`). 설계본 `{slug}-acceptance.md` 산출. meta-prompter 입력·codex GROUND TRUTH가 정리본 + 설계본 둘 다를 포함 → 지시서에 완료조건·검증이 실림
+- **slug 일관**: 세 산출물이 동일 slug 공유 — `grill-me-{slug}.md`(정리본) ↔ `{slug}-acceptance.md`(설계본) ↔ `requirement-{slug}.md`(지시서)
+- **codex 자기검증**: grill-me 정리본 + acceptance 설계본=GROUND TRUTH 기준 체크리스트 생성 → 지시서 반영도 대조 → `Coverage: N%` + 보완점. 모델 `gpt-5.5`, reasoning effort 레벨 `high` (`-c model_reasoning_effort="high"`)
 - **Phase 게이트**: 각 Phase 전이 조건 미충족 시 다음 Phase 진입 금지
 - **codex 미설치 시** 검증만 생략(`/codex:setup` 안내), 지시서는 보존
 - 산출물은 지시서까지 — **구현 코드 미작성·`ExitPlanMode` 미호출**
@@ -482,6 +491,23 @@ DDR은 read-only 검증기라 단독으로는 "검증 땡, 끝"이다. `ddr-loop
 - 자동 보정 없음 — Step 0 걸리면 사용자가 직접 처리(의도적). 자동 stash 배제(pop 충돌 새 위험 회피).
 - 충돌 예측 정밀도는 git 버전 의존 — < 2.38은 교집합 fallback(확정 아님).
 - merge 기본(로컬 SHA 보존). rebase는 diverged 한정 옵션.
+
+---
+
+### 6.12 acceptance-design
+
+```
+/claudecode-for-me:acceptance-design docs/feature.md
+```
+
+타겟 문서(spec/FRD)는 "무엇을 만든다"는 적어도 **완료조건·엣지케이스·오류케이스·검증방법**이 비거나 모호한 경우가 많다. acceptance-design은 그 doc를 ground truth로 읽고 위 4축을 사용자와 같이 설계한다. 질문 방식은 grill-me(6.5)와 동일하되, 시작 시 doc를 읽고 질문 범위를 4축으로 고정한다는 점이 다르다.
+
+- **doc 입력 필수**: `$ARGUMENTS` doc 경로 → `Read` 1회. 경로 없음 "문서 경로 필수" / 파일 없음 "오류: 문서 파일 없음" 종료.
+- **4축 고정**: 완료조건(Acceptance Criteria) / 엣지케이스 / 오류케이스 / 검증방법. doc에 명시된 것은 확인, 빈 곳·모호한 곳 우선 질문.
+- **1문 1답** (`AskUserQuestion`)으로 추적, 추천 2개(`(Recommended)`) + auto-`Other`. **논리 모순 시 명시 지적**, doc 근거 있으면 인용 후 되묻기.
+- 3~4 교환마다 4축 트래커. 종료 시 **4축 설계본**(출처 라인 + 완료조건/엣지/오류/검증 + Open Items + 구체화 수준) 후 확정 리뷰.
+- 확정 시 **`.requirements/{slug}-acceptance.md` 자동 저장**(slug=doc stem 영어 kebab, 동명 시 번호 suffix).
+- 산출물은 설계본까지 — **구현 plan·`ExitPlanMode` 미수행**. 후속(meta-prompter·ddr-loop 등)은 사용자가 설계본을 받아 진행.
 
 ---
 
@@ -588,6 +614,7 @@ Claudecode-For-Me/
 │   ├── plugin.json              # 매니페스트 (name·version·author)
 │   └── marketplace.json         # 마켓플레이스 등록 정보
 ├── skills/                      # Claude Code 스킬 (자연어 트리거)
+│   ├── acceptance-design/
 │   ├── branch-review/
 │   ├── codenav-frontmatter-gen/
 │   ├── ddr-loop/
@@ -604,6 +631,7 @@ Claudecode-For-Me/
 │   ├── codenav-templates/       # /codenav-install 이 워크스페이스로 복사하는 자산
 │   │   ├── CODENAV-GUIDE-TEMPLATE.md
 │   │   └── codenav-prefer.ps1
+│   ├── acceptance-design.md
 │   ├── branch-review.md
 │   ├── codenav-bootstrap.md
 │   ├── codenav-frontmatter-gen.md
