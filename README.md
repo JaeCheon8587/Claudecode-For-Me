@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v2.10.0 · 커스텀 스킬 13종 + 슬래시 커맨드 16종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v2.10.1 · 커스텀 스킬 13종 + 슬래시 커맨드 16종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,7 +11,7 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `2.10.0` |
+| 버전 | `2.10.1` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
@@ -66,6 +66,10 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v2.10.1 — forge-scope 인자 우선순위 명문화 (충돌 오인 방지)
+
+`--single-step` + `--preset=contract-tdd` 동시 지정을 parent agent 가 "상호 배타 충돌"로 오인해 경고하던 문제 차단. `forge_scope.py` 는 deterministic precedence(`--preset=<X>` 명시 > `--single-step` 암묵 > auto)로 정상 처리하며, contract-tdd 분기에서 single-step step-cap(=1)은 자동 해제된다. `--doc` 도 FRD 전용이 아님(TASK·일반 문서·FRD 모두 가능)을 SKILL·README 에 명시. 코드 동작 불변 — 문서/가드레일만 보강.
 
 ### v2.10.0 — acceptance-design 스킬 추가 + requirement-spec 파이프라인 통합
 
@@ -334,8 +338,11 @@ codenav --root <repo> ui --port 9876
 | `--quiet` | 진행 표시기 억제 (Claude Code spawn 권장) |
 | `--plan-only` | plan 생성·출력만 |
 | `--preset=auto\|contract-tdd` | 기본 splitter / contract→red→green→regression 4-step |
+| `--single-step` | FRD 아닌 일반 단일 작업(암묵 single-step preset) |
 | `--sln=<path>` | contract-tdd 가 사용할 .sln 경로. 미지정 시 `Src/*.sln` auto-detect (다수 시 에러) |
 | `--compact-docs` | guardrail 문서 핵심 섹션 압축 주입 |
+
+> **인자 우선순위(충돌 아님)**: `--single-step` + `--preset=<X>` 동시 지정은 에러가 아니다. preset 우선순위는 `--preset=<X>` 명시 > `--single-step`(암묵) > auto 이며, contract-tdd 분기에서 single-step 의 step-cap(=1)은 자동 해제되고 `--single-step` 은 무시된다. `--doc` 도 FRD 전용이 아니라 TASK·일반 문서·FRD 모두 가능 — doc 종류는 preset 선택에만 영향. parent agent 가 이를 "상호 배타" 충돌로 보고 경고 출력하면 안 된다.
 
 #### 한계
 
