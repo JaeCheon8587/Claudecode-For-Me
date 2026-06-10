@@ -5,6 +5,7 @@ __pycache__/
 
 # Local sandboxes (user-specific test corpora, may host their own git repo)
 samples/
+Test/
 
 # Local debug artifacts
 _inspect.py

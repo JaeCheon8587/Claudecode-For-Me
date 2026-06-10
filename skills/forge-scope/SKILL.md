@@ -136,6 +136,11 @@ git worktree remove .worktrees/<phase-dir> && git branch -D feat-<phase-dir>
 
 > **테스트 스코프 자동 판단**: 작업 문서(TASK/FRD/prompt)에서 대상 App·기능을 읽어 **검증할 테스트 프로젝트(.csproj)** 를 추론하고 실행 명령에 `--test-target=<csproj>` (repo root 기준 상대경로)를 첨가한다. 추론 근거: App 이름 → 해당 테스트 프로젝트(예: MASTER → `Src/.../z_Test/Master/Mirero.XLab.Test.Master/...csproj`). 풀 솔루션 빌드를 피해 빠르게 검증한다. 확신 없으면 생략(자동감지/sln fallback). `forge-scope.json` 의 `test_target` 보다 우선.
 
+> **인자 충돌 경고 금지 (precedence, NOT conflict)**: parent agent 는 아래를 충돌로 보고하지 말 것 — 모두 `forge_scope.py` 가 정의된 우선순위로 정상 처리한다.
+> - `--single-step` + `--preset=contract-tdd` 동시 지정은 **에러 아님**. contract-tdd 가 이긴다(deterministic 4-step). single-step 의 step-cap(=1)은 contract-tdd 분기에서 자동 해제되고 `--single-step` 은 무시된다 (`forge_scope.py:2521-2527`). "상호 배타 / 동시 지정 불가" 류 경고를 출력하지 말 것.
+> - preset 우선순위: `--preset=<X>` 명시 > `--single-step`(=암묵 single-step) > 기본(auto). `--single-step` 은 preset 미지정 시의 단축 표현일 뿐 별도 preset 과 배타가 아니다.
+> - `--doc` 은 FRD 전용이 아니다 — TASK·일반 문서·FRD 모두 가능. doc 종류는 preset 선택(frd-implementation / single-step / contract-tdd)에만 영향을 주며, doc=TASK 라는 사실 자체는 경고 사유가 아니다.
+
 ### Mode 1 — prompt-only
 `$ARGUMENTS`가 일반 텍스트로 시작하면 (`/docs/`·`docs/` 형식이 아님, 대소문자 무시):
 
@@ -240,7 +245,7 @@ python ./scripts/forge_scope.py <phase-dir> --trust --yes --quiet \
 | `--preset=auto` | auto-splitter. 여러 레이어 분해가 필요할 때만 사용. |
 | `--preset=contract-tdd` | 문서 1개로 contract/red/green/regression 4-step 생성. sln 우선순위: `--sln` CLI > `FORGE_DEFAULT_SLN` env > `forge-scope.json` `default_sln` > auto-detect. 호출 단축형: `/forge-scope tdd <doc> <prompt>` (Mode 2c). |
 | `--sln=<path>` | contract-tdd 가 사용할 .sln 경로 (repo root 기준). 미지정 시 `Src/*.sln` (1단계) → `Src/*/*.sln` (2단계) auto-detect. 다수 시 에러 + 후보 목록 출력. |
-| `--single-step` | FRD 아닌 일반 단일 작업. |
+| `--single-step` | FRD 아닌 일반 단일 작업(암묵 single-step preset). `--preset=<X>` 와 동시 지정돼도 충돌 아님 — preset 이 우선하고 single-step 은 무시된다(특히 contract-tdd). 단계 4 "인자 충돌 경고 금지" 참고. |
 | `--compact-docs` | 가드레일 문서를 핵심 섹션만 압축 주입. |
 | `--yes` | plan 자동 승인. Claude Code spawn 시 항상 포함. |
 | `--quiet` | 진행 표시기 억제. Claude Code spawn 시 항상 포함. |
