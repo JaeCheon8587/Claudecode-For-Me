@@ -594,7 +594,7 @@ class ClaudeInvoker:
         # 호출당 startup 세금을 제거한다. --bare와 공존해도 중복 차감일 뿐 무해.
         if self._lean:
             cmd += [
-                "--mcp-config", "{}", "--strict-mcp-config",
+                "--mcp-config", '{"mcpServers": {}}', "--strict-mcp-config",
                 "--disable-slash-commands",
                 "--tools", self._child_tools,
             ]
@@ -1085,6 +1085,40 @@ class IndexStore:
             "Step did not update status",
         )
 
+    def child_status_file(self, step_num: int) -> Path:
+        return self._cfg.phase_dir / f"step{step_num}-status.json"
+
+    def ingest_child_status(self, step_num: int) -> str:
+        """자식이 쓴 step{N}-status.json 을 읽어 index.json 에 프로그램적으로 반영.
+
+        자식이 거대한 중첩 index.json 을 손수편집하다 JSON 을 깨뜨리는 사고를
+        원천 차단한다(자식은 작은 status 파일만 새로 쓴다). status 파일이 없거나
+        깨졌으면 'pending' 을 반환해 기존 재시도 로직이 동작한다.
+        """
+        sf = self.child_status_file(step_num)
+        if not sf.exists():
+            return "pending"
+        try:
+            data = json.loads(sf.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return "pending"
+        status = data.get("status", "pending")
+        if status not in ALLOWED_STATUS:
+            return "pending"
+        idx = self.load()
+        for s in idx["steps"]:
+            if s["step"] == step_num:
+                s["status"] = status
+                if data.get("summary"):
+                    s["summary"] = data["summary"]
+                if status == "error" and data.get("error_message"):
+                    s["error_message"] = data["error_message"]
+                if status == "blocked" and data.get("blocked_reason"):
+                    s["blocked_reason"] = data["blocked_reason"]
+                break
+        self.save(idx)
+        return status
+
     def completed_count(self) -> int:
         return sum(1 for s in self.load()["steps"] if s["status"] == "completed")
 
@@ -1133,6 +1167,12 @@ class IndexStore:
         return reason
 
     def reset_for_retry(self, step_num: int) -> None:
+        # 직전 시도의 status 파일을 지워 재시도가 stale 결과를 읽지 않게 한다.
+        sf = self.child_status_file(step_num)
+        try:
+            sf.unlink()
+        except OSError:
+            pass
         idx = self.load()
         for s in idx["steps"]:
             if s["step"] == step_num:
@@ -2143,7 +2183,8 @@ class StepExecutor:
 
         for attempt in range(1, self.MAX_RETRIES + 1):
             elapsed = self._run_attempt(step, prev_error, attempt, done_count)
-            status = self._store.read_step_status(step_num)
+            # 자식이 쓴 step{N}-status.json 을 index.json 에 프로그램적으로 반영(손수편집 금지).
+            status = self._store.ingest_child_status(step_num)
             if status == "completed":
                 self._on_success(step_num, step_name, elapsed)
                 return
@@ -2199,10 +2240,13 @@ class StepExecutor:
                 f"2. 이 step에 명시된 작업만 수행하라. 추가 기능이나 파일을 만들지 마라.\n"
                 f"3. 기존 테스트를 깨뜨리지 마라.\n"
                 f"4. AC(Acceptance Criteria) 검증을 직접 실행하라.\n"
-                f"5. /phases/{PHASES_SUBDIR}/{self._cfg.phase_dir_name}/index.json의 해당 step status를 업데이트하라:\n"
-                f'   - AC 통과 → "completed" + "summary" 필드에 이 step의 산출물을 한 줄로 요약\n'
-                f'   - {self.MAX_RETRIES}회 수정 시도 후에도 실패 → "error" + "error_message" 기록\n'
-                f'   - 사용자 개입이 필요한 경우 → "blocked" + "blocked_reason" 기록 후 즉시 중단\n'
+                f"5. **index.json 은 절대 수정하지 마라 (forge 가 소유·관리한다).** 대신 이 step 의 결과를 "
+                f"`phases/{PHASES_SUBDIR}/{self._cfg.phase_dir_name}/step<현재step번호>-status.json` 파일에 "
+                f"JSON 한 객체로 새로 기록하라:\n"
+                f'   - AC 통과 → {{"status": "completed", "summary": "<이 step 산출물 한 줄 요약>"}}\n'
+                f'   - {self.MAX_RETRIES}회 수정 시도 후에도 실패 → {{"status": "error", "error_message": "<원인>"}}\n'
+                f'   - 사용자 개입이 필요한 경우 → {{"status": "blocked", "blocked_reason": "<이유>"}} 기록 후 즉시 중단\n'
+                f"   이 파일은 작은 단일 객체이므로 유효한 JSON 으로 정확히 작성하라.\n"
                 f"6. 모든 변경사항을 커밋하라:\n"
                 f"   {commit_example}\n\n---\n\n"
             )
