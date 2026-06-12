@@ -21,6 +21,7 @@ docs/.templates v0.7 체계 (per-App PRD/FC/ARCHITECTURE/FRD/ADR/ADR-CATALOG/TAS
 - **AI 가 모드·영향 FRD 자동 식별** — 사용자가 모드·FRD ID 지정하지 않음. AI 가 FC 파싱 + prompt 매칭. 0건이어도 자동 NEW 강행 금지 — 사용자 확인 1회.
 - **FRD 본문 부분 갱신 (CHANGE)** — 변경 이력 표 + AI 판단 영향 section 텍스트만. TASK ID 인용 X.
 - **부분 실패 시 rollback X**.
+- **쓰기 후 Codex 2축 검증-fix 루프** — 기본 ON (`--no-verify` 스킵), max 3회·임계 conformance 99%. fix=Claude (manifest 범위만). cap 소진해도 rollback X. codex 미설치 시 구조 check 폴백.
 - **템플릿 대조 강제** — FRD/ADR/TASK/FC/PRD 본문 생성 직전 해당 `.templates/App/.../X-TEMPLATE.md` 1회 `Read`. 절 구조·메타 행 수·placeholder 원본 대조 후 채움. 기억 의존 구조 생성 금지 (drift 방지). 템플릿 부재 시 경고 후 진행.
 
 ---
@@ -57,6 +58,7 @@ python scripts/docs_helpers.py list-apps --repo .
 - `completion_criteria` — §9 (default `미작성/추후`)
 - `risks` — §10
 - `adr_decision` (override 가능, 없으면 AI 추론)
+- `--no-verify` (flag) — Phase 12 검증-fix 루프 생략, 구조 check + cross-ref 만 (12.5 폴백).
 
 **필수 입력 게이트**: `purpose` 또는 `완료 상태` 를 prompt 에서 추출 실패 시 → `AskUserQuestion` 1회로 수집. 추론·placeholder 날조 금지. 무응답 시에만 `미작성/추후` placeholder. (Backlog 모드는 FRD/TASK 미생성이므로 `purpose` 만 필수.)
 
@@ -577,21 +579,76 @@ CHANGE 모드 본문 준비 완료 → **Phase 10 (사전 확정)** 으로.
 
 ---
 
-## Phase 12: 자기 검증
+## Phase 12: 검증-fix 수렴 루프 (기본 ON, --no-verify 스킵)
+
+> Phase 11 쓰기 결과를 Codex 가 2축(prompt 의도 + v0.7 룰) 채점 → 미달 시 Claude 가 manifest 범위 내 문서만 fix → 재검증. 임계(conformance 99%) 또는 cap(3회) 까지 반복. `--no-verify` 지정 또는 codex 미설치 시 12.5 폴백(구 동작).
+
+### 12.0 manifest 작성 (휘발)
+
+Phase 11 의 생성/수정 파일 목록 + 변경 요지를 JSON 으로 `.git/info/docs-add-task-manifest.json` 에 `Write`:
+```json
+{ "app": "<App>", "mode": "NEW|CHANGE",
+  "created": ["docs/<App>/FRD/<App>-FRD-NNN.md", "..."],
+  "modified": [{"path": "docs/<App>/<App>-FC.md", "summary": "<요지>"}, "..."] }
+```
+삭제 산출물 없음 (docs-add-task 는 삭제 안 함) — created/modified 만.
+
+### 12.1 수렴 루프 (i = 1..3)
+
+**(a) 구조 게이트**
+```
+python scripts/docs_helpers.py check --repo . --app <App>
+```
+exit 1 (FAIL) 이면 그 FAIL 항목을 이번 라운드 결함으로 합산.
+
+**(b) Codex 2축 검증**
+```
+python scripts/docs_verify.py --repo . --app <App> --mode <NEW|CHANGE> \
+   --prompt "<원본 사용자 prompt>" \
+   --manifest-file .git/info/docs-add-task-manifest.json
+```
+- exit 2 (codex 미설치) → 루프 중단 → **12.5 폴백**.
+- exit 0 → stdout 마지막 `Conformance: N%` 추출 + `## Defects` 목록 수집.
+- exit 1 (conformance 추출 실패 등) → conformance 미상 취급: Defects 있으면 fix 라운드 진행, 없으면 보수적 종료 (12.3, 결과 "검증 불완전" 표기).
+
+**(c) 종료 판정**
+- conformance ≥ 99 → 수렴 → 12.3.
+- i == 3 → cap 도달 → 12.3 (rollback X, 마지막 상태 유지).
+- 아니면 (d).
+
+**(d) fix (Claude 인라인)**
+`## Defects` 항목 중 **manifest (created/modified) 경로에 속한 것만** `Edit` 으로 수정.
+- 범위 밖 파일 지적 (예: ARCHITECTURE/PRD) 은 고치지 않고 12.3 의 [Warning] 으로 수집.
+- 구조 게이트 FAIL 도 범위 내면 수정.
+- fix 후 manifest 갱신 불필요 (파일 목록 불변) → i+1 로 12.1(a) 재진입.
+
+### 12.2 conformance 궤적 기록
+
+각 라운드 pct 를 누적 (예: `88% → 96% → 99%`). 12.3 보고에 사용.
+
+### 12.3 종료 보고
+
+- `Verify: <궤적>  (<수렴 ✅ N fix rounds | cap ⛔ 99% 미달>)`
+- cap 미달 시 남은 `## Defects` 그대로 노출 + "수동 처리 안내".
+- 범위 밖 지적 = `[Warning] <파일> 검토 권장 (자동 수정 안 함)`.
+
+### 12.4 정리
+
+`.git/info/docs-add-task-manifest.json` 삭제 (휘발).
+
+### 12.5 codex 미설치 / --no-verify 폴백 (구 동작)
 
 ```
 python scripts/docs_helpers.py check --repo . --app <App>
 ```
-
-FAIL 있어도 source 유지. 출력 그대로 사용자 노출. 수동 처리 안내.
-
-**내용 cross-ref 자가검증** (`check` 는 구조만 봄 — 아래 의미 정합은 AI 가 쓴 파일 대조 후 텍스트 보고):
+결과만 노출 + 아래 AI cross-ref 5항목 수동 대조 보고 (자동 수정 안 함):
 - [ ] FRD 메타 기능 ID == FC 신규/영향 F 행 번호 일치
 - [ ] FRD §16 "필요" 선언 == 실제 FC/ADR/ADR-CATALOG 수행됨 (선언-실행 일치)
 - [ ] FC 행 (기능상태·구현상태·테스트상태) = 일관성 룰표 허용 조합 (Phase 9C)
 - [ ] AC/TC ID 연속 (중복·누락 없음)
 - [ ] ADR-CATALOG Proposed 행 doc-id == 신규 ADR 파일 doc-id 일치
-불일치 항목 = 보고 + 수동 수정 안내 (자동 재수정 안 함, 부분실패 rollback X 룰 일관). NEW=5항목 전부 / CHANGE=§16 항목은 FRD §16 갱신 없으면 skip.
+불일치 항목 = 보고 + 수동 수정 안내. NEW=5항목 전부 / CHANGE=§16 항목은 FRD §16 갱신 없으면 skip.
+codex 미설치 시: `[Warning] codex 미설치로 자동 검증-fix 생략. /codex:setup 후 재실행 권장.`
 
 ---
 
@@ -606,6 +663,7 @@ UPDATE docs/<App>/<App>-PRD.md (§3.1, §7)
 UPDATE docs/<App>/<App>-FC.md (5 tables)
 UPDATE docs/<App>/<App>-ADR-CATALOG.md (Proposed +1)
 Checks: <P> PASS, <F> FAIL
+Verify: 88% → 96% → 99% (수렴, 2 fix rounds)
 ```
 
 ### CHANGE 모드
@@ -617,7 +675,10 @@ UPDATE docs/<App>/FRD/<App>-FRD-<N2>.md (history + sections)
 UPDATE docs/<App>/<App>-FC.md (rows updated)
 UPDATE docs/<App>/<App>-ADR-CATALOG.md (Proposed +1)
 Checks: <P> PASS, <F> FAIL
+Verify: 88% → 96% → 99% (수렴, 2 fix rounds)
 ```
+
+스킵/폴백 시: `Verify: [skipped: --no-verify]` 또는 `Verify: [skipped: no codex]`.
 
 호스트 영향 (work_type=refactor/migration 이면서 진입점/런타임 영향) 감지 시:
 ```

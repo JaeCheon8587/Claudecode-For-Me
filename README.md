@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v2.10.1 · 커스텀 스킬 13종 + 슬래시 커맨드 16종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v2.11.0 · 커스텀 스킬 13종 + 슬래시 커맨드 16종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,7 +11,7 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `2.10.1` |
+| 버전 | `2.11.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
@@ -66,6 +66,10 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v2.11.0 — docs-add-task Codex 2축 검증-fix 수렴 루프
+
+`docs-add-task` 의 Phase 12 "자기 검증(자동 재수정 안 함)" 을 **검증-fix 수렴 루프**로 교체. 쓰기 후 산출 문서를 Codex 가 2축(① 원본 prompt 의도 반영 ② v0.7 룰 준수)으로 채점하고, conformance 미달 시 Claude 가 이번 run 이 만든/고친 문서(manifest 범위)만 fix → 재검증을 **임계 99% 또는 cap 3회** 까지 반복한다. 범위 밖 지적은 `[Warning]` 보류, cap 소진해도 rollback X(마지막 상태 유지 + 궤적·남은 결함 보고). 기본 ON, `--no-verify` 스킵, codex 미설치 시 기존 구조 check + cross-ref 폴백. 신규 `scripts/docs_verify.py`(단일 라운드 검증)는 `doc_driven_review.py` 의 Codex 호출 인프라를 import 재사용.
 
 ### v2.10.1 — forge-scope 인자 우선순위 명문화 (충돌 오인 방지)
 
@@ -241,8 +245,9 @@ codenav --root <repo> ui --port 9876
 - **NEW 모드** (신규 기능): FRD 20절 신규 생성 + TASK + ADR, App-PRD §3.1·§7 갱신, FC 5표 행 추가, ADR-CATALOG Proposed +1
 - **CHANGE 모드** (기존 수정/refactor): TASK + ADR 생성, AI 가 FC 보고 영향 FRD 다수 자동 식별, 영향 FRD 변경 이력 + section 갱신, FC 상태 갱신, ADR-CATALOG Proposed +1
 - **TASK 양방향 인용 금지** (v0.7) — TASK 본문 ↔ 영구 SSOT 마크다운 링크 X
-- **자기 검증** — 쓰기 후 `python scripts/docs_helpers.py check --repo .` 자동
+- **검증-fix 루프** — 쓰기 후 Codex 2축(prompt 의도 + v0.7 룰) 채점, 미달 시 Claude 가 manifest 범위 문서만 fix, max 3회·임계 conformance 99%. 기본 ON, `--no-verify` 스킵, codex 미설치 시 구조 check 폴백.
 - Python helper (read-only): `python scripts/docs_helpers.py {list-apps|next-id|parse-fc|parse-frd|git-user|check}`
+- Python verifier (Codex 위임): `python scripts/docs_verify.py --repo . --app <App> --mode <NEW|CHANGE> --prompt "<원본>" --manifest-file <manifest.json>`
 
 ### 6.4 forge-full / forge-scope / forge-cancel (harness_framework 임베디드)
 
