@@ -1,6 +1,6 @@
 ---
 name: requirement-spec
-description: 요구사항을 대화로 도출하고 완료조건·검증을 설계한 뒤 개발 지시서로 정제하고 codex로 자기검증하는 메타 스킬. grill-me로 요구사항 도출 → acceptance-design으로 완료조건·엣지·오류·검증 4축 설계 → meta-prompter로 개발 지시서 정제 → .requirements/requirement-{slug}.md 저장 → codex로 정리본+설계본 대비 반영도(%) 검증 → 보완점 1회 반영. "요구사항 지시서 만들어줘", "요구사항부터 같이 정리해서 작업지시서까지", "요구사항 도출하고 검증까지", "requirement-spec" 요청 시 트리거.
+description: 요구사항을 대화로 도출하고 완료조건·검증을 설계한 뒤 개발 지시서로 정제하고 codex로 자기검증하는 메타 스킬. grill-me로 요구사항 도출 → acceptance-design으로 완료조건·엣지·오류·검증 4축 설계 → meta-prompter로 개발 지시서 정제 → .requirements/requirement-{slug}.md 저장 → codex 검증↔보완 수렴 루프(최대 3회·99% 임계). "요구사항 지시서 만들어줘", "요구사항부터 같이 정리해서 작업지시서까지", "요구사항 도출하고 검증까지", "requirement-spec" 요청 시 트리거.
 argument-hint: "[요구사항 도출할 주제]"
 ---
 
@@ -29,7 +29,7 @@ argument-hint: "[요구사항 도출할 주제]"
 
 스킬 활성화 시:
 1. 주제를 1~2문장으로 확인한다.
-2. 파이프라인을 1줄로 선언한다: *"요구사항 도출(grill-me) → 완료조건·검증 4축 설계(acceptance-design) → 개발 지시서 정제(meta-prompter) → 저장 → codex 검증 → 보완. grill-me·acceptance-design 인터뷰 외에는 자동 진행한다."*
+2. 파이프라인을 1줄로 선언한다: *"요구사항 도출(grill-me) → 완료조건·검증 4축 설계(acceptance-design) → 개발 지시서 정제(meta-prompter) → 저장 → codex 검증↔보완 수렴 루프(최대 3회·99%). grill-me·acceptance-design 인터뷰 외에는 자동 진행한다."*
 3. `$ARGUMENTS`를 Phase 1의 grill-me 주제로 넘긴다.
 
 ---
@@ -94,11 +94,14 @@ acceptance-design이 사용자 중단으로 설계본을 확정하지 못하면 
 
 ---
 
-## Phase 4 — codex 자기검증
+## Phase 4 — codex 자기검증↔보완 수렴 루프 (최대 3회 · 99% 임계)
 
-> ⛔ **게이트**: codex 결과 회수(Coverage 추출 또는 raw 확보)가 끝나기 **전에는 절대** Phase 5로 넘어가지 않는다. codex 미설치/오류 분기일 때는 Phase 5~6을 건너뛰고 즉시 종료한다(그 외 경로로 진행 금지).
+> ⛔ **게이트**: 루프가 임계(99%) 도달 또는 최대 3회로 종료되기 **전에는 절대** Phase 5로 넘어가지 않는다. codex 미설치/오류 분기일 때는 Phase 5~6을 건너뛰고 즉시 종료한다(그 외 경로로 진행 금지).
 
-grill-me 정리본 + acceptance 4축 설계본을 기준(GROUND TRUTH), requirement 지시서를 검증 대상(ARTIFACT)으로 두고 codex에 위임한다.
+grill-me 정리본 + acceptance 4축 설계본을 기준(GROUND TRUTH), requirement 지시서를 검증 대상(ARTIFACT)으로 두고 codex에 위임해 검증하고, 임계 미달이면 codex가 짚은 보완점을 지시서에 자동 반영한 뒤 재검증한다. **임계(기본 99%) 도달 또는 최대 반복(기본 3회) cap**까지 반복한다.
+
+- **루프 파라미터**: 기본 `max_iter=3`, `threshold=99%`. 사용자가 횟수/임계를 다르게 말하면 그 값을 쓴다.
+- **수렴 구조**: ddr-loop(검증=codex / 수정=claude)와 동일. 마지막 라운드는 검증만 하고 보완하지 않는다.
 
 ### 가용성 체크
 - `codex --version`을 시도한다. 실패하면:
@@ -174,33 +177,41 @@ Coverage: <integer 0-100>%
 - 100%는 모든 행이 ✓일 때만.
 ```
 
-### 출력 회수
-- stdout을 캡처한다.
-- 마지막 `Coverage: <N>%` 라인에서 정수를 추출한다(정규식 `Coverage:\s*(\d{1,3})%`, 마지막 매칭).
-- 파싱 실패 시 codex raw 출력을 그대로 사용자에게 노출하고 Phase 5로 진행한다.
+### 루프 실행 (i = 1 → max_iter)
+
+각 라운드 `i`에서:
+1. **검증**: 위 codex 호출을 실행하고 stdout을 캡처한다. 마지막 `Coverage: <N>%` 라인에서 정수를 추출한다(정규식 `Coverage:\s*(\d{1,3})%`, 마지막 매칭). trajectory에 N을 기록한다.
+   - 로그 1줄: `[req-spec] iteration i/{max_iter}: Coverage N%`.
+   - **파싱 실패**: codex raw 출력을 그대로 노출하고 루프를 중단한다(현 지시서 확정) → Phase 5.
+2. **임계 도달** (`N ≥ threshold`): 수렴 성공. 루프를 종료한다 → Phase 5.
+3. **마지막 라운드** (`i == max_iter`): cap 도달. 보완하지 않고 루프를 종료한다(마지막은 검증만) → Phase 5.
+4. **그 외**: codex `Gaps to Fix`를 지시서에 반영해 `.requirements/requirement-{slug}.md`를 **덮어쓴다**.
+   - meta-prompter 출력 규약(개조식 종결, 항목 형식, 가드레일 4문구, 코드블록 본문 구조)을 유지한다(재서술 금지).
+   - 다음 라운드(`i+1`)로 진행해 1번부터 재검증한다.
+
+trajectory(예: `82% → 94% → 99%`)·최종 Coverage·반영 라운드 수·종료 사유(임계/cap)를 Phase 5 보고용으로 보존한다.
 
 ---
 
-## Phase 5 — 사용자 리뷰
+## Phase 5 — 수렴 결과 리뷰
 
-> ⛔ **게이트**: 사용자의 답(반영/미반영)을 받기 **전에는 절대** Phase 6으로 넘어가지 않는다. 임의로 반영 여부를 가정하지 않는다.
+> ⛔ **게이트**: 사용자의 답을 받기 **전에는 절대** Phase 6으로 넘어가지 않는다. 임의로 가정하지 않는다.
 
-- codex 결과를 텍스트로 요약·노출한다: **Coverage %**, ✗/⚠ 항목, **Gaps to Fix** 목록.
+- 루프 결과를 텍스트로 요약·노출한다: **trajectory**(`82% → 94% → 99%`), **최종 Coverage %**, 반영한 보완 라운드 수, **종료 사유**(임계 도달 / cap 도달), 남은 ✗/⚠ 항목과 마지막 `Gaps to Fix`.
 - 리뷰 시 **반드시** `AskUserQuestion`을 사용.
 - `AskUserQuestion` 1회:
-  - question: "codex가 찾은 보완점을 지시서에 반영할까요? (Coverage {N}%)"
-  - options: **반영 (Recommended)** / **미반영 — 현 지시서 확정**
+  - 임계 도달 시 question: "수렴 완료 (Coverage {N}%). 이대로 확정할까요?"
+  - cap 도달(미달) 시 question: "최대 {max_iter}회 반복했으나 {N}% (임계 {threshold}% 미달). 어떻게 할까요?"
+  - options: **확정 (Recommended)** / **보완 1회 더 — 마지막 Gaps 반영**
 
 ---
 
-## Phase 6 — 반영 후 종료
+## Phase 6 — 종료
 
 > ⛔ **게이트**: Phase 5의 사용자 선택에 따라서만 동작한다. 이 Phase로 스킬이 **종료**되며, 구현·코드 작성 단계로 넘어가지 않는다.
 
-- **반영 선택**: codex의 `Gaps to Fix`를 지시서에 반영해 `.requirements/requirement-{slug}.md`를 **덮어쓴다**.
-  - meta-prompter 출력 규약(개조식 종결, 항목 형식, 가드레일 4문구, 코드블록 본문 구조)을 유지한다.
-  - 갱신 후 최종 경로를 한 줄로 보고한다.
-- **미반영 선택**: 현 지시서를 그대로 확정하고 경로를 보고한다.
+- **확정 선택**: 현 지시서를 그대로 확정하고 최종 경로 + 최종 Coverage를 한 줄로 보고한다.
+- **보완 1회 더 선택**: 마지막 `Gaps to Fix`를 지시서에 반영해 `.requirements/requirement-{slug}.md`를 덮어쓴다(meta-prompter 출력 규약 유지). 갱신 후 최종 경로를 보고한다. (재검증은 하지 않는다 — 루프는 Phase 4에서 이미 종료.)
 - 종료. 구현 단계로 넘어가지 않는다.
 
 ---

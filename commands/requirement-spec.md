@@ -1,5 +1,5 @@
 ---
-description: grill-me→acceptance-design→meta-prompter→codex 검증으로 요구사항 개발 지시서를 도출·저장
+description: grill-me→acceptance-design→meta-prompter→codex 검증↔보완 수렴 루프(최대 3회·99%)로 요구사항 개발 지시서를 도출·저장
 argument-hint: "<주제>"
 ---
 

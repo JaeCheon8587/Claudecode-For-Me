@@ -18,8 +18,8 @@ Options:
     --commit <ref>                커밋 노드 검증. fix cwd = repo root (--worktree 와 mutex)
     --scope auto|working-tree|branch  기본 auto. DDR 통과
     --base <ref>                  branch scope 기준점. DDR 통과
-    --max-iter <N>                최대 반복 횟수. 기본 10
-    --threshold <pct>             목표 conformance %. 기본 95
+    --max-iter <N>                최대 반복 횟수. 기본 3
+    --threshold <pct>             목표 conformance %. 기본 99
     --commit-each                 라운드별 fix를 타깃에 커밋 (기본 off = 미커밋 누적)
     --model <name>                codex(DDR) --model 통과
     --effort <level>              codex(DDR) --effort 통과
@@ -77,8 +77,8 @@ EXIT_CAP = 7
 EXIT_KBI = 130
 
 DDR_SCRIPT = SCRIPT_DIR / "doc_driven_review.py"
-DEFAULT_MAX_ITER = 10
-DEFAULT_THRESHOLD = 95
+DEFAULT_MAX_ITER = 3
+DEFAULT_THRESHOLD = 99
 DEFAULT_FIX_MODEL = "claude-sonnet-4-6"  # 최신 Sonnet
 DEFAULT_FIX_EFFORT = "high"              # claude --effort 레벨
 

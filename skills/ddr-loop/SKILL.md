@@ -1,6 +1,6 @@
 ---
 name: ddr-loop
-description: doc-driven-review(DDR) 검증 ↔ fix(claude) 수렴 루프를 사용자 프로젝트에서 실행한다. forge가 만든 worktree나 현재 브랜치 변경에 대해 DDR(Codex)로 conformance를 채점하고, 임계 미달이면 그 리포트로 claude가 코드를 고친 뒤 재검증 — 임계(기본 95%) 또는 최대 반복(기본 10) cap까지 반복한다. DDR 단독은 1회 검증으로 끝나지만 ddr-loop는 목표 conformance까지 수렴시킨다. 첫 호출 시 scripts/ddr_loop.py + 의존 스크립트(doc_driven_review.py, forge_scope.py)를 자동 부트스트랩한 뒤 ddr_loop.py를 실행한다. "DDR 루프", "검증하고 고치고 반복", "conformance 95%까지", "ddr-loop" 요청 시 트리거. /claudecode-for-me:ddr-loop 로 실행.
+description: doc-driven-review(DDR) 검증 ↔ fix(claude) 수렴 루프를 사용자 프로젝트에서 실행한다. forge가 만든 worktree나 현재 브랜치 변경에 대해 DDR(Codex)로 conformance를 채점하고, 임계 미달이면 그 리포트로 claude가 코드를 고친 뒤 재검증 — 임계(기본 99%) 또는 최대 반복(기본 3) cap까지 반복한다. DDR 단독은 1회 검증으로 끝나지만 ddr-loop는 목표 conformance까지 수렴시킨다. 첫 호출 시 scripts/ddr_loop.py + 의존 스크립트(doc_driven_review.py, forge_scope.py)를 자동 부트스트랩한 뒤 ddr_loop.py를 실행한다. "DDR 루프", "검증하고 고치고 반복", "conformance 99%까지", "ddr-loop" 요청 시 트리거. /claudecode-for-me:ddr-loop 로 실행.
 argument-hint: "<doc-path...> [--worktree <branch>|--commit <ref>] [--scope auto|working-tree|branch] [--max-iter N] [--threshold P] [--commit-each]"
 input: 문서 경로 1개 이상 + 선택적 스코프/루프 CLI 옵션
 output: 수렴 리포트(conformance 궤적) + .review/<doc-stem>-review.md (최종 라운드)
@@ -105,7 +105,7 @@ DDR로 검증하므로 git 없이는 동작 불가능하다.
    - 특정 커밋(예: forge no-worktree feat 커밋)을 지목하면 `--commit <ref>`.
    - 아무 것도 없으면 생략 → 현재 브랜치 working-tree 대상(`--scope auto`).
 
-3. **루프 파라미터**: 사용자가 횟수/임계를 말하면 `--max-iter N` / `--threshold P`로 넘긴다(기본 10 / 95).
+3. **루프 파라미터**: 사용자가 횟수/임계를 말하면 `--max-iter N` / `--threshold P`로 넘긴다(기본 3 / 99).
    라운드별 커밋을 원하면 `--commit-each`.
 
 4. **권한**: 자동 수정을 위해 항상 `--trust --quiet`를 첨가한다.
@@ -113,7 +113,7 @@ DDR로 검증하므로 git 없이는 동작 불가능하다.
 실행 예:
 ```bash
 python ./scripts/ddr_loop.py --docs docs/FRD/F003.md \
-  --worktree feat-login-feature --threshold 95 --max-iter 10 \
+  --worktree feat-login-feature --threshold 99 --max-iter 3 \
   --trust --quiet
 ```
 
@@ -161,8 +161,8 @@ python ./scripts/ddr_loop.py --docs docs/FRD/F003.md \
 | `--commit <ref>` | 커밋 노드 검증. fix cwd = repo root. `--worktree`와 mutex. |
 | `--scope auto\|working-tree\|branch` | 기본 auto. `auto`는 미커밋/커밋 양쪽을 자동 처리(권장). |
 | `--base <ref>` | branch scope 기준점. 기본 origin/main merge-base. |
-| `--max-iter <N>` | 최대 반복 cap. 기본 10. |
-| `--threshold <pct>` | 목표 conformance %. 기본 95. 도달 시 즉시 종료. |
+| `--max-iter <N>` | 최대 반복 cap. 기본 3. |
+| `--threshold <pct>` | 목표 conformance %. 기본 99. 도달 시 즉시 종료. |
 | `--commit-each` | 라운드별 fix를 타깃에 커밋. 기본 off(미커밋 누적). |
 | `--model` / `--effort` | codex(DDR) 통과. |
 | `--fix-model` | fix용 claude 모델. 기본 `claude-sonnet-4-6` (최신 Sonnet). |

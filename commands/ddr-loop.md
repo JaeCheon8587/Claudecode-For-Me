@@ -1,5 +1,5 @@
 ---
-description: doc-driven-review(검증) ↔ fix(claude 수정) 수렴 루프. 임계(기본 95%) 또는 cap(기본 10회)까지 반복
+description: doc-driven-review(검증) ↔ fix(claude 수정) 수렴 루프. 임계(기본 99%) 또는 cap(기본 3회)까지 반복
 argument-hint: "<doc-path> [추가 doc-path...] [--worktree <ref>|--commit <ref>] [--scope auto|working-tree|branch] [--base <ref>] [--max-iter N] [--threshold P] [--commit-each] [--model <name>] [--effort <level>] [--fix-model <name>] [--dry-run]"
 ---
 
