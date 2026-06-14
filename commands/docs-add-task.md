@@ -1,6 +1,6 @@
 # docs-add-task
 
-기존 기능 수정/개선/refactor TASK + ADR 작성, AI 가 FC 보고 영향 FRD 다수 자동 식별 후 변경 이력 + 영향 section 갱신, FC 행 상태 갱신, ADR-CATALOG Proposed 행 추가.
+신규 기능 또는 기존 수정/개선/refactor 설계 문서를 **문서별 upsert** 로 작성. AI 가 FC·ADR-CATALOG 보고 영향 자산 자동 식별 후 각 문서를 신설/갱신/생략 분기. TASK 항상 생성, ADR 은 결정 유무에 따라 신설/수정/생략.
 
 v0.7 per-App SSOT 체계. TASK 는 휘발성 + self-contained. 외부 SSOT 인용 금지 (양방향). source repo in-place 수정.
 
@@ -15,11 +15,12 @@ v0.7 per-App SSOT 체계. TASK 는 휘발성 + self-contained. 외부 SSOT 인�
 ## Instructions
 
 1. `skills/docs-add-task/SKILL.md` Phase 0~13 따름.
-2. App 결정 → 입력 수집 → **AI 가 FC 파싱 영향 FRD 식별 + 모드 자동 판정(NEW/CHANGE)** → 사용자 확인 → 번호 할당 → 컨텐츠 준비 → 사전 확정 → in-place 쓰기 → 자기 검증 → 결과 보고.
+2. App 결정 → 입력 수집 → **AI 가 FC·ADR-CATALOG 파싱 후 자산별 op 판정(신설/갱신/생략)** → 사용자 확인 → 번호 할당 → 컨텐츠 준비 → 사전 확정 → in-place 쓰기 → 자기 검증 → 결과 보고.
 3. TASK 본문에 영구 SSOT 마크다운 링크 절대 금지 (v0.7 양방향 룰).
-4. ADR 항상 동반 생성. 결정 narrative AI 추론.
+4. ADR upsert — 새 결정이면 신설, 기존 결정 변경이면 기존 ADR 수정(supersede/in-place), **결정 없으면 생략**. 결정 narrative AI 추론.
 5. 영향 FRD 본문 자동 부분 갱신 (변경 이력 + 영향 section). TASK ID 인용 X.
 6. 호스트 영향 (refactor/migration) 감지 시 APP-ARCHITECTURE 검토 권고만.
+7. 작성 후 codex 로 요구사항서(`.requirements/req-<App>-TASK-<NNN>.md`)↔생성문서 정합 자동 채점 — 99% 또는 3회까지 검증↔보강 수렴(전용 리포트 `.review/req-conformance-*.md`). codex 미설치·요구사항서 부재 시 생략.
 
 ## 작업 유형 (work_type)
 
@@ -31,7 +32,7 @@ v0.7 per-App SSOT 체계. TASK 는 휘발성 + self-contained. 외부 SSOT 인�
 - `feature` — 기존 기능 확장
 - `변경` / `버그수정` — 기능 변경 / 버그픽스
 
-신규 기능/기존 수정 자동 판정 — 신규는 FRD 생성(NEW 모드), 기존은 영향 FRD 갱신(CHANGE 모드). 둘 다 TASK + ADR 동반.
+신규 기능/기존 수정 자동 판정 — 신규는 FRD 신설, 기존은 영향 FRD 갱신 (한 작업서 혼합 허용). TASK 항상 생성, ADR 은 결정 유무에 따라 신설/수정/생략.
 
 ## 비범위
 

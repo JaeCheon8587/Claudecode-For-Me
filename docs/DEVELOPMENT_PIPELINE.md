@@ -29,7 +29,7 @@
 flowchart TD
     A["1. grill-me<br/>요구사항 구체화"] --> A2["1.5 acceptance-design<br/>완료조건·검증 4축 설계"]
     A2 --> B["2. meta-prompter<br/>설계 프롬프트 정제"]
-    B --> C["3. docs-add-task<br/>NEW/CHANGE 자동 분기"]
+    B --> C["3. docs-add-task<br/>문서별 upsert"]
     C --> F["4. forge-scope<br/>문서 기반 개발"]
     F --> G["5. doc-driven-review<br/>Codex 문서 기준 검증"]
     G --> H["6. 반영<br/>리뷰 결과 코드/문서 반영"]
@@ -43,20 +43,23 @@ flowchart TD
 | 1 | `grill-me` | 거친 아이디어/계획 | 합의된 요구사항 (대화형) | 모호함을 집요한 질문으로 구체화. 논리 공백 지적 |
 | 1.5 | `acceptance-design` | grill-me 정리본 (doc) | 완료조건·엣지케이스·오류케이스·검증방법 4축 설계본 (대화형) | doc 기준 "끝의 정의"와 검증을 같이 설계 |
 | 2 | `meta-prompter` | grill-me 결과 + 4축 설계본 | 한국어 개조식 메타프롬프트 (마크다운 코드블록) | 요구사항을 다음 단계가 안정 수행할 구조화 프롬프트로 정제 |
-| 3 | `docs-add-task` | 자연어 프롬프트 (신규 또는 기존 수정) | **NEW**: FRD 신규 + TASK + ADR, App-PRD §3.1/§7 갱신, FC 5표 행 추가 / **CHANGE**: TASK + ADR, 영향 FRD 자동 식별·갱신, FC 행 상태 갱신. 양 모드 ADR-CATALOG Proposed 행 | 모드 자동 판정 후 설계 문서 in-place 작성 |
+| 3 | `docs-add-task` | 자연어 프롬프트 (신규 또는 기존 수정) | 문서별 upsert — 신규 기능: FRD 신설 + App-PRD §3.1/§7 + FC 5표 행 / 기존 영향: FRD 갱신 + FC 행 상태 갱신 (혼합 허용). TASK 항상 생성. ADR 은 결정 유무에 따라 신설/수정/생략, op 따라 ADR-CATALOG 동기화. **작성 후 codex 자기검증(요구사항서↔생성문서, 99%/3회 수렴)** | 자산별 op 판정 후 in-place 작성 + 요구사항 정합 검증 |
 | 4 | `forge-scope` | doc-path + 프롬프트 | `phases/scoped/<phase-dir>/index.json` + `step{N}.md` + 코드 | 설계 문서 기반 경량 scoped 개발 실행 |
 | 5 | `doc-driven-review` | doc-path (1개 이상) | Missing / Improve / Overengineered / Conformance(%) | Codex 위임 — 문서가 코드 변경점에 반영됐는지 검증 |
 | 6 | (수동) | 리뷰 결과 | 반영된 코드/문서 | Missing 보강, Overengineered 제거, Improve 판단 반영 |
 
 ## 3. 분기 규칙 (step 3)
 
-step3 `docs-add-task` 는 **단일 진입점**. 내부에서 **NEW vs CHANGE** 모드로 자동 분기 (`parse-fc` 영향 FRD 식별 기반):
+step3 `docs-add-task` 는 **단일 진입점**. 내부에서 **자산별 upsert** 로 분기 (`parse-fc` + ADR-CATALOG 인덱스 기반). 모드 라벨 없이 문서마다 신설/갱신/생략 결정:
 
-- **NEW 모드** (신규 기능) → 해당 App `{App}-FC.md` 5축 표에 대응 기능 행 **없음**. 새 FRD 20절 + TASK + ADR 동반 생성, App-PRD §3.1/§7 갱신, FC 5표 행 추가.
-- **CHANGE 모드** (기존 수정/개선/refactor) → FC 에 이미 기능 행 **존재** (또는 운영성 work_type). AI 가 FC 파싱해 영향 FRD 다수 자동 식별 후 TASK + ADR 생성, 영향 FRD 갱신.
-- 영향 FRD 0건이어도 자동 NEW 강행 X — 사용자 확인 1회.
+- **신규 기능** → 해당 App `{App}-FC.md` 5축 표에 대응 기능 행 **없음**. 새 FRD 20절 신설, App-PRD §3.1/§7 갱신, FC 5표 행 추가.
+- **기존 수정/개선/refactor** → FC 에 이미 기능 행 **존재** (또는 운영성 work_type). AI 가 FC 파싱해 영향 FRD 다수 자동 식별 후 영향 FRD 갱신, FC 행 상태 갱신.
+- **혼합 허용** — 한 작업서 신규 FRD 신설 + 기존 FRD 갱신 동시 가능.
+- 신규 기능 0건이어도 모호 시 자동 신설 강행 X — 사용자 확인 1회.
 
-양 모드 모두 v0.7 전용, in-place 수정, **TASK + ADR 항상 동반** (Backlog 모드 예외). TASK 는 휘발성 + 외부 SSOT 인용 금지 ([DOCUMENT_GUIDE §1.2](.templates/DOCUMENT_GUIDE.md) 룰).
+v0.7 전용, in-place 수정, **TASK 항상 생성** (Backlog 예외). **ADR 은 필요 시** — 새 결정이면 신설, 기존 결정 변경이면 기존 ADR 수정(supersede/in-place), 결정 없으면 생략. TASK 는 휘발성 + 외부 SSOT 인용 금지 ([DOCUMENT_GUIDE §1.2](.templates/DOCUMENT_GUIDE.md) 룰).
+
+작성 완료 후 step3 내부에서 **요구사항 정합 자기검증**을 자동 수행한다: 기준 요구사항서(`.requirements/req-<App>-TASK-<NNN>.md`, 불변)와 이번 실행 생성문서를 codex(`docs_conformance.py`)로 대조해 반영률(%)·부족 항목을 채점하고, 메인 에이전트가 부족분을 보강한 뒤 재검증 — 99% 또는 3회까지 수렴. **step5 `doc-driven-review`(문서↔코드)와 검증 축이 다르다**: step3 자기검증 = 요구↔문서, step5 = 문서↔코드.
 
 ## 4. 데이터 흐름 / SSOT
 

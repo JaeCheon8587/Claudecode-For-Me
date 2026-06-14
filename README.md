@@ -132,7 +132,7 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `codenav-frontmatter-gen` | `/claudecode-for-me:codenav-frontmatter-gen [--limit N] [--apply]` | C# 클래스 description 빈칸을 AI로 일괄 채워 `// ---` frontmatter 블록 삽입 |
 | `doc-driven-review` | `/claudecode-for-me:doc-driven-review <doc-path>... [--worktree <ref>] [--commit <ref>]` | 첨부 문서 기준 working-tree/커밋 변경을 Codex CLI로 검증. Missing/Improve/Overengineered + Conformance(%) + 인용검증 보고. linked worktree·커밋 노드 지목 지원 |
 | `ddr-loop` | `/claudecode-for-me:ddr-loop <doc-path>... [--worktree <ref>\|--commit <ref>] [--max-iter N] [--threshold P] [--commit-each]` | DDR(Codex 검증) ↔ fix(claude 수정) 수렴 루프. 임계(기본 99%) 또는 cap(기본 3회)까지 반복. 검증자=Codex / 수정자=Claude 분리 |
-| `docs-add-task` | `/claudecode-for-me:docs-add-task [요청]` | v0.7 per-App 신규/기존 자동 판정 — 신규 FRD 생성(NEW) 또는 기존 영향 FRD 갱신(CHANGE), TASK + ADR 항상 생성, FC/PRD/ADR-CATALOG 갱신 |
+| `docs-add-task` | `/claudecode-for-me:docs-add-task [요청]` | v0.7 per-App 문서별 upsert — 신규 기능 FRD 신설 / 기존 영향 FRD 갱신(혼합 허용), FC/PRD/ADR-CATALOG 신설·갱신, TASK 항상 생성, ADR 은 결정 유무에 따라 신설/수정/생략 |
 | `forge-cancel` | `/claudecode-for-me:forge-cancel <phase>` | forge phase 브랜치·산출물 정리 |
 | `forge-full` | `/claudecode-for-me:forge-full <phase>` | 문서 기반 전체 프로젝트 구현 phase runner |
 | `forge-scope` | `/claudecode-for-me:forge-scope <prompt> [--no-worktree] [--test-target=<csproj>] [--ai-commit-msg] [--full-fleet] [--timings]` | 단일 FRD·기능·버그픽스용 경량 phase runner. 워크트리 미생성(in-place)·빌드 스코프 축소·lean child claude(MCP/skill 미로드)·AI 커밋 메시지 재작성(옵트인) |
@@ -153,7 +153,7 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `doc-driven-review` | doc-driven-review skill 진입. Codex CLI 위임 read-only 리뷰. `--worktree <branch\|path>` linked worktree / `--commit <ref>` 커밋 노드 지목 지원 |
 | `ddr-loop` | ddr-loop skill 진입. DDR 검증↔claude 수정 수렴 루프. `--threshold`(기본 99%)/`--max-iter`(기본 3) cap. `--commit-each` 라운드 커밋 |
 | `commit-analysis` | 변경 분석 후 `[ADD]`/`[MOD]`/`[FIX]` 자동 판단 한글 커밋 생성 |
-| `docs-add-task` | docs-add-task skill 진입 (NEW=신규 FRD / CHANGE=기존 수정, TASK + ADR 항상) |
+| `docs-add-task` | docs-add-task skill 진입 (문서별 upsert — FRD 신설/갱신 혼합, TASK 항상, ADR 신설/수정/생략) |
 | `forge-cancel` | forge-cancel skill 진입 |
 | `forge-full` | forge-full skill 진입 |
 | `forge-scope` | forge-scope skill 진입 |
@@ -235,22 +235,24 @@ codenav --root <repo> ui --port 9876
 
 상세는 [codenavigator README](https://github.com/JaeCheon8587/codenavigator#readme) 및 [frontmatter 규약](https://github.com/JaeCheon8587/codenavigator/blob/main/docs/frontmatter.md) 참조.
 
-### 6.3 docs-add-task (v0.7 per-App SSOT, NEW/CHANGE 통합)
+### 6.3 docs-add-task (v0.7 per-App SSOT, 문서별 upsert)
 
 ```
-/claudecode-for-me:docs-add-task 주문 검색 기능 추가              # NEW — 신규 기능
-/claudecode-for-me:docs-add-task 주문 검색에 cursor 페이지네이션 추가  # CHANGE — 기존 수정
+/claudecode-for-me:docs-add-task 주문 검색 기능 추가              # 신규 기능 → FRD 신설
+/claudecode-for-me:docs-add-task 주문 검색에 cursor 페이지네이션 추가  # 기존 수정 → 영향 FRD 갱신
 ```
 
 - **v0.7 per-App 전용** — `docs/.templates/App/` 양식 (20 section FRD, 5 표 FC, ADR/ADR-CATALOG/TASK)
 - **In-place 수정** — source repo 직접 쓰기. preview 없음.
-- **모드 자동 판정** — `parse-fc` 영향 FRD 식별 → 0건+신규=**NEW**, ≥1건/운영성=**CHANGE**. 0건이어도 사용자 확인 1회 (자동 NEW 강행 X).
-- **TASK + ADR 항상 생성** — 양 모드 공통 (Backlog 모드만 예외). 결정 없으면 placeholder 자동.
-- **NEW 모드** (신규 기능): FRD 20절 신규 생성 + TASK + ADR, App-PRD §3.1·§7 갱신, FC 5표 행 추가, ADR-CATALOG Proposed +1
-- **CHANGE 모드** (기존 수정/refactor): TASK + ADR 생성, AI 가 FC 보고 영향 FRD 다수 자동 식별, 영향 FRD 변경 이력 + section 갱신, FC 상태 갱신, ADR-CATALOG Proposed +1
+- **문서별 upsert** — NEW/CHANGE 모드 라벨 없음. `parse-fc`·ADR-CATALOG 인덱스로 영향 자산 식별 → 자산마다 신설/갱신/생략 분기. **신규 기능 + 기존 FRD 갱신 한 작업서 혼합 허용**. 신규 기능 0건이어도 모호 시 사용자 확인 1회 (자동 신설 강행 X).
+- **TASK 항상 생성** — Backlog 모드만 예외. 결정 없으면 placeholder 자동.
+- **ADR upsert (생략 허용)** — 새 결정 → ADR 신설 / 기존 결정 변경 → 기존 ADR 수정(supersede 또는 in-place, AI 판단) / 결정 없음 → ADR 생략. ADR op 따라 ADR-CATALOG(Proposed 추가 / Deprecated·Superseded 이동 / 행 갱신) 동기화. (DOCUMENT_GUIDE "필요 시 ADR 등재" 와 정렬)
+- **FRD upsert** — 신규 기능이면 20절 신설 + App-PRD §3.1·§7 + FC 5표 행 추가 / 기존 영향이면 버전 bump + 변경 이력 + 영향 section 갱신 + FC 행 상태 갱신
 - **TASK 양방향 인용 금지** (v0.7) — TASK 본문 ↔ 영구 SSOT 마크다운 링크 X
-- **자기 검증** — 쓰기 후 `python scripts/docs_helpers.py check --repo .` 자동
-- Python helper (read-only): `python scripts/docs_helpers.py {list-apps|next-id|parse-fc|parse-frd|git-user|check}`
+- **자기 검증** — 쓰기 후 `python scripts/docs_helpers.py check --repo .` 자동 (구조 무결성)
+- **요구사항서 영구 기록** — `.requirements/req-<App>-TASK-<NNN>.md` (검증 기준, 불변)
+- **요구사항 정합 자동 검증 (codex)** — 작성 후 요구사항서↔생성문서 반영률(%) 채점, 99% 또는 3회까지 검증↔보강 수렴. 미달 시 현재 %·부족 항목 보고. 전용 리포트 `.review/req-conformance-*.md`. codex 미설치·요구사항서 부재 시 생략. (단계5 doc-driven-review=문서↔**코드** 와 축 다름: 본 검증=요구사항서↔**생성문서**.)
+- Python helper (read-only): `python scripts/docs_helpers.py {list-apps|next-id|parse-fc|parse-frd|git-user|check}` · 정합 검증: `python scripts/docs_conformance.py --reference <req> --targets <docs...>`
 
 ### 6.4 forge-full / forge-scope / forge-cancel (harness_framework 임베디드)
 
