@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v2.11.0 · 커스텀 스킬 13종 + 슬래시 커맨드 16종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v2.13.0 · 커스텀 스킬 13종 + 슬래시 커맨드 16종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,7 +11,7 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `2.11.0` |
+| 버전 | `2.13.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
@@ -66,6 +66,14 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v2.13.0 — docs-add-task 요구사항 정합 자기검증 루프 (codex 99%/3회)
+
+`docs-add-task` 가 설계 문서 작성 후 **codex 로 요구사항서↔생성문서 정합을 자동 채점**하고 수렴시킨다. 기준 = 사용자가 입력한 요구사항서(`.requirements/req-<App>-TASK-<NNN>.md`, 영구 기록·불변), 대상 = 이번 실행 변경 전체(FRD/TASK/ADR/FC/PRD/ADR-CATALOG). codex 가 전용 출력 템플릿(요구 반영 표 ✓/⚠/✗ + 부족 항목·보강 지시 + Conformance%)으로 채점 → 메인 에이전트가 부족분을 설계 문서에 보강 → 재검증, **99% 또는 최대 3회까지 수렴**(미달 시 현재 %·부족 항목 보고). 검증자=codex / 수정자=메인 에이전트(인라인). 신규 `scripts/docs_conformance.py` (doc_driven_review codex 헬퍼 import 재사용, 원본 무수정). codex 미설치·요구사항서 부재 시 graceful skip(본체 작성 결과 유지). step5 `doc-driven-review`(문서↔코드)와 검증 축이 다름 — 본 검증은 요구↔문서.
+
+### v2.12.0 — docs-add-task NEW/CHANGE 모드 폐기 → 문서별 upsert 통합
+
+`docs-add-task` 의 NEW/CHANGE 모드 분기를 폐기하고 **문서별 upsert** 단일 경로로 통합. 영향 자산마다 신설/갱신/생략을 자동 판정 — 신규 기능 FRD 신설 + 기존 영향 FRD 갱신을 **한 작업서 혼합** 가능. ADR 도 upsert(새 결정=신설 / 기존 결정 변경=supersede·in-place / 결정 없음=**생략**)로 "TASK 1개=ADR 1개 항상 강제" 룰 폐기(DOCUMENT_GUIDE "필요 시 ADR" 정렬). FC/PRD/ADR-CATALOG 는 op 따라 행 추가·갱신. TASK 는 항상 생성(휘발성).
 
 ### v2.11.0 — ddr-loop·requirement-spec 수렴 루프 기본값 조정 (3회·99%)
 
