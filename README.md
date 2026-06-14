@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v2.13.0 · 커스텀 스킬 13종 + 슬래시 커맨드 16종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v2.14.0 · 커스텀 스킬 13종 + 슬래시 커맨드 16종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,7 +11,7 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `2.13.0` |
+| 버전 | `2.14.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
@@ -66,6 +66,10 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v2.14.0 — docs-add-task TASK §7/§11 빈 절 생략 (후속 스킬 블로킹 방지)
+
+`docs-add-task` 가 TASK 문서의 **§7 결정 필요 사항·§11 미확인 사항**을 작성할 때, 실제 미해결 항목이 1건 이상일 때만 절(heading+표)을 둔다. 항목 0건이면 **절 전체를 생략**하고 `"없음"` placeholder 행을 남기지 않는다. 기존엔 빈 절에 `"없음"` 행을 남겨 후속 스킬(DDR/branch-review 등)이 미결 항목으로 오인해 블로킹하던 문제를 제거. SKILL Phase 9 룰 + 핵심 원칙 + TASK 템플릿(`APP-TASK-001-TEMPLATE.md` §7/§11) 동기화. `docs_helpers.py check` 는 TASK 섹션 수를 검사하지 않아 절 생략으로 §번호 공백(§6→§8)이 생겨도 PASS — 구조 검증 영향 없음.
 
 ### v2.13.0 — docs-add-task 요구사항 정합 자기검증 루프 (codex 99%/3회)
 

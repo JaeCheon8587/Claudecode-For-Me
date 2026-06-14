@@ -20,6 +20,7 @@ docs/.templates v0.7 체계 (per-App PRD/FC/ARCHITECTURE/FRD/ADR/ADR-CATALOG/TAS
 - **외부 SSOT 인용 금지 (v0.7 양방향 룰)** — TASK 본문에 영구 SSOT 마크다운 링크 사용 X. 영향 SSOT 는 §6 표에 텍스트로만 명시. 역으로 영구 SSOT 도 TASK 인용 X.
 - **AI 가 영향 자산·op 자동 식별** — 사용자가 모드·FRD ID·ADR op 지정하지 않음. AI 가 FC 파싱 + ADR-CATALOG 인덱스 매칭. 신규 기능 0건이어도 자동 신설 강행 금지 — 모호 시 사용자 확인 1회.
 - **FRD 본문 부분 갱신 (기존 FRD)** — 변경 이력 표 + AI 판단 영향 section 텍스트만. TASK ID 인용 X.
+- **TASK §7·§11 빈 절 생략** — 결정 필요 사항(§7)·미확인 사항(§11) 은 실제 미해결 항목 있을 때만 작성. 0건이면 절 전체 생략, `"없음"` placeholder 행 금지 (후속 스킬 블로킹 방지). Phase 9 참조.
 - **부분 실패 시 rollback X**.
 - **템플릿 대조 강제** — FRD/ADR/TASK/FC/PRD 본문 생성·수정 직전 해당 `.templates/App/.../X-TEMPLATE.md` 1회 `Read`. 절 구조·메타 행 수·placeholder 원본 대조 후 채움. 기억 의존 구조 생성 금지 (drift 방지). 템플릿 부재 시 경고 후 진행.
 - **토큰 절약** — ADR 후보 탐색은 `ADR-CATALOG.md`(compact 인덱스) 1회 Read → 매칭된 후보 ADR 1개만 Read. 전 ADR 파일 스캔 금지.
@@ -427,12 +428,14 @@ work_type + prompt 의도로 영향 section 결정:
 | 4 | 비목표 | 본 작업에서 다루지 않는 범위 |
 | 5 | 영향 범위 | 코드 영역/사용자 흐름/운영 흐름/외부 이해관계자 표 |
 | 6 | 영구 SSOT 갱신 여부 | **필수, 텍스트만** (아래 참조) |
-| 7 | 결정 필요 사항 | "없음" 또는 D-T<NNN>-001 행 |
+| 7 | 결정 필요 사항 | **실제 결정 항목 있을 때만** D-T<NNN>-001~ 행 작성. 항목 0건 → **§7 절 전체 생략** (heading+표 모두 X). `"없음"` placeholder 행 금지 |
 | 8 | 작업 단계 | steps 표 (단계/작업/산출물/선행 조건/상태=Todo) |
 | 9 | 완료 기준 | AC-T<NNN>-001 행 — **Given/When/Then** (Then=기대결과 literal 우선) + **검증 대상(§8 단계/§3)** 열. **§9.1 단위 테스트 명세** 표 동반(전부 **단위 테스트**, TS-T<NNN>-001~): 테스트명·프로젝트·클래스·함수·선행 조건/픽스처·검증 대상·도입 근거·검증 AC. 그린필드는 프로젝트/클래스/함수 "신규 — 구현 시 확정" |
 | 10 | 리스크와 되돌림 기준 | risks 표 또는 "없음" 행 |
-| 11 | 미확인 사항 | Q-T<NNN>-001 행 또는 "없음" |
+| 11 | 미확인 사항 | **실제 미확인 항목 있을 때만** Q-T<NNN>-001~ 행 작성. 항목 0건 → **§11 절 전체 생략** (heading+표 모두 X). `"없음"` placeholder 행 금지 |
 | 12 | 컨텍스트 임베드 | 영향 FRD 본문에서 §8/§9/§15 복제·요약 (마크다운 링크 X) |
+
+**§7·§11 빈 절 생략 룰 (필수)**: §7 결정 필요 사항 / §11 미확인 사항 은 **실제 미해결 항목이 1건 이상일 때만** heading+표를 작성한다. 항목 0건이면 **절 전체(heading `## 7.`/`## 11.` + 표) 를 아예 출력하지 않는다**. `"없음"` placeholder 행을 남기지 않는다 — 후속 스킬(DDR/branch-review 등)이 placeholder 를 미결 항목으로 오인해 블로킹하는 것을 막기 위함. 절 생략으로 §번호 공백(예: §6 → §8)이 생겨도 정상 (`check` 는 TASK 섹션 수를 검사하지 않음).
 
 **§6 영구 SSOT 갱신 여부** (Phase 11 쓰기 마지막에 실제 결과로 채움 — 템플릿 형식 따름, op 반영):
 ```
@@ -463,7 +466,7 @@ work_type + prompt 의도로 영향 section 결정:
 ## 작성 계획 (upsert)
 
 ### 생성 파일
-- CREATE docs/<App>/TASK/<App>-TASK-<NNN>.md (12 section)
+- CREATE docs/<App>/TASK/<App>-TASK-<NNN>.md (최대 12 section — 빈 §7/§11 생략)
 - (신규 FRD 있으면) CREATE docs/<App>/FRD/<App>-FRD-<NNN>.md (20 section)
 - (신규 ADR 있으면) CREATE docs/<App>/ADR/<App>-ADR-<NNN>.md (Proposed, narrative)
 
