@@ -2427,7 +2427,9 @@ class ForgeScope:
         체크아웃되어 CLAUDE.md/docs 등이 누락된다. ROOT(=main repo)에서 자동으로 복사한 뒤
         여전히 없으면 fail-fast로 사용자에게 알린다.
         """
-        _BOOTSTRAP_PATHS = ["CLAUDE.md", "PHASE_SCHEMA.md", "FORGE_SCOPE.md", _docs_dirname(ROOT)]
+        # `.claude/rules`: CLAUDE.md의 @include 타깃. gitignore되면 워크트리에서 누락돼
+        # CLAUDE.md 규칙 본문이 통째로 깨진다(껍데기만 주입). 존재 시에만 복사된다.
+        _BOOTSTRAP_PATHS = ["CLAUDE.md", "PHASE_SCHEMA.md", "FORGE_SCOPE.md", _docs_dirname(ROOT), ".claude/rules"]
         for rel in _BOOTSTRAP_PATHS:
             src = ROOT / rel
             if not src.exists():

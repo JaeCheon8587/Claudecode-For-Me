@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v2.14.0 · 커스텀 스킬 13종 + 슬래시 커맨드 16종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v2.15.0 · 커스텀 스킬 13종 + 슬래시 커맨드 16종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,7 +11,7 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `2.14.0` |
+| 버전 | `2.15.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
@@ -66,6 +66,10 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v2.15.0 — forge-scope 워크트리 부트스트랩에 `.claude/rules` 추가 (룰 본문 누락 수정)
+
+`forge-scope` 가 워크트리 생성 시 main→worktree 로 복사하는 부트스트랩 목록(`_verify_worktree_bootstrap` 의 `_BOOTSTRAP_PATHS`)에 **`.claude/rules` 추가**. 기존엔 `CLAUDE.md` 만 복사돼, `CLAUDE.md` 가 `@.claude/rules/*.md` `@include` 로 룰을 끌어오는 프로젝트에서 **@include 타깃이 워크트리에 없어 룰 본문이 통째로 누락**됐다(GuardrailLoader 는 raw text 주입이라 @include 미전개, child claude 의 native auto-discovery 도 파일 부재로 깨짐 → 인덱스·표 껍데기만 들어감). 이제 `.claude/rules` 가 함께 복사돼 child claude(`--bare` off 환경)가 `@include` 를 native 전개 → IMMUTABLE/GIT_POLICY/DDD 등 규칙이 정상 로드된다. `if not src.exists()` 가드로 rules 디렉토리 없는 프로젝트엔 무영향. 기존 워크트리도 다음 실행 시 dir-skip 가드(`dst 비어있음`)를 통과해 채워진다. `.claude/hooks`·`skills`·`plugins`·codenav 인덱스는 의도적으로 제외(lean 모드가 무력화 + codenav 인덱스는 메인 repo 경로 스냅샷이라 워크트리에선 stale·경로 불일치 위험).
 
 ### v2.14.0 — docs-add-task TASK §7/§11 빈 절 생략 (후속 스킬 블로킹 방지)
 
