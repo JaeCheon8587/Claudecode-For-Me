@@ -41,6 +41,16 @@
 | stdout 압축 | `--quiet` | 부모 Claude Code 세션에 진행 표시기/usage 표가 누적되지 않음 |
 | `--bare` | 자동 (`ANTHROPIC_API_KEY`가 있을 때만) | 자식 claude에서 CLAUDE.md/hooks/plugins 자동 로딩 스킵 |
 
+### 1.4 인라인 실행 모델 (기본)
+
+`forge_scope.py`는 step 코딩을 **자식 `claude` 프로세스로 spawn하지 않고**, 호출한 Claude Code 세션이 직접 인라인으로 수행하도록 설계됐다. step마다 프로세스를 새로 부팅하던 콜드스타트를 제거해 간단 작업을 빠르게 만든다. 결정적 골격(워크트리·plan·warmup·commit·index)은 python이 강제하고, step 코딩만 세션이 맡는다. 3단계로 나뉜다:
+
+1. **`--scaffold-only`** — dirty 검사 → 워크트리 ensure → deterministic plan(index.json + step{N}.md) → warmup → 가드레일 로드까지 하고 step 매니페스트(JSON: `worktree`/`phase_dir`/`docs_scope`/`root_dirty_baseline`/`steps[]`)를 stdout으로 출력 후 종료(`_execute_all` 미진입 = 자식 spawn 0). `--preset=auto`만 plan 생성에 splitter 자식 1콜.
+2. **`--record-step=N`** — 호출 세션이 워크트리에서 step N을 코딩하고 `step{N}-status.json`을 쓴 뒤 호출. 사후가드(메인repo 누수·워크트리 무변경) → attempt counter(`--max-attempts`) → TDD 순서 gate → status ingest → 2단계 commit → index 전이. result JSON(`completed`/`retry`/`error`/`blocked`)을 stdout으로 출력.
+3. **`--finalize`** — 전 step 완료 후 phase 마감(finalize + top index + 옵션 push).
+
+> child 실행 경로(`StepExecutor`·`ClaudeInvoker`)와 `--preset=auto` splitter는 보존된다(`ddr_loop.py`·`forge_full.py`가 사용). 큰 작업은 `forge_full.py`(자식+백그라운드)로 라우팅한다.
+
 ---
 
 ## 2. CLI 플래그 전체 목록
@@ -105,6 +115,15 @@ python scripts/forge_scope.py <phase_dir> [options]
 | `--strict` | bool | `false` | 가드레일 문서에 `{placeholder}` 패턴이 남아 있으면 실패. 문서 미완성 상태로 자동 진행을 막고 싶을 때. |
 | `--verbose` | bool | `false` | DEBUG 레벨 로그를 stderr로 출력. 본 옵션은 `--quiet`과 직교(quiet은 stdout만 억제, verbose는 stderr만 늘림). |
 | `--timings` | bool | `false` | phase 구간별 wall-clock 상세 테이블 출력. 미지정이어도 종료 시 `[timings] worktree=.. warmup=.. step0=..(out=..) commit-msg=.. total=..` 요약 1줄을 stderr로 출력. step `out`(output_tokens)이 작은데 elapsed가 크면 모델이 아니라 .NET 빌드/IO 병목. |
+
+### 2.8 인라인 실행 (§1.4)
+
+| 플래그 | 타입 | 기본값 | 설명 |
+|---|---|---|---|
+| `--scaffold-only` | bool | `false` | 워크트리·plan·warmup·가드레일까지만 수행하고 step 매니페스트(JSON)를 stdout으로 출력 후 종료. step 실행은 호출 세션이 인라인 수행. |
+| `--record-step` | int | `None` | 인라인 세션이 끝낸 step N 수확: 사후가드 → attempt counter → TDD 순서 gate → status ingest → 2단계 commit → index 전이. result JSON 출력. |
+| `--finalize` | bool | `false` | phase 마감(finalize + top index + 옵션 push). 전 step 완료 후 1회. |
+| `--max-attempts` | int | `3` | record-step 하드 백스톱. step당 record 누적 호출이 이 값에 도달하고도 completed가 아니면 강제 error(세션이 cap을 무시해도 결정적 종료). |
 
 ---
 
@@ -231,9 +250,25 @@ python scripts/forge_scope.py <phase-dir> \
   --quiet --yes --trust
 ```
 
-### 6.5 Claude Code 부모 세션에서 spawn할 때
+### 6.5 Claude Code 부모 세션에서 인라인 구동 (기본)
 
-`Bash(run_in_background=true)`로 한 번 호출하고 즉시 turn 종료. **`--quiet --yes` 필수.** Monitor / ScheduleWakeup / 자발적 진행 확인용 read 금지(메인 세션 토큰 30% 소모 사례 있음).
+forge-scope는 **foreground 인라인**이다. 세션이 직접 3단계를 돈다(`run_in_background` 쓰지 않음):
+
+```bash
+# 1) scaffold — 매니페스트(JSON) 파싱: worktree, steps[], docs_scope, root_dirty_baseline
+python scripts/forge_scope.py <phase-dir> --preset=contract-tdd \
+  --doc=docs/FRD/<FRD-ID>.md --prompt="..." --scaffold-only --quiet --yes --trust
+
+# 2) 세션이 워크트리에서 step{N} 코딩 → AC 실행 → step{N}-status.json 작성 → record (각 step)
+python scripts/forge_scope.py <phase-dir> --record-step=N --quiet --yes --trust
+
+# 3) finalize
+python scripts/forge_scope.py <phase-dir> --finalize --quiet --yes --trust
+```
+
+- **`--quiet --yes` 필수.** step 코딩 시 모든 파일 작업은 매니페스트의 `worktree` 절대경로 하위에서만(메인 repo 누수 시 record-step이 abort).
+- step N이 `completed`되기 전 step N+1 시작 금지(TDD 순서). `retry`는 같은 step 재작업(`--max-attempts` 상한).
+- 무거운/장기 작업은 `forge_full.py`(자식+백그라운드)로 라우팅.
 
 ---
 
@@ -267,10 +302,11 @@ splitter를 다시 돌리고 싶으면 `phases/scoped/<phase-dir>/`를 통째로
 | 경로 | 역할 |
 |---|---|
 | `scripts/forge_scope.py` | 본체 실행기. |
-| `scripts/test_forge_scope.py` | 단위 테스트(91개). |
+| `scripts/test_forge_scope.py` | 인라인 경로(scaffold/record/finalize) 통합 테스트. |
 | `.claude/commands/forge-scope.md` | 사용자 대면 슬래시 커맨드 명세(스킬). |
 | `PHASE_SCHEMA.md` | phase 디렉토리 스키마(공용). |
 | `phases/scoped/index.json` | 모든 scoped phase의 top-level 상태 인덱스. |
 | `phases/scoped/<phase-dir>/index.json` | 해당 phase의 plan + step 상태. |
 | `phases/scoped/<phase-dir>/step{N}.md` | step별 작업 지시문(5개 H2 헤딩 필수). |
-| `phases/scoped/<phase-dir>/step{N}-output.json` | step 실행 결과(stdout/stderr/usage). |
+| `phases/scoped/<phase-dir>/step{N}-status.json` | 인라인 세션이 쓰는 step 결과(`{status, summary}`). record-step이 ingest. |
+| `phases/scoped/<phase-dir>/step{N}-output.json` | (child 경로) step 실행 결과(stdout/stderr/usage). |

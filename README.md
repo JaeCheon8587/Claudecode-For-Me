@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v2.15.0 · 커스텀 스킬 13종 + 슬래시 커맨드 16종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v2.16.0 · 커스텀 스킬 13종 + 슬래시 커맨드 16종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,7 +11,7 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `2.15.0` |
+| 버전 | `2.16.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
@@ -66,6 +66,10 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v2.16.0 — forge-scope 인라인 실행 전환 (step 콜드스타트 제거)
+
+`forge-scope` 의 step 실행을 **자식 `claude` 프로세스 spawn → 호출 세션 인라인**으로 전환. 간단 작업이 느린 본체였던 step별 프로세스 콜드스타트(CLI boot·세션 init·툴 등록)·백그라운드 폴링을 제거한다. 워크트리 격리·TDD 4-step·step별 atomic commit·index 상태머신은 **그대로 유지** — python 이 결정적 골격을 강제하고 step 코딩만 세션이 맡는다. `forge_scope.py` 신규 플래그 3종: `--scaffold-only`(워크트리·plan·warmup 까지 + step 매니페스트 JSON 출력 후 종료), `--record-step=N`(사후가드[메인repo 누수·워크트리 무변경]→attempt counter→TDD 순서 gate→status ingest→2단계 commit), `--finalize`(phase 마감). `--max-attempts`(기본 3) 하드 백스톱으로 무한 재작업 차단. 격리는 record-step 사후가드 — 인라인 세션이 메인 repo 에 누수하면 scaffold 시점 `root_dirty_baseline` 대비 탐지해 abort. **하위호환 보존**: `ClaudeInvoker`·`DEFAULT_CHILD_TOOLS`·`StepExecutor`·`StepSplitter` 및 child 실행 경로·`--preset=auto` splitter 는 그대로 유지(`ddr_loop.py`·`forge_full.py` 의존). 큰 작업은 `forge_full.py`(자식+백그라운드)로 라우팅. SKILL.md 는 foreground 인라인 루프(scaffold→가드레일 read→step 코딩·AC·record→finalize)로 재작성, `run_in_background`·Monitor·폴링 지침 제거. `scripts/test_forge_scope.py` 신규(인라인 경로 통합 테스트 10종).
 
 ### v2.15.0 — forge-scope 워크트리 부트스트랩에 `.claude/rules` 추가 (룰 본문 누락 수정)
 

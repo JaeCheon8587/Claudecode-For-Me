@@ -1262,6 +1262,33 @@ class IndexStore:
         )
         self._write_json(top_file, top)
 
+    # ---- 인라인 실행 지원: attempt counter(OI-2) + 메인 repo 누수 baseline(OI-1) ----
+
+    def increment_attempt(self, step_num: int) -> int:
+        """record-step 호출당 step의 attempts를 +1 하고 반환한다(하드 백스톱 카운터)."""
+        idx = self.load()
+        for s in idx["steps"]:
+            if s["step"] == step_num:
+                s["attempts"] = int(s.get("attempts", 0)) + 1
+                self.save(idx)
+                return s["attempts"]
+        return 0
+
+    def get_attempts(self, step_num: int) -> int:
+        return next(
+            (int(s.get("attempts", 0)) for s in self.load()["steps"] if s["step"] == step_num),
+            0,
+        )
+
+    def set_root_baseline(self, lines: list[str]) -> None:
+        """scaffold 시점 메인 repo(ROOT)의 dirty 기준선을 index.json에 저장한다."""
+        idx = self.load()
+        idx["root_dirty_baseline"] = list(lines)
+        self.save(idx)
+
+    def get_root_baseline(self) -> list[str]:
+        return list(self.load().get("root_dirty_baseline") or [])
+
     @staticmethod
     def _read_json(p: Path) -> dict:
         try:
@@ -2140,6 +2167,51 @@ class DeterministicPlanBuilder:
 
 
 # ============================================================================
+# 인라인 실행 공용 헬퍼 — 메인 repo 누수 baseline + step 완료 commit
+# ============================================================================
+def _root_porcelain() -> list[str]:
+    """메인 repo(ROOT)의 `git status --porcelain` 라인 정렬 집합.
+
+    인라인 세션이 워크트리 대신 메인 repo에 코드를 잘못 떨군 경우를 record-step이
+    탐지하기 위한 기준선/현재값 비교용(OI-1).
+    """
+    r = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    return sorted(l for l in (r.stdout or "").splitlines() if l.strip())
+
+
+def commit_completed_step(
+    store: "IndexStore",
+    git: "GitOperations",
+    cfg: "PhaseConfig",
+    phase_name: str,
+    step_num: int,
+    step_name: str,
+) -> None:
+    """완료된 step을 2단계 commit(feat 코드 + chore 아티팩트)으로 기록한다.
+
+    child 경로(StepExecutor._on_success)와 인라인 경로(ForgeScope.record_step)가
+    동일 commit 규칙을 공유하도록 추출한 함수. index.json·step{N}-output.json·
+    step{N}-status.json 은 reset_paths로 feat 에서 빼 chore 로 보낸다(feat=코드만).
+    """
+    store.mark_completed(step_num)
+    output_rel = f"phases/{PHASES_SUBDIR}/{cfg.phase_dir_name}/step{step_num}-output.json"
+    index_rel = f"phases/{PHASES_SUBDIR}/{cfg.phase_dir_name}/index.json"
+    status_rel = f"phases/{PHASES_SUBDIR}/{cfg.phase_dir_name}/step{step_num}-status.json"
+    git.two_step_commit(
+        feat_msg=StepExecutor.FEAT_MSG.format(phase=phase_name, num=step_num, name=step_name),
+        chore_msg=StepExecutor.CHORE_MSG.format(phase=phase_name, num=step_num),
+        reset_paths=[output_rel, index_rel, status_rel],
+    )
+
+
+# ============================================================================
 # StepExecutor — 단일 step 라이프사이클 (재시도 + commit)
 # ============================================================================
 class StepExecutor:
@@ -2322,8 +2394,9 @@ class StepExecutor:
         )
 
     def _on_success(self, step_num: int, step_name: str, elapsed: int) -> None:
-        self._store.mark_completed(step_num)
-        self._commit_step(step_num, step_name)
+        commit_completed_step(
+            self._store, self._git, self._cfg, self._phase_name, step_num, step_name
+        )
         _qprint(f"  ✓ Step {step_num}: {step_name} [{elapsed}s]")
 
     def _on_blocked(self, step_num: int, step_name: str, elapsed: int) -> None:
@@ -2546,6 +2619,12 @@ class ForgeScope:
         if not self._no_worktree:
             store.ensure_git_base(self._git.head_sha())
 
+        # 인라인 모드: scaffold(워크트리·plan·warmup·가드레일)까지만 하고 매니페스트를
+        # stdout으로 넘긴 뒤 종료. step 실행은 호출 세션이 인라인으로 수행한다(자식 spawn 0).
+        if getattr(self._args, "scaffold_only", False):
+            self._emit_scaffold_manifest(store)
+            return EXIT_OK
+
         executor = StepExecutor(
             self._cfg,
             store,
@@ -2558,6 +2637,137 @@ class ForgeScope:
         )
         self._execute_all(store, executor, total)
         self._finalize(store, phase_name)
+        return EXIT_OK
+
+    # ---- 인라인 실행 (scaffold-only / record-step / finalize) ----
+
+    def _emit_scaffold_manifest(self, store: IndexStore) -> None:
+        """scaffold 결과(워크트리·step 목록·docs_scope·메인repo baseline)를 JSON으로 출력."""
+        if not self._no_worktree:
+            store.set_root_baseline(_root_porcelain())
+        idx = store.load()
+        steps = [
+            {
+                "step": s["step"],
+                "name": s["name"],
+                "status": s["status"],
+                "step_file": str((self._cfg.phase_dir / f"step{s['step']}.md").resolve()),
+            }
+            for s in sorted(idx.get("steps", []), key=lambda x: x["step"])
+        ]
+        manifest = {
+            "worktree": str(self._cfg.root.resolve()),
+            "phase_dir": str(self._cfg.phase_dir.resolve()),
+            "phase": self._cfg.phase_dir_name,
+            "docs_scope": store.get_docs_scope(),
+            "no_worktree": self._no_worktree,
+            "root_dirty_baseline": store.get_root_baseline(),
+            "steps": steps,
+        }
+        print(json.dumps(manifest, ensure_ascii=False))
+
+    def _git_worktree_dirty(self) -> bool:
+        r = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=self._cfg.root,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        return bool((r.stdout or "").strip())
+
+    def _record_result(
+        self, result: str, n: int, *, attempts: int = 0, max_attempts: int = 0, message: str = ""
+    ) -> int:
+        print(
+            json.dumps(
+                {
+                    "result": result,
+                    "step": n,
+                    "attempts": attempts,
+                    "max": max_attempts,
+                    "message": message,
+                },
+                ensure_ascii=False,
+            )
+        )
+        return {
+            "completed": EXIT_OK,
+            "retry": EXIT_OK,
+            "blocked": EXIT_BLOCKED,
+            "error": EXIT_ERR,
+        }[result]
+
+    def record_step(self, n: int) -> int:
+        """인라인 세션이 끝낸 step N을 수확한다(사후가드→counter→gate→ingest→commit)."""
+        store = IndexStore(self._cfg)
+        store.validate_schema(store.load())
+        _, phase_name = store.get_meta()
+        steps = store.load()["steps"]
+        if not any(s["step"] == n for s in steps):
+            return self._record_result("error", n, message=f"step {n} 없음")
+        # 1) OI-1 사후가드: 인라인 세션이 메인 repo(ROOT)에 누수했는지 baseline 대비 탐지.
+        if not self._no_worktree:
+            leaked = sorted(set(_root_porcelain()) - set(store.get_root_baseline()))
+            if leaked:
+                return self._record_result(
+                    "error", n,
+                    message=f"메인 repo 누수 {leaked} — 작업을 워크트리({self._cfg.root})로 옮겨 재실행",
+                )
+        # 2) 워크트리 무변경 = step 미수행
+        if not self._git_worktree_dirty():
+            return self._record_result("error", n, message="워크트리에 변경 없음 — step 미수행")
+        # 3) OI-2 하드 백스톱 counter
+        attempts = store.increment_attempt(n)
+        max_attempts = getattr(self._args, "max_attempts", StepExecutor.MAX_RETRIES)
+        # 4) status ingest (OI-4: step{N}-status.json 재사용)
+        status = store.ingest_child_status(n)
+        if status == "completed":
+            # 5) TDD gate: 이전 step 미완이면 거부(red→green 순서 보존)
+            prev_incomplete = [
+                s["step"]
+                for s in store.load()["steps"]
+                if s["step"] < n and s["status"] != "completed"
+            ]
+            if prev_incomplete:
+                return self._record_result(
+                    "error", n, attempts=attempts, max_attempts=max_attempts,
+                    message=f"이전 step 미완 {prev_incomplete} — 순서대로 진행하라",
+                )
+            step_name = next(s["name"] for s in store.load()["steps"] if s["step"] == n)
+            commit_completed_step(store, self._git, self._cfg, phase_name, n, step_name)
+            return self._record_result("completed", n, attempts=attempts, max_attempts=max_attempts)
+        if status == "blocked":
+            store.update_top("blocked")
+            return self._record_result(
+                "blocked", n, attempts=attempts, max_attempts=max_attempts,
+                message=store.read_step_error(n),
+            )
+        # 6) 미완(pending/error) — 백스톱 판정
+        if attempts >= max_attempts:
+            store.mark_error(n, store.read_step_error(n), max_attempts)
+            store.update_top("error")
+            return self._record_result(
+                "error", n, attempts=attempts, max_attempts=max_attempts,
+                message="최대 시도 초과",
+            )
+        store.reset_for_retry(n)
+        return self._record_result("retry", n, attempts=attempts, max_attempts=max_attempts)
+
+    def finalize_only(self) -> int:
+        """모든 step 완료 후 phase를 마감한다(finalize+top index+push)."""
+        store = IndexStore(self._cfg)
+        store.validate_schema(store.load())
+        pending = [s["step"] for s in store.load()["steps"] if s["status"] != "completed"]
+        if pending:
+            print(
+                json.dumps({"result": "error", "message": f"미완 step {pending}"}, ensure_ascii=False)
+            )
+            return EXIT_ERR
+        _, phase_name = store.get_meta()
+        self._finalize(store, phase_name)
+        print(json.dumps({"result": "finalized", "phase": phase_name}, ensure_ascii=False))
         return EXIT_OK
 
     # ---- 내부 헬퍼 ----
@@ -3167,6 +3377,39 @@ def _build_parser() -> argparse.ArgumentParser:
             "억제하고 phase 완료 한 줄 + 에러만 출력한다."
         ),
     )
+    parser.add_argument(
+        "--scaffold-only",
+        action="store_true",
+        help=(
+            "워크트리·plan·warmup·가드레일까지만 수행하고 step 매니페스트(JSON)를 stdout으로 "
+            "출력한 뒤 종료한다. step 실행은 호출 세션이 인라인으로 수행한다(자식 claude spawn 0)."
+        ),
+    )
+    parser.add_argument(
+        "--record-step",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "인라인 세션이 끝낸 step N을 수확한다: 사후가드(메인repo 누수·워크트리 무변경) → "
+            "attempt counter → TDD 순서 gate → status ingest → 2단계 commit → index 전이. "
+            "result JSON을 stdout으로 출력."
+        ),
+    )
+    parser.add_argument(
+        "--finalize",
+        action="store_true",
+        help="phase 마감: finalize + top-index 갱신 + (옵션) push. 모든 step 완료 후 1회 호출.",
+    )
+    parser.add_argument(
+        "--max-attempts",
+        type=int,
+        default=StepExecutor.MAX_RETRIES,
+        help=(
+            "record-step 하드 백스톱: step당 record 호출 누적이 이 값에 도달하고도 completed가 "
+            "아니면 강제 error 처리한다(기본 3). 세션이 SKILL.md cap을 무시해도 결정적으로 끊긴다."
+        ),
+    )
     return parser
 
 
@@ -3188,6 +3431,10 @@ def main() -> None:
 
     try:
         forge = ForgeScope(args)
+        if args.record_step is not None:
+            sys.exit(forge.record_step(args.record_step))
+        if args.finalize:
+            sys.exit(forge.finalize_only())
         sys.exit(forge.run())
     except KeyboardInterrupt:
         print("\n  ⚠ Interrupted (top-level).", file=sys.stderr)
