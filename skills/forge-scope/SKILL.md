@@ -59,7 +59,7 @@ cwd에 아래 파일·디렉토리가 없으면 플러그인 내장 템플릿에
 
 ### 단계 2b — 부트스트랩 산출물 commit (필수)
 
-신규 파일이 복사되었다면 **워크트리 생성 전에 메인 repo에 commit**한다. 워크트리는 현재 HEAD 기준 생성되므로 untracked 부트스트랩 파일은 워크트리에 없어 scaffold가 실패한다.
+신규 파일이 복사되었다면 **워크트리 생성 전에 메인 repo에 commit**한다. 가드레일·docs는 이제 ROOT에서 직접 읽지만(워크트리 복사 폐지), untracked 부트스트랩 파일이 남으면 scaffold 시작 시 메인 repo dirty 게이트에 걸려 중단된다(`--force` 우회). commit으로 트리를 clean하게 둔다.
 
 ```bash
 git add scripts/forge_full.py scripts/forge_scope.py scripts/forge_cancel.py \
@@ -87,13 +87,15 @@ forge_scope.py는 git worktree 기반으로 동작합니다.
 
 ### 워크트리 동작 요약
 
-`forge_scope.py --scaffold-only`는 phase 시작 시 메인 repo 안 `.worktrees/<phase-dir>/`에 git worktree를 생성하고 branch `feat-<phase-dir>`에 attach한다. 다음이 모두 워크트리 안에서 발생한다:
+`forge_scope.py --scaffold-only`는 phase 시작 시 메인 repo 안 `.worktrees/<phase-dir>/`에 git worktree를 생성하고 branch `feat-<phase-dir>`에 attach한다. 다음이 모두 워크트리 안에서 발생한다(= **쓰기 타깃**):
 
 - `phases/scoped/<phase-dir>/index.json` 및 `step{N}.md`
 - step 코딩으로 작성·수정되는 코드
 - 모든 `git commit`
 
-**인라인 실행에서 이 세션은 워크트리 디렉토리 안에서 작업한다.** scaffold가 stdout으로 워크트리 절대경로를 넘겨주며, 이후 모든 Read/Edit/Write/Bash(cwd)는 **그 워크트리 절대경로 하위에서만** 수행한다. 메인 repo 작업 트리는 건드리지 않는다(record-step이 누수를 탐지해 abort한다 — 단계 5 참고).
+**읽기 ROOT / 쓰기 worktree 모델.** 인라인 실행에서 이 세션의 cwd는 스킬 실행 경로(= `root`, 메인 repo)에 머문다. 가드레일(CLAUDE.md)·docs 같은 **읽기는 `root` 기준**, 코드·산출물 **쓰기(Edit/Write)는 `worktree` 절대경로 하위에서만** 수행한다. scaffold가 stdout으로 `root`와 `worktree` 절대경로를 모두 넘겨준다. 메인 repo 파일을 **수정**하지 않는다(읽기는 허용 — record-step의 누수 가드는 git 변경만 탐지하므로 read-only는 안전. 단계 5 참고).
+
+> 워크트리로의 CLAUDE.md/docs 복사는 더 이상 하지 않는다. 워크트리는 `ROOT/.worktrees/...`로 ROOT 하위에 중첩돼 있어 가드레일은 ROOT에서 직접·최신본으로 읽힌다.
 
 > **서브모듈**: 워크트리 서브모듈은 메인 repo 서브모듈을 junction(Windows)/symlink(Unix)로 링크해 가져온다(오프라인 동작). `submodule.<name>.ignore=all`로 status/commit에서 무시. 메인 미populate면 skip. 정리는 `forge_cancel.py`가 링크를 먼저 제거.
 
@@ -176,7 +178,7 @@ scaffold → 가드레일 read → step 루프(코딩·AC·record) → finalize 
 
 ```json
 {
-  "worktree": "<절대경로>", "phase_dir": "<절대경로>", "phase": "<name>",
+  "root": "<절대경로>", "worktree": "<절대경로>", "phase_dir": "<절대경로>", "phase": "<name>",
   "docs_scope": ["docs/..."], "no_worktree": false,
   "root_dirty_baseline": [...],
   "steps": [{"step":0,"name":"...","status":"pending","step_file":"<절대경로>"}, ...]
@@ -187,14 +189,14 @@ scaffold → 가드레일 read → step 루프(코딩·AC·record) → finalize 
 - 비정상 종료면 stderr를 사용자에게 전달하고 중단한다.
 
 ### 5-2. 가드레일 read (1회)
-`<worktree>/CLAUDE.md`와 `docs_scope`의 각 문서를 **1회 read**한다. 이것이 작업 규칙·범위의 ground truth다.
+`<root>/CLAUDE.md`와 `docs_scope`의 각 문서(**`<root>` 기준**)를 **1회 read**한다. 이것이 작업 규칙·범위의 ground truth다. (가드레일·docs는 항상 `root`에서 읽는다 — 워크트리 복사본이 아님.)
 
 ### 5-3. Step 루프 (번호 오름차순, 순서 엄수)
 `steps`의 `pending` step을 **번호 오름차순으로 하나씩** 처리한다. step N record가 `completed`되기 전에 step N+1을 시작하지 않는다(TDD red→green 순서 보존).
 
 각 step:
 1. `step_file`(절대경로) Read — 작업 내용·`## Acceptance Criteria` bash·금지사항 확인.
-2. **코딩**: 요구사항만 구현. **모든 Edit/Write/Read는 `worktree` 절대경로 하위에서만.** 메인 repo 파일 수정 금지.
+2. **코딩**: 요구사항만 구현. **코드 Edit/Write는 `worktree` 절대경로 하위에서만.** 가드레일·docs Read는 `root` 기준 허용. 메인 repo 파일 **수정** 금지(읽기는 OK).
 3. **AC 실행**: step 파일의 Acceptance Criteria bash를 `cwd=<worktree>`로 실행. 통과해야 완료.
 4. **status 기록**: `<phase_dir>/step{N}-status.json`에 한 객체로 작성:
    - 성공 → `{"status":"completed","summary":"<핵심 파일·검증결과 200자 이내>"}`

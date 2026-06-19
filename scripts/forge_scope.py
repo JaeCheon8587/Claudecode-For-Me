@@ -1352,7 +1352,9 @@ class StepSplitter:
     # ---- 내부 헬퍼 ----
 
     def _build_split_prompt(self, user_prompts: list[str], doc_paths: list[Path]) -> str:
-        claude_md = self._cfg.root / "CLAUDE.md"
+        # 읽기 출처는 항상 ROOT(프로젝트 루트). 워크트리 cfg.root 아님 — 가드레일/문서는
+        # source-of-truth인 메인 repo에서 읽어 staleness·중복복사를 제거한다.
+        claude_md = ROOT / "CLAUDE.md"
         guardrail_text = claude_md.read_text(encoding="utf-8") if claude_md.exists() else ""
 
         joined_prompts = "\n\n---\n\n".join(p for p in user_prompts if p) or "(없음)"
@@ -1364,7 +1366,7 @@ class StepSplitter:
                 text = _compact_markdown_doc(text)
             clipped = text[:DOC_BYTES_LIMIT]
             note = "" if len(text) <= DOC_BYTES_LIMIT else (f"\n\n... ({len(text) - DOC_BYTES_LIMIT}자 생략) ...")
-            rel = path.relative_to(self._cfg.root).as_posix()
+            rel = path.relative_to(ROOT).as_posix()
             doc_sections.append(f"### {rel}\n\n```\n{clipped}{note}\n```")
         docs_block = "\n\n".join(doc_sections) if doc_sections else "(첨부 문서 없음)"
 
@@ -1723,7 +1725,8 @@ class DeterministicPlanBuilder:
     def _build_single_step_plan(self, user_prompts: list[str], doc_paths: list[Path]) -> dict:
         if self._preset == "frd-implementation":
             self._require_single_doc(doc_paths, preset="frd-implementation")
-        docs_scope = [p.relative_to(self._cfg.root).as_posix() for p in doc_paths]
+        # doc_paths는 ScopeValidator(ROOT)가 만든 ROOT-절대경로 → ROOT 기준 상대화.
+        docs_scope = [p.relative_to(ROOT).as_posix() for p in doc_paths]
         step_name = self._step_name(docs_scope)
         return {
             "project": self._project_name(),
@@ -1741,7 +1744,8 @@ class DeterministicPlanBuilder:
 
     def _build_contract_tdd_plan(self, user_prompts: list[str], doc_paths: list[Path]) -> dict:
         self._require_single_doc(doc_paths, preset="contract-tdd")
-        docs_scope = [p.relative_to(self._cfg.root).as_posix() for p in doc_paths]
+        # doc_paths는 ScopeValidator(ROOT)가 만든 ROOT-절대경로 → ROOT 기준 상대화.
+        docs_scope = [p.relative_to(ROOT).as_posix() for p in doc_paths]
         doc_rel = docs_scope[0]
         return {
             "project": self._project_name(),
@@ -1788,12 +1792,12 @@ class DeterministicPlanBuilder:
             sys.exit(EXIT_ERR)
 
     def _project_name(self) -> str:
-        claude_md = self._cfg.root / "CLAUDE.md"
+        claude_md = ROOT / "CLAUDE.md"
         if claude_md.exists():
             for line in claude_md.read_text(encoding="utf-8").splitlines():
                 if line.startswith("# 프로젝트:"):
                     return _truncate_text(line.removeprefix("# 프로젝트:").strip(), 80)
-        return _truncate_text(self._cfg.root.name, 80)
+        return _truncate_text(ROOT.name, 80)
 
     def _step_name(self, docs_scope: list[str]) -> str:
         if docs_scope:
@@ -2439,15 +2443,18 @@ class ForgeScope:
         if self._no_worktree:
             self._wt = None
             worktree_root = ROOT
-            self._verify_inplace_bootstrap(worktree_root)
             _qprint(f"  Worktree: 생성 안 함 — 메인 repo에서 직접 실행 ({ROOT})")
         else:
             self._wt = WorktreeManager(ROOT, args.phase_dir, force=args.force)
             with self._timed("worktree"):
                 worktree_root = self._wt.ensure()
-            self._verify_worktree_bootstrap(worktree_root, args.phase_dir)
+        # 워크트리/in-place 공통: 가드레일은 ROOT에서 읽으므로 ROOT에 CLAUDE.md만 있으면 된다.
+        # (워크트리로의 docs/CLAUDE.md 복사는 폐지 — 읽기 ROOT / 쓰기 worktree 모델.)
+        self._verify_root_guardrail(ROOT)
         self._cfg = PhaseConfig(args.phase_dir, root=worktree_root)
-        self._validator = ScopeValidator(worktree_root)
+        # docs_scope 검증·문서 읽기는 ROOT(메인 repo) 기준. 워크트리(worktree_root)는
+        # 코드/phase 산출물 "쓰기" 전용 — 복사 없이 ROOT의 docs를 직접 읽는다.
+        self._validator = ScopeValidator(ROOT)
         trust = _is_trusted(args.trust)
         # invoker 2종 분리:
         # - splitter_invoker: 일회성 strict-JSON 호출. 세션 미공유.
@@ -2484,7 +2491,7 @@ class ForgeScope:
             or bool(getattr(args, "single_step", False))
         )
         self._guardrail_loader = GuardrailLoader(
-            self._cfg.root,
+            ROOT,
             self._validator,
             strict=args.strict,
             compact_docs=compact_docs,
@@ -2493,62 +2500,17 @@ class ForgeScope:
         self._splitter: Optional[StepSplitter] = None  # lazy
 
     @staticmethod
-    def _verify_worktree_bootstrap(worktree_root: Path, phase_dir: str) -> None:
-        """워크트리에 필수 부트스트랩 파일이 있는지 확인하고, gitignored면 main→worktree 자동 복사.
+    def _verify_root_guardrail(root: Path) -> None:
+        """ROOT(메인 repo)에 가드레일 CLAUDE.md가 있는지 확인하고, 없으면 fail-fast.
 
-        메인 repo에서 부트스트랩 파일을 .gitignore로 제외하면 worktree에는 tracked 파일만
-        체크아웃되어 CLAUDE.md/docs 등이 누락된다. ROOT(=main repo)에서 자동으로 복사한 뒤
-        여전히 없으면 fail-fast로 사용자에게 알린다.
-        """
-        # `.claude/rules`: CLAUDE.md의 @include 타깃. gitignore되면 워크트리에서 누락돼
-        # CLAUDE.md 규칙 본문이 통째로 깨진다(껍데기만 주입). 존재 시에만 복사된다.
-        _BOOTSTRAP_PATHS = ["CLAUDE.md", "PHASE_SCHEMA.md", "FORGE_SCOPE.md", _docs_dirname(ROOT), ".claude/rules"]
-        for rel in _BOOTSTRAP_PATHS:
-            src = ROOT / rel
-            if not src.exists():
-                continue
-            dst = worktree_root / rel
-            if src.is_dir():
-                # 재실행 시 이미 채워진 docs 디렉토리는 재복사하지 않는다(디스크 churn 회피).
-                # 첫 워크트리 생성(gitignored docs 누락) 시에만 복사한다. 메인 docs가
-                # 갱신됐다면 forge_cancel 후 재생성으로 반영한다.
-                if dst.exists() and any(dst.iterdir()):
-                    continue
-                shutil.copytree(src, dst, dirs_exist_ok=True)
-            elif not dst.exists():
-                shutil.copy2(src, dst)
-        required = ["CLAUDE.md"]
-        missing = [rel for rel in required if not (worktree_root / rel).exists()]
-        if not missing:
-            return
-        print(
-            "ERROR: 워크트리에 필수 부트스트랩 파일이 없습니다.\n"
-            "       메인 repo에서 부트스트랩 산출물을 commit하지 않은 채 워크트리를 생성한 것으로 보입니다.\n"
-            f"  워크트리: {worktree_root}\n"
-            f"  누락:    {', '.join(missing)}\n"
-            "\n"
-            "  복구 절차 (메인 repo에서 실행):\n"
-            f"    python scripts/forge_cancel.py {phase_dir} --yes\n"
-            "    git add scripts/forge_full.py scripts/forge_scope.py scripts/forge_cancel.py \\\n"
-            "            CLAUDE.md PHASE_SCHEMA.md FORGE_SCOPE.md docs/.templates/ .gitignore\n"
-            "    git commit -m 'chore: bootstrap forge-scope'\n"
-            "    # 이후 forge-scope 재실행",
-            file=sys.stderr,
-        )
-        sys.exit(EXIT_ERR)
-
-    @staticmethod
-    def _verify_inplace_bootstrap(root: Path) -> None:
-        """--no-worktree 사전 검사 — ROOT에 필수 가드레일(CLAUDE.md) 존재 확인.
-
-        워크트리 모드 _verify_worktree_bootstrap 의 fail-fast 패리티. in-place 는 메인
-        repo가 곧 작업 트리라 복사는 하지 않고 존재만 확인한다. 없으면 가드레일 없이
-        코드가 생성되는 사고를 막기 위해 즉시 중단한다.
+        워크트리/in-place 두 모드 공통 가드. forge-scope는 docs·CLAUDE.md를 ROOT에서
+        직접 읽으므로(워크트리로의 복사 폐지) ROOT에 CLAUDE.md만 있으면 충분하다.
+        없으면 가드레일 없이 코드가 생성되는 사고를 막기 위해 즉시 중단한다.
         """
         if (root / "CLAUDE.md").exists():
             return
         print(
-            "ERROR: --no-worktree 모드인데 CLAUDE.md가 없습니다.\n"
+            "ERROR: 가드레일 CLAUDE.md가 ROOT에 없습니다.\n"
             f"  경로: {root / 'CLAUDE.md'}\n"
             "  가드레일 없이 코드가 생성되는 것을 막기 위해 중단합니다.\n"
             "  부트스트랩(단계 2)을 먼저 수행하거나 CLAUDE.md를 생성한 뒤 재실행하세요.",
@@ -2656,6 +2618,7 @@ class ForgeScope:
             for s in sorted(idx.get("steps", []), key=lambda x: x["step"])
         ]
         manifest = {
+            "root": str(ROOT.resolve()),
             "worktree": str(self._cfg.root.resolve()),
             "phase_dir": str(self._cfg.phase_dir.resolve()),
             "phase": self._cfg.phase_dir_name,
@@ -2949,7 +2912,7 @@ class ForgeScope:
         if len(doc_args) != 1:
             return
         doc_rel = doc_args[0].lstrip("/")
-        doc_path = self._cfg.root / doc_rel
+        doc_path = ROOT / doc_rel
         if not doc_path.exists():
             return
         text = doc_path.read_text(encoding="utf-8")

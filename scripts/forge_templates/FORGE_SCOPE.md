@@ -23,9 +23,9 @@
 
 ### 1.2 가드레일 주입 모델
 
-매 step 호출 시 prompt 컨텍스트:
-- `CLAUDE.md` (항상)
-- `docs_scope`에 명시된 문서만 (whitelist)
+매 step 호출 시 prompt 컨텍스트 (가드레일·docs는 항상 **ROOT(메인 repo)**에서 읽는다 — 워크트리 복사본 아님):
+- `CLAUDE.md` (항상, ROOT 기준)
+- `docs_scope`에 명시된 문서만 (whitelist, ROOT 기준)
 - `--compact-docs` 사용 시 FRD류 문서는 핵심 H2 섹션(§1·§4·§5·§7·§8·§9·§12·§14·§17)만 추출
 - 이전 step의 `summary` (있으면) — 직렬 컨텍스트 누적
 - 첫 호출에서만 작업 규칙·재시도 규약 전체 주입(이후는 동일 세션 `-r`로 cache_read 적중)
@@ -45,7 +45,7 @@
 
 `forge_scope.py`는 step 코딩을 **자식 `claude` 프로세스로 spawn하지 않고**, 호출한 Claude Code 세션이 직접 인라인으로 수행하도록 설계됐다. step마다 프로세스를 새로 부팅하던 콜드스타트를 제거해 간단 작업을 빠르게 만든다. 결정적 골격(워크트리·plan·warmup·commit·index)은 python이 강제하고, step 코딩만 세션이 맡는다. 3단계로 나뉜다:
 
-1. **`--scaffold-only`** — dirty 검사 → 워크트리 ensure → deterministic plan(index.json + step{N}.md) → warmup → 가드레일 로드까지 하고 step 매니페스트(JSON: `worktree`/`phase_dir`/`docs_scope`/`root_dirty_baseline`/`steps[]`)를 stdout으로 출력 후 종료(`_execute_all` 미진입 = 자식 spawn 0). `--preset=auto`만 plan 생성에 splitter 자식 1콜.
+1. **`--scaffold-only`** — dirty 검사 → 워크트리 ensure → deterministic plan(index.json + step{N}.md) → warmup → 가드레일 로드까지 하고 step 매니페스트(JSON: `root`/`worktree`/`phase_dir`/`docs_scope`/`root_dirty_baseline`/`steps[]`)를 stdout으로 출력 후 종료(`_execute_all` 미진입 = 자식 spawn 0). `--preset=auto`만 plan 생성에 splitter 자식 1콜. **읽기(가드레일·docs)는 `root`, 쓰기(코드·산출물)는 `worktree`.**
 2. **`--record-step=N`** — 호출 세션이 워크트리에서 step N을 코딩하고 `step{N}-status.json`을 쓴 뒤 호출. 사후가드(메인repo 누수·워크트리 무변경) → attempt counter(`--max-attempts`) → TDD 순서 gate → status ingest → 2단계 commit → index 전이. result JSON(`completed`/`retry`/`error`/`blocked`)을 stdout으로 출력.
 3. **`--finalize`** — 전 step 완료 후 phase 마감(finalize + top index + 옵션 push).
 
@@ -255,7 +255,7 @@ python scripts/forge_scope.py <phase-dir> \
 forge-scope는 **foreground 인라인**이다. 세션이 직접 3단계를 돈다(`run_in_background` 쓰지 않음):
 
 ```bash
-# 1) scaffold — 매니페스트(JSON) 파싱: worktree, steps[], docs_scope, root_dirty_baseline
+# 1) scaffold — 매니페스트(JSON) 파싱: root, worktree, steps[], docs_scope, root_dirty_baseline
 python scripts/forge_scope.py <phase-dir> --preset=contract-tdd \
   --doc=docs/FRD/<FRD-ID>.md --prompt="..." --scaffold-only --quiet --yes --trust
 
@@ -266,7 +266,7 @@ python scripts/forge_scope.py <phase-dir> --record-step=N --quiet --yes --trust
 python scripts/forge_scope.py <phase-dir> --finalize --quiet --yes --trust
 ```
 
-- **`--quiet --yes` 필수.** step 코딩 시 모든 파일 작업은 매니페스트의 `worktree` 절대경로 하위에서만(메인 repo 누수 시 record-step이 abort).
+- **`--quiet --yes` 필수.** step 코딩 시 코드 **쓰기**(Edit/Write)는 매니페스트의 `worktree` 절대경로 하위에서만, 가드레일·docs **읽기**는 `root` 기준(read-only는 누수 아님). 메인 repo 파일 수정 시 record-step이 abort.
 - step N이 `completed`되기 전 step N+1 시작 금지(TDD 순서). `retry`는 같은 step 재작업(`--max-attempts` 상한).
 - 무거운/장기 작업은 `forge_full.py`(자식+백그라운드)로 라우팅.
 
