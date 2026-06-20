@@ -29,10 +29,25 @@ docs/.templates v0.7 체계 (per-App PRD/FC/ARCHITECTURE/FRD/ADR/ADR-CATALOG/TAS
 
 ---
 
+## 사전 준비 — helper 경로 (CLAUDE_PLUGIN_ROOT fallback)
+
+helper 스크립트(`docs_helpers.py`·`docs_conformance.py`)는 **소비자 repo 에 복사되지 않는다** (forge-scope·doc-driven-review 와 동일 컨벤션 — v3.0.1 부트스트랩 복사 폐지). dev repo(로컬 `./scripts/` 보유)면 로컬, 아니면 플러그인 설치 경로를 쓴다:
+
+```bash
+HELP="scripts/docs_helpers.py";      [ -f "$HELP" ] || HELP="${CLAUDE_PLUGIN_ROOT}/scripts/docs_helpers.py"
+CONF="scripts/docs_conformance.py";  [ -f "$CONF" ] || CONF="${CLAUDE_PLUGIN_ROOT}/scripts/docs_conformance.py"
+```
+
+> **Claude Code 의 Bash 호출은 셸 상태를 보존하지 않는다.** helper 를 실행하는 **모든 Bash 블록 맨 앞에 위 2줄을 함께 둔다**(또는 해석된 절대경로를 인라인). 이후 Phase 들은 `python "$HELP" ...` / `python "$CONF" ...` 로 표기한다. cwd 는 **소비자 repo 루트 유지** — helper 는 `--repo .` 로 대상 docs 를 해석하므로 스크립트 파일 위치만 플러그인 경로면 된다.
+>
+> ⚠ **이 fallback 없으면**: 로컬 사본이 없는 소비자 repo 에서 Phase 0 가 즉시 file-not-found 로 실패하고, `docs_conformance.py` 미복사 시 Phase 13 가 file-not-found(exit 2)를 "codex 미설치"로 오인해 **정합 검증을 통째로 silent skip** 한다.
+
+---
+
 ## Phase 0: 대상 App 결정
 
 ```
-python scripts/docs_helpers.py list-apps --repo .
+python "$HELP" list-apps --repo .
 ```
 
 응답 JSON 의 `apps[].code` 이용:
@@ -70,7 +85,7 @@ python scripts/docs_helpers.py list-apps --repo .
 ## Phase 2: 영향 자산 식별 + op 판정
 
 ```
-python scripts/docs_helpers.py parse-fc --repo . --app <App>
+python "$HELP" parse-fc --repo . --app <App>
 ```
 
 응답 JSON 의 `features[]` 사용. ADR 후보 식별을 위해 `docs/<App>/<App>-ADR-CATALOG.md` 1회 `Read`.
@@ -119,8 +134,8 @@ AI 작업 (자산별 op 결정):
 ## Phase 3: 번호 할당 + 컨텍스트 수집
 
 ```
-python scripts/docs_helpers.py next-id --repo . --app <App> --kind task
-python scripts/docs_helpers.py git-user --repo .
+python "$HELP" next-id --repo . --app <App> --kind task
+python "$HELP" git-user --repo .
 ```
 
 op 에 따라 추가 호출:
@@ -129,7 +144,7 @@ op 에 따라 추가 호출:
 - **신규 ADR (신설 또는 supersede 의 후속 ADR) 있으면** 건수만큼 `next-id --kind adr`.
 - **영향 기존 FRD 각각**:
   ```
-  python scripts/docs_helpers.py parse-frd --repo . --app <App> --frd-id <F_NNN>
+  python "$HELP" parse-frd --repo . --app <App> --frd-id <F_NNN>
   ```
   응답에서 `version`(patch bump 기준) · `sections`(컨텍스트 임베드용) · `ac_max`/`tc_max`/`q_max`(추가 시 다음 번호) 추출.
 - **기존 ADR 수정 대상이면** 그 ADR 파일 1개 `Read` — 버전(bump 기준) + 본문(결정/결과 절) 확보.
@@ -507,7 +522,7 @@ work_type + prompt 의도로 영향 section 결정:
 ## Phase 12: 자기 검증
 
 ```
-python scripts/docs_helpers.py check --repo . --app <App>
+python "$HELP" check --repo . --app <App>
 ```
 
 FAIL 있어도 source 유지. 출력 그대로 사용자 노출. 수동 처리 안내.
@@ -537,7 +552,7 @@ FAIL 있어도 source 유지. 출력 그대로 사용자 노출. 수동 처리 �
 ```
 for i in 1..3:
   1. Bash 실행:
-     python scripts/docs_conformance.py --reference <reference_doc> --targets <targets...>
+     python "$CONF" --reference <reference_doc> --targets <targets...>
   2. exit 2 → codex 미설치 skip. exit 4 → 문서 크기 초과 skip. (둘 다 경고 후 종료)
   3. conformance 파싱: .review/req-conformance-<reference_doc stem>.md frontmatter `conformance: N%`
      (없으면 stdout 마지막 `Conformance: N%`).

@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v3.2.0 · 커스텀 스킬 11종 + 슬래시 커맨드 15종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v3.2.1 · 커스텀 스킬 11종 + 슬래시 커맨드 15종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,7 +11,7 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `3.2.0` |
+| 버전 | `3.2.1` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
@@ -66,6 +66,10 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v3.2.1 — docs-add-task helper 경로 CLAUDE_PLUGIN_ROOT fallback (Phase 13 silent-skip 버그 수정)
+
+`docs-add-task` 만 helper 를 프로젝트-상대(`python scripts/docs_helpers.py`)로 호출해 — forge-scope·ddr-loop·doc-driven-review 가 쓰는 `${CLAUDE_PLUGIN_ROOT}/scripts/` 컨벤션을 벗어나 있었다. v3.0.1 부트스트랩 복사 폐지 이후 소비자 repo 에 스크립트가 없어 두 가지 실패: ① 로컬 사본 없는 repo 는 Phase 0 에서 즉시 file-not-found 하드 실패. ② `docs_conformance.py` 미복사 repo 는 Phase 13 가 file-not-found(python exit 2)를 "codex 미설치"로 **오인해 요구사항 정합 검증을 통째로 silent skip**(검증한 적 없는데 "생략"으로 위장). doc-driven-review 와 동일한 fallback(`[ -f ./scripts/X ] || X="${CLAUDE_PLUGIN_ROOT}/scripts/X"`)을 SKILL 사전 준비 절에 도입하고 Phase 0·2·3·12·13 의 helper 호출 6곳을 `$HELP`/`$CONF` 로 전환. cwd 는 소비자 repo 유지(helper 는 `--repo .` 기반). 로컬 사본도 항상 플러그인 최신본으로 대체돼 stale drift 방지. SKILL·README 만 변경 — 스크립트 코드 무수정.
 
 ### v3.2.0 — ddr-loop 재도입 (build-process 인라인 수렴 루프)
 
@@ -288,10 +292,10 @@ codenav --root <repo> ui --port 9876
 - **ADR upsert (생략 허용)** — 새 결정 → ADR 신설 / 기존 결정 변경 → 기존 ADR 수정(supersede 또는 in-place, AI 판단) / 결정 없음 → ADR 생략. ADR op 따라 ADR-CATALOG(Proposed 추가 / Deprecated·Superseded 이동 / 행 갱신) 동기화. (DOCUMENT_GUIDE "필요 시 ADR 등재" 와 정렬)
 - **FRD upsert** — 신규 기능이면 20절 신설 + App-PRD §3.1·§7 + FC 5표 행 추가 / 기존 영향이면 버전 bump + 변경 이력 + 영향 section 갱신 + FC 행 상태 갱신
 - **TASK 양방향 인용 금지** (v0.7) — TASK 본문 ↔ 영구 SSOT 마크다운 링크 X
-- **자기 검증** — 쓰기 후 `python scripts/docs_helpers.py check --repo .` 자동 (구조 무결성)
+- **자기 검증** — 쓰기 후 `docs_helpers.py check --repo .` 자동 (구조 무결성). helper 는 로컬 `./scripts/` 없으면 `${CLAUDE_PLUGIN_ROOT}/scripts/` 로 실행(forge-scope·doc-driven-review 와 동일 — 소비자 repo 무복사)
 - **요구사항서 영구 기록** — `.requirements/req-<App>-TASK-<NNN>.md` (검증 기준, 불변)
 - **요구사항 정합 자동 검증 (codex)** — 작성 후 요구사항서↔생성문서 반영률(%) 채점, 99% 또는 3회까지 검증↔보강 수렴. 미달 시 현재 %·부족 항목 보고. 전용 리포트 `.review/req-conformance-*.md`. codex 미설치·요구사항서 부재 시 생략. (단계5 doc-driven-review=문서↔**코드** 와 축 다름: 본 검증=요구사항서↔**생성문서**.)
-- Python helper (read-only): `python scripts/docs_helpers.py {list-apps|next-id|parse-fc|parse-frd|git-user|check}` · 정합 검증: `python scripts/docs_conformance.py --reference <req> --targets <docs...>`
+- Python helper (read-only): `docs_helpers.py {list-apps|next-id|parse-fc|parse-frd|git-user|check}` · 정합 검증: `docs_conformance.py --reference <req> --targets <docs...>`. 실행 경로 = 로컬 `./scripts/` fallback → `${CLAUDE_PLUGIN_ROOT}/scripts/` (소비자 repo 에 미복사, cwd 는 대상 repo 유지)
 
 ### 6.4 forge-scope / forge-cancel (harness_framework 임베디드)
 
