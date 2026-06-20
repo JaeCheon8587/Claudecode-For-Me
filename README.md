@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v2.16.0 · 커스텀 스킬 13종 + 슬래시 커맨드 16종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v3.2.0 · 커스텀 스킬 11종 + 슬래시 커맨드 15종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,12 +11,12 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `2.16.0` |
+| 버전 | `3.2.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
 | 네임스페이스 | `/claudecode-for-me:<name>` |
-| 구성요소 | Skill 13 · Command 16 · Python runner 6 (`scripts/`) |
+| 구성요소 | Skill 11 · Command 15 · Python runner 5 (`scripts/`) |
 | 외부 연동 도구 | [`codenavigator`](https://github.com/JaeCheon8587/codenavigator) (PyPI) — codenav-bootstrap / codenav-frontmatter-gen 슬래시가 호출 |
 
 플러그인은 **글로벌 캐시**에 설치되므로 한 번 설치 후 모든 프로젝트의 **새 세션**에서 자동 노출된다. 프로젝트별 재설치 불필요.
@@ -66,6 +66,10 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v3.2.0 — ddr-loop 재도입 (build-process 인라인 수렴 루프)
+
+문서↔코드 수렴 루프 `ddr-loop`을 forge-scope과 동일한 build-process 방식으로 재도입. forge-scope 워크트리(feat-<slug>) 브랜치의 변경점을 명시 docs와 doc-driven-review(codex)로 대조해 일치율(Conformance%)을 매기고, 미달 항목을 **현재 세션이 워크트리 안에서 인라인 수정**·재검한다. **최대 3회, 일치율 99% 도달 시 정지**. reviewer=codex / fixer=세션(구버전의 ClaudeInvoker 자식 spawn 폐지). 빌드/테스트는 **대상 프로젝트(.csproj)만, 솔루션(*.sln) 금지**. 회차마다 `fix(ddr-<slug>)` 커밋. 신규 얇은 helper `scripts/ddr_loop.py`(init만 — 워크트리·docs 검증 + .process 스캐폴딩, `.process/<docName>/`를 rmtree하지 않아 forge-scope 산출물 보존)·템플릿 `scripts/ddr_templates/ddr-loop-{build,progress}.md`. 리뷰는 기존 `doc_driven_review.py`, slug 선택은 `worktree_setup.py list`, 정리는 `/forge-cancel` 재사용(ddr 전용 cancel 없음).
 
 ### v3.1.0 — forge-cancel 커맨드 신설 (워크트리·브랜치 정리, 서브모듈 보존)
 
@@ -161,7 +165,7 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 
 ## 5. 플러그인 구성요소
 
-### Skill 10종
+### Skill 11종
 
 | Skill | 슬래시 커맨드 | 역할 |
 |---|---|---|
@@ -169,6 +173,7 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `branch-review` | `/claudecode-for-me:branch-review [ref]` | HEAD↔ref diff을 Standards/Spec 2축 병렬 검토 |
 | `codenav-frontmatter-gen` | `/claudecode-for-me:codenav-frontmatter-gen [--limit N] [--apply]` | C# 클래스 description 빈칸을 AI로 일괄 채워 `// ---` frontmatter 블록 삽입 |
 | `doc-driven-review` | `/claudecode-for-me:doc-driven-review <doc-path>... [--worktree <ref>] [--commit <ref>]` | 첨부 문서 기준 working-tree/커밋 변경을 Codex CLI로 검증. Missing/Improve/Overengineered + Conformance(%) + 인용검증 보고. linked worktree·커밋 노드 지목 지원 |
+| `ddr-loop` | `/claudecode-for-me:ddr-loop <slug> --docs <doc>...` | forge 워크트리 브랜치를 docs와 codex로 대조(일치율%), 미달분을 세션이 워크트리 안에서 인라인 수정·재검. 최대 3회·99% 정지. 빌드는 `.csproj`만. 정리는 forge-cancel |
 | `docs-add-task` | `/claudecode-for-me:docs-add-task [요청]` | v0.7 per-App 문서별 upsert — 신규 기능 FRD 신설 / 기존 영향 FRD 갱신(혼합 허용), FC/PRD/ADR-CATALOG 신설·갱신, TASK 항상 생성, ADR 은 결정 유무에 따라 신설/수정/생략 |
 | `forge-scope` | `/claudecode-for-me:forge-scope <TASK-doc-path> [--name <slug>] [--force]` | TASK 문서 1건을 워크트리에서 고정 계약-TDD 파이프라인(계약+테스트→구현→빌드/유닛테스트)으로 구현. `worktree_setup.py`(플러그인 캐시) init 셋업 후 세션이 인라인 수행. 빌드는 `.csproj` 단위만(솔루션 금지). 정리는 `forge-cancel`. |
 | `grill-me` | `/claudecode-for-me:grill-me [주제]` | 1문 1답으로 요구사항 모호점 추적 |
@@ -176,7 +181,7 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `requirement-spec` | `/claudecode-for-me:requirement-spec [주제]` | grill-me→acceptance-design→meta-prompter→codex 검증을 자동 체인. 요구사항 도출·완료조건 4축 설계·개발 지시서 `.requirements/requirement-{slug}.md` 산출 후 정리본+설계본 대비 codex 검증↔보완 수렴 루프(최대 3회·99% 임계) |
 | `safe-pull` | `/claudecode-for-me:safe-pull [원격/브랜치]` | git pull 전 fetch(비파괴)로 변경·충돌·사이드이펙트 브리핑 후 AskUserQuestion 컨펌 게이트 |
 
-### Command 14종
+### Command 15종
 
 | Command | 설명 |
 |---|---|
@@ -186,6 +191,7 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `codenav-frontmatter-gen` | codenav-frontmatter-gen skill 진입 (AI가 .cs에 frontmatter 영구 삽입). `--projects` / `--files` / `--staged` 스코프 인자 |
 | `codenav-install` | 프로젝트 루트의 `tools/codenavigator/` 폴더에 codenavigator (PyPI) 격리 설치 + `codenav.ps1/codenav.sh` launcher + `.gitignore` 자동 작성 + `docs/codenav-guide.md` 작성 + 루트 `CLAUDE.md` 링크 셋업 |
 | `doc-driven-review` | doc-driven-review skill 진입. Codex CLI 위임 read-only 리뷰. `--worktree <branch\|path>` linked worktree / `--commit <ref>` 커밋 노드 지목 지원 |
+| `ddr-loop` | ddr-loop skill 진입. forge 워크트리 브랜치↔docs 수렴 루프(codex reviewer + 세션 fixer, 최대 3회·99%) |
 | `commit-analysis` | 변경 분석 후 `[ADD]`/`[MOD]`/`[FIX]` 자동 판단 한글 커밋 생성 |
 | `docs-add-task` | docs-add-task skill 진입 (문서별 upsert — FRD 신설/갱신 혼합, TASK 항상, ADR 신설/수정/생략) |
 | `forge-cancel` | forge-scope 워크트리·`feat-<slug>` 브랜치 제거 (서브모듈 메인 원본 보존). `<slug>` 지정 또는 생략 시 목록에서 선택. 스킬 없이 커맨드 단독 |
@@ -471,6 +477,24 @@ git repo·TASK 문서 존재·**미결 항목 없음**을 검사. 미결(=`**TEM
 
 ---
 
+### 6.12 ddr-loop (문서↔코드 수렴 루프)
+
+```
+/claudecode-for-me:ddr-loop LOADER-TASK-007 --docs Docs/Loader/FRD/LOADER-FRD-003.md
+/claudecode-for-me:ddr-loop order-api --docs docs/spec.md docs/contract.md --base develop
+/claudecode-for-me:ddr-loop                # slug 생략 → forge 워크트리 목록에서 선택
+```
+
+forge-scope가 워크트리(feat-<slug>)에 기능을 구현한 뒤, ddr-loop은 그 브랜치 변경점을 **명시 문서(docs) 기준으로 수렴**시킨다. forge-scope→ddr-loop이 자연스러운 연계.
+
+- **build-process 방식** — forge-scope처럼 `.process/<docName>/ddr-loop-build.md`(루프 PLAN)·`ddr-loop-progress.md`(회차·일치율 추적)에 기록하며 진행. `ddr_loop.py init`은 `.process/<docName>/`를 지우지 않아 forge-scope 산출물과 공존.
+- **reviewer=codex / fixer=세션** — `doc_driven_review.py`(codex)가 `--worktree feat-<slug> --scope branch`로 브랜치 diff↔docs 대조해 `Conformance: N%` 산정. 미달 항목(Top Priorities/Review Comments/Overengineered)을 **현재 세션이 워크트리 안에서 인라인 수정**(자식 spawn 없음).
+- **수렴 조건(고정)** — 최대 **3회**, 일치율 **≥ 99%** 도달 시 정지. 회차마다 빌드/테스트(**대상 `.csproj`만, 솔루션 금지**) 통과 후 `fix(ddr-<slug>): iter N 일치율 N%` 커밋.
+- **문서 자동수정 금지** — 일치율을 올리려 docs/SSOT를 고치지 않는다. 코드를 docs에 맞춘다.
+- **전제** — codex CLI 필수(미설치 시 첫 review exit 2 → 중단), forge 워크트리 존재(없으면 init exit 2). 정리는 `/forge-cancel`(서브모듈 메인 원본 보존).
+
+---
+
 ## 7. 외부 연동 도구: codenavigator
 
 C# 코드베이스 시맨틱 인덱스 + AI 자동 description 생성 도구. **별도 PyPI 패키지로 분리** (v1.16.0 부터). 본 플러그인은 슬래시 커맨드(`codenav-bootstrap`, `codenav-frontmatter-gen`)로 도구를 호출할 뿐, 코드는 동행하지 않음.
@@ -577,6 +601,7 @@ Claudecode-For-Me/
 │   ├── acceptance-design/
 │   ├── branch-review/
 │   ├── codenav-frontmatter-gen/
+│   ├── ddr-loop/
 │   ├── doc-driven-review/
 │   ├── docs-add-task/
 │   ├── forge-scope/
@@ -594,6 +619,7 @@ Claudecode-For-Me/
 │   ├── codenav-frontmatter-gen.md
 │   ├── codenav-install.md
 │   ├── commit-analysis.md
+│   ├── ddr-loop.md
 │   ├── doc-driven-review.md
 │   ├── docs-add-task.md
 │   ├── forge-cancel.md
@@ -605,10 +631,12 @@ Claudecode-For-Me/
 ├── docs/                       # v0.7 문서 시스템 자산
 │   └── .templates/             # PRD/FC/FRD/ADR/ARCHITECTURE/CLAUDE/README 양식 + App/ + .rules/ (코드 룰 3종)
 ├── scripts/                     # Python 헬퍼·러너
+│   ├── ddr_loop.py              # ddr-loop 워크트리·docs 검증 + .process 스캐폴딩 (init)
 │   ├── doc_driven_review.py
 │   ├── docs_conformance.py
 │   ├── docs_helpers.py
 │   ├── worktree_setup.py        # forge-scope 워크트리 셋업·검증·cancel
+│   ├── ddr_templates/           # ddr-loop build/progress 템플릿
 │   └── forge_templates/         # forge-scope build/progress 템플릿 + docs/.templates 시드
 ├── tests/                       # pytest 스위트 (forge·docs·doc-driven-review)
 ├── samples/                     # (gitignored) 로컬 C# 테스트 픽스처 — 미커밋
@@ -626,6 +654,8 @@ Claudecode-For-Me/
 | install 직후 슬래시 자동완성에 안 보임 | 매니페스트는 세션 시작 시 1회 로드 | 세션 종료 → 재시작 |
 | update 후 신규 스킬 호출 불가 | 동일 — 캐시는 갱신됐으나 세션은 구버전 보유 | 세션 재시작 |
 | `forge-scope` 가 워크트리 안 만들고 종료(exit 2) | TASK 문서 미결 항목(§7 결정·§11 미확인·placeholder·`**TEMPLATE**` 배너) | 문서 완성·미결 해소 후 재시도 |
+| `ddr-loop` init exit 2 "forge 워크트리 없음" | 해당 slug 워크트리 미생성 | 먼저 `/forge-scope <TASK-doc>` 실행, 또는 forge-cancel에 쓴 slug 확인 (`worktree_setup.py list`) |
+| `ddr-loop` 첫 review exit 2 | codex CLI 미설치 (리뷰는 codex 의존) | `/codex:setup` 후 재시도 |
 | `docs-add-task` "App 0건" | `/CLAUDE.md` Backend Services Overview 표 + `docs/<App>/` 부재 | App 행 추가 + 폴더 부트스트랩 |
 | `codenav frontmatter gen` 결과 `generated=0` | `claude` CLI 부재 또는 stdout JSON 키 mismatch | `where claude` 확인. v1.15.0+ 는 `result`/`response` 둘 다 처리 |
 | `codenav frontmatter gen` "git working tree is dirty" 거부 | 안전장치 | commit/stash 또는 `--allow-dirty` |
