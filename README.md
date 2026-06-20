@@ -67,6 +67,14 @@ pip install -U codenavigator
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
 
+### v3.1.0 — forge-cancel 커맨드 신설 (워크트리·브랜치 정리, 서브모듈 보존)
+
+워크트리 정리를 forge-scope에서 분리한 독립 커맨드 `/claudecode-for-me:forge-cancel` 신설. `forge-scope`는 개발(create) 전용, 정리는 forge-cancel이 담당. **다중 워크트리 전제** — `/forge-cancel <slug>` 면 그 워크트리+`feat-<slug>` 브랜치 제거, **인자 없으면** forge 워크트리 목록을 제시하고 선택받아 제거. `worktree_setup.py`에 `list` 서브커맨드(`.worktree/*` + `feat-*` 워크트리를 JSON으로 나열) 추가. **서브모듈 메인 원본 절대 보존** — cancel은 워크트리 junction/symlink 링크만 해제(안 하면 `git worktree remove`가 junction 따라 메인 서브모듈을 삭제하는 사고)하고, 기존의 `git submodule deinit`은 제거해 메인 repo 서브모듈 상태를 일절 건드리지 않는다. 커맨드 전용(스킬 없음). forge-scope SKILL에서 cancel 분기 제거 → forge-cancel로 위임.
+
+### v3.0.1 — forge-scope 부트스트랩 폐지 (플러그인 캐시에서 직접 실행)
+
+`worktree_setup.py`·템플릿을 사용자 프로젝트로 **복사하지 않는다**. helper는 cwd(메인 repo)에서 동작하고 템플릿은 helper 옆에서 읽으므로 `${CLAUDE_PLUGIN_ROOT}/scripts/worktree_setup.py`를 직접 실행하면 충분 — 앱 repo 히스토리에 forge 도구를 남기지 않는다. SKILL 단계2(복사+커밋)를 폐지하고, `.gitignore`에 워크트리·상태 생성물(`.worktree/`·`.process/`)만 추가하도록 정리. (구 v3.0.0은 forge 도구 3파일을 프로젝트에 복사·커밋했음.)
+
 ### v3.0.0 — forge-scope 전면 재설계 (얇은 worktree_setup helper + 완전 인라인 TDD) · BREAKING
 
 `forge-scope` 를 **고정 계약-TDD 파이프라인 + 완전 세션 자율** 모델로 재설계. 기존 `forge_scope.py`(3408줄, 오케스트레이터·step splitter·`--scaffold-only`/`--record-step`/`--finalize` 상태머신·하드 강제 게이트)를 폐기하고, **얇은 `scripts/worktree_setup.py`** 로 대체한다. `worktree_setup.py` 는 **셋업·검증·정리만** 담당 — 워크트리 생성, 서브모듈 링크, 가드레일 복사, 미결 항목 검증 게이트(1개), `.process` 스캐폴딩, `cancel <slug>` teardown. **실제 코딩(계약→테스트→구현→빌드/유닛테스트)은 호출 세션이 워크트리 안에서 인라인**으로 수행 — step별 자식 `claude` spawn·백그라운드 폴링·python 하드 게이트 제거. TDD 순서·단계별 atomic commit·테스트 통과는 세션이 신규 `scripts/forge_templates/forge-scope-build.md`·`forge-scope-progress.md` 를 따라 self-discipline 으로 지킨다. 빌드/테스트는 솔루션(`*.sln`) 금지, 대상 `.csproj` 단위만.
@@ -153,7 +161,7 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 
 ## 5. 플러그인 구성요소
 
-### Skill 13종
+### Skill 10종
 
 | Skill | 슬래시 커맨드 | 역할 |
 |---|---|---|
@@ -161,17 +169,14 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `branch-review` | `/claudecode-for-me:branch-review [ref]` | HEAD↔ref diff을 Standards/Spec 2축 병렬 검토 |
 | `codenav-frontmatter-gen` | `/claudecode-for-me:codenav-frontmatter-gen [--limit N] [--apply]` | C# 클래스 description 빈칸을 AI로 일괄 채워 `// ---` frontmatter 블록 삽입 |
 | `doc-driven-review` | `/claudecode-for-me:doc-driven-review <doc-path>... [--worktree <ref>] [--commit <ref>]` | 첨부 문서 기준 working-tree/커밋 변경을 Codex CLI로 검증. Missing/Improve/Overengineered + Conformance(%) + 인용검증 보고. linked worktree·커밋 노드 지목 지원 |
-| `ddr-loop` | `/claudecode-for-me:ddr-loop <doc-path>... [--worktree <ref>\|--commit <ref>] [--max-iter N] [--threshold P] [--commit-each]` | DDR(Codex 검증) ↔ fix(claude 수정) 수렴 루프. 임계(기본 99%) 또는 cap(기본 3회)까지 반복. 검증자=Codex / 수정자=Claude 분리 |
 | `docs-add-task` | `/claudecode-for-me:docs-add-task [요청]` | v0.7 per-App 문서별 upsert — 신규 기능 FRD 신설 / 기존 영향 FRD 갱신(혼합 허용), FC/PRD/ADR-CATALOG 신설·갱신, TASK 항상 생성, ADR 은 결정 유무에 따라 신설/수정/생략 |
-| `forge-cancel` | `/claudecode-for-me:forge-cancel <phase>` | forge phase 브랜치·산출물 정리 |
-| `forge-full` | `/claudecode-for-me:forge-full <phase>` | 문서 기반 전체 프로젝트 구현 phase runner |
-| `forge-scope` | `/claudecode-for-me:forge-scope <prompt> [--no-worktree] [--test-target=<csproj>] [--ai-commit-msg] [--full-fleet] [--timings]` | 단일 FRD·기능·버그픽스용 경량 phase runner. 워크트리 미생성(in-place)·빌드 스코프 축소·lean child claude(MCP/skill 미로드)·AI 커밋 메시지 재작성(옵트인) |
+| `forge-scope` | `/claudecode-for-me:forge-scope <TASK-doc-path> [--name <slug>] [--force]` | TASK 문서 1건을 워크트리에서 고정 계약-TDD 파이프라인(계약+테스트→구현→빌드/유닛테스트)으로 구현. `worktree_setup.py`(플러그인 캐시) init 셋업 후 세션이 인라인 수행. 빌드는 `.csproj` 단위만(솔루션 금지). 정리는 `forge-cancel`. |
 | `grill-me` | `/claudecode-for-me:grill-me [주제]` | 1문 1답으로 요구사항 모호점 추적 |
 | `meta-prompter` | `/claudecode-for-me:meta-prompter [요청]` | 거친 요청 → 구조화된 메타 프롬프트 |
 | `requirement-spec` | `/claudecode-for-me:requirement-spec [주제]` | grill-me→acceptance-design→meta-prompter→codex 검증을 자동 체인. 요구사항 도출·완료조건 4축 설계·개발 지시서 `.requirements/requirement-{slug}.md` 산출 후 정리본+설계본 대비 codex 검증↔보완 수렴 루프(최대 3회·99% 임계) |
 | `safe-pull` | `/claudecode-for-me:safe-pull [원격/브랜치]` | git pull 전 fetch(비파괴)로 변경·충돌·사이드이펙트 브리핑 후 AskUserQuestion 컨펌 게이트 |
 
-### Command 16종
+### Command 14종
 
 | Command | 설명 |
 |---|---|
@@ -181,11 +186,9 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `codenav-frontmatter-gen` | codenav-frontmatter-gen skill 진입 (AI가 .cs에 frontmatter 영구 삽입). `--projects` / `--files` / `--staged` 스코프 인자 |
 | `codenav-install` | 프로젝트 루트의 `tools/codenavigator/` 폴더에 codenavigator (PyPI) 격리 설치 + `codenav.ps1/codenav.sh` launcher + `.gitignore` 자동 작성 + `docs/codenav-guide.md` 작성 + 루트 `CLAUDE.md` 링크 셋업 |
 | `doc-driven-review` | doc-driven-review skill 진입. Codex CLI 위임 read-only 리뷰. `--worktree <branch\|path>` linked worktree / `--commit <ref>` 커밋 노드 지목 지원 |
-| `ddr-loop` | ddr-loop skill 진입. DDR 검증↔claude 수정 수렴 루프. `--threshold`(기본 99%)/`--max-iter`(기본 3) cap. `--commit-each` 라운드 커밋 |
 | `commit-analysis` | 변경 분석 후 `[ADD]`/`[MOD]`/`[FIX]` 자동 판단 한글 커밋 생성 |
 | `docs-add-task` | docs-add-task skill 진입 (문서별 upsert — FRD 신설/갱신 혼합, TASK 항상, ADR 신설/수정/생략) |
-| `forge-cancel` | forge-cancel skill 진입 |
-| `forge-full` | forge-full skill 진입 |
+| `forge-cancel` | forge-scope 워크트리·`feat-<slug>` 브랜치 제거 (서브모듈 메인 원본 보존). `<slug>` 지정 또는 생략 시 목록에서 선택. 스킬 없이 커맨드 단독 |
 | `forge-scope` | forge-scope skill 진입 |
 | `grill-me` | grill-me skill 진입 |
 | `meta-prompter` | meta-prompter skill 진입 |
@@ -284,117 +287,58 @@ codenav --root <repo> ui --port 9876
 - **요구사항 정합 자동 검증 (codex)** — 작성 후 요구사항서↔생성문서 반영률(%) 채점, 99% 또는 3회까지 검증↔보강 수렴. 미달 시 현재 %·부족 항목 보고. 전용 리포트 `.review/req-conformance-*.md`. codex 미설치·요구사항서 부재 시 생략. (단계5 doc-driven-review=문서↔**코드** 와 축 다름: 본 검증=요구사항서↔**생성문서**.)
 - Python helper (read-only): `python scripts/docs_helpers.py {list-apps|next-id|parse-fc|parse-frd|git-user|check}` · 정합 검증: `python scripts/docs_conformance.py --reference <req> --targets <docs...>`
 
-### 6.4 forge-full / forge-scope / forge-cancel (harness_framework 임베디드)
+### 6.4 forge-scope / forge-cancel (harness_framework 임베디드)
+
+`forge-scope`는 TASK 문서 1건을 워크트리에서 **고정 계약-TDD 파이프라인**으로 구현한다. python(`worktree_setup.py`)은 **셋업·검증·정리만** 하고, 실제 코딩(계약+테스트→구현→빌드/유닛테스트)은 호출 세션이 워크트리 안에서 인라인으로 수행한다. 빌드/테스트는 **솔루션(`*.sln`) 금지, 대상 `.csproj` 단위만**.
 
 #### 전제 조건
 
 | 조건 | 필수 | 비고 |
 |---|---|---|
 | Python 3.10+ (`python` 또는 `py -3`) | **필수** | 미설치 시 즉시 가이드 출력 후 중단 |
-| `claude` CLI PATH | **필수** | child claude spawn |
-| git repository | 권장 | 없으면 경고, 브랜치 자동화 실패 가능 |
-| `FORGE_TRUST=1` 또는 `--trust` | **필수** | 미설정 시 child claude 즉시 종료 |
+| git repository | **필수** | 워크트리 기반 동작 |
+| 채워진 TASK 문서 | **필수** | 미결 항목(§7 결정·§11 미확인)·placeholder·`**TEMPLATE**` 배너 잔존 시 검증 게이트가 exit 2로 중단 |
 
-#### 환경변수
+#### 복사 없음 (플러그인 캐시 직접 실행)
 
-| 변수 | 설명 |
-|---|---|
-| `FORGE_TRUST` | `1`/`true`/`yes` — `--trust` 동일 |
-| `FORGE_CLAUDE_TIMEOUT` | step 최대 시간(초). 기본 1800 |
-| `ANTHROPIC_API_KEY` | `--bare` child 모드 사용 시 필수 |
-
-#### 첫 호출 시 자동 부트스트랩
-
-사용자 프로젝트 cwd에 **없는 것만** 복사(덮어쓰기 없음):
-
-```
-./scripts/forge_full.py
-./scripts/forge_scope.py
-./scripts/forge_cancel.py
-./CLAUDE.md
-./PHASE_SCHEMA.md
-./FORGE_SCOPE.md
-./docs/.templates/   (8 템플릿)
-```
+`worktree_setup.py`·템플릿을 프로젝트로 복사하지 않는다 — `${CLAUDE_PLUGIN_ROOT}/scripts/worktree_setup.py`를 직접 실행한다. 프로젝트에는 생성물 `.worktree/`·`.process/`만 `.gitignore`에 추가된다(그 `.gitignore` 변경만 commit).
 
 #### 사용 예시
 
 ```bash
-# FRD 단건 구현 (권장 — splitter 우회, 토큰 절감)
-/claudecode-for-me:forge-scope /docs/FRD/FRD-F003.md FRD-F003 주문 상태 API 구현
+# TASK 문서 1건 구현 (워크트리 .worktree/<slug> + feat-<slug> 브랜치)
+/claudecode-for-me:forge-scope Docs/Loader/TASK/LOADER-TASK-007.md
 
-# 자유 텍스트 prompt (phase-dir 자동 도출, 확인 1회)
-/claudecode-for-me:forge-scope 로그인 기능에 소셜 로그인 옵션 추가
+# slug 명시
+/claudecode-for-me:forge-scope Docs/App/TASK/APP-TASK-003.md --name order-api
 
-# 워크트리 없이 현재 브랜치에서 직접 (격리·머지 단계 생략)
-/claudecode-for-me:forge-scope 버전 상수 추가 --no-worktree
-
-# 전체 프로젝트 구현
-/claudecode-for-me:forge-full mvp-v2 --prompt="MVP v2 전체 구현" --docs-mode=recursive --trust
-
-# plan 미리보기 (파일·브랜치 생성 없음)
-/claudecode-for-me:forge-full order-flow --plan-only --prompt="주문 흐름" --doc=docs/FRD/FRD-F009.md --trust
-
-# 취소
-/claudecode-for-me:forge-cancel login-feature --dry-run
-/claudecode-for-me:forge-cancel login-feature --kind scoped
+# 워크트리·브랜치 정리 (서브모듈 메인 원본 보존). slug 생략 시 목록에서 선택
+/claudecode-for-me:forge-cancel LOADER-TASK-007
+/claudecode-for-me:forge-cancel
 ```
 
-#### forge-scope 인자 모드
+#### 옵션
 
-- **Mode 1 (prompt-only)**: 일반 텍스트 → phase-dir 자동 도출 + 확인 1회
-- **Mode 2 (doc + prompt)**: 첫 토큰이 `docs/...md` / `/docs/...md`(대소문자 무시) → `--doc` 분리
-- FRD(`docs/FRD/` 하위) → `--preset=frd-implementation --compact-docs` 자동
-- 일반 문서 → `--single-step --compact-docs` 자동
+| 커맨드 | 인자 | 설명 |
+|---|---|---|
+| `forge-scope` | `<TASK-doc-path>` | **필수**. 구현할 TASK 문서 경로 |
+| | `--name <slug>` | docName·워크트리·브랜치 이름 명시 (기본: 문서 파일명 stem) |
+| | `--force` | 메인 repo dirty 검사 우회 |
+| `forge-cancel` | `[<slug>]` | 제거할 워크트리 slug. 생략 시 목록에서 선택 |
 
-#### forge-scope 전용 옵션
+#### 검증 게이트 (forge-scope init)
 
-| 옵션 | 설명 |
-|---|---|
-| `--no-worktree` | 워크트리·`feat-<phase>` 브랜치 미생성. 메인 repo **현재 브랜치에서 직접** 실행(격리·머지 단계 없음). 시작 시 작업 트리 dirty면 중단(`--force` 우회). `--push` 는 현재 브랜치 push. 모든 preset과 직교 |
-| `--test-target=<csproj>` | 검증(`dotnet test`) 대상 테스트 프로젝트 1회 지정(휘발성). 풀 솔루션 빌드 회피. warmup `dotnet restore`도 이 타깃으로 좁힌다(single-step/frd). 우선순위: 이 플래그 > `forge-scope.json` `test_target` > `Src/Tests` 단일 자동감지 > 전체 sln |
-| `--ai-commit-msg` | phase 완료 후 feat(코드) 커밋 메시지를 AI로 repo 스타일 재작성한다(추가 claude 호출 1회). 워크트리 모드 한정. **기본 OFF** |
-| `--full-fleet` | child claude에 MCP 서버·plugin skill 전체 로드 허용. 기본은 **lean**(MCP 0개 + skill off + 최소 `--tools`)으로 호출당 startup 세금 제거. 디버깅용 |
-| `--child-tools` | lean 모드 child claude 빌트인 tool 허용목록(콤마구분). 기본 `Bash,Edit,Read,Write,Grep,Glob` |
-| `--timings` | phase 구간별 wall-clock 상세 출력. (미지정이어도 완료 시 `[timings]` 요약 1줄은 항상 stderr 출력) |
-| `--step-model` | splitter·step·commit-msg 모델. 기본 `claude-opus-4-8` |
-| `--step-effort` | Claude `--effort` (`low\|medium\|high\|xhigh\|max`). 기본 `high` |
+git repo·TASK 문서 존재·**미결 항목 없음**을 검사. 미결(=`**TEMPLATE**` 배너 / §11 미확인 사항 Open 행 / §7 결정 필요 행 / 미치환 `{...}` placeholder) 시 exit 2로 중단하고 워크트리를 만들지 않는다.
 
-- **모델·effort**: forge-scope 의 splitter/step/commit-msg claude 호출은 기본 **Opus 4.8 + effort high** (지능 최우선, `--step-model`/`--step-effort` 로 override). forge-full 은 **Opus 4.8 + high 고정**.
-- **lean child claude** (기본): child `claude -p` 호출에 `--strict-mcp-config`(MCP 0개)·`--disable-slash-commands`·최소 `--tools` 를 항상 부착해 **API key 유무와 무관하게** MCP 함대·plugin cold-load 세금을 제거한다(OAuth 구독 사용자도 적용). 전체 로드는 `--full-fleet`. ddr-loop fix 호출에도 동일 적용(`--full-fleet`/`--child-tools` 지원).
-- **빌드 스코프**: 검증은 풀 솔루션 `dotnet build` 대신 **대상 테스트 프로젝트만** `dotnet test`(빌드 겸함)로 좁혀 대규모 sln에서 시간 절감. warmup `dotnet restore`도 동일 타깃으로 좁힌다(single-step/frd; contract-tdd는 회귀 때문에 풀 sln 유지). `forge-scope.json` 에 `default_sln`/`test_target` 키로 고정 가능.
-- **AI 커밋 메시지 재작성** (기본 **off**): `--ai-commit-msg` 옵트인 시 phase 완료 후 `feat` 커밋 diff를 AI에 주고 repo 기존 subject 스타일로 메시지를 재작성한다. squash 안 함 — 커밋별 메시지만 교체하며 tree·author·date 보존, `chore` housekeeping 커밋은 템플릿 유지. (워크트리 모드만 동작)
-- **계측**: 완료/중단 시 `[timings] worktree=.. warmup=.. step0=..(out=..) commit-msg=.. total=..` 요약을 출력한다. step의 `out`(output_tokens)이 작은데 elapsed가 크면 모델이 아니라 .NET 빌드/IO 병목임을 뜻한다.
+#### 워크트리 서브모듈
 
-#### forge-full 주요 옵션
-
-| 옵션 | 설명 |
-|---|---|
-| `--prompt` | plan 생성 입력 (반복 가능) |
-| `--doc` | guardrail 문서 (`docs/` 하위 `.md`, 반복 가능) |
-| `--docs-mode=root\|recursive\|explicit` | 문서 인입 정책 |
-| `--trust` | child claude 권한 (`FORGE_TRUST=1` 동일) |
-| `--yes` | plan 자동 승인 |
-| `--quiet` | 진행 표시기 억제 (Claude Code spawn 권장) |
-| `--plan-only` | plan 생성·출력만 |
-| `--preset=auto\|contract-tdd` | 기본 splitter / contract→red→green→regression 4-step |
-| `--single-step` | FRD 아닌 일반 단일 작업(암묵 single-step preset) |
-| `--sln=<path>` | contract-tdd 가 사용할 .sln 경로. 미지정 시 `Src/*.sln` auto-detect (다수 시 에러) |
-| `--compact-docs` | guardrail 문서 핵심 섹션 압축 주입 |
-
-> **인자 우선순위(충돌 아님)**: `--single-step` + `--preset=<X>` 동시 지정은 에러가 아니다. preset 우선순위는 `--preset=<X>` 명시 > `--single-step`(암묵) > auto 이며, contract-tdd 분기에서 single-step 의 step-cap(=1)은 자동 해제되고 `--single-step` 은 무시된다. `--doc` 도 FRD 전용이 아니라 TASK·일반 문서·FRD 모두 가능 — doc 종류는 preset 선택에만 영향. parent agent 가 이를 "상호 배타" 충돌로 보고 경고 출력하면 안 된다.
-
-#### 한계
-
-- `--preset=contract-tdd`는 .sln 필요. `--sln=<path>` 명시 또는 `Src/*.sln` / `Src/*/*.sln` 단일 자동 감지. 다수 sln 있으면 명시 강제.
-- step timestamp **KST(UTC+9) 고정**.
-- step.md 5개 헤딩 **한국어 고정**.
-- **워크트리 서브모듈**: `git submodule update`(네트워크) 대신 **메인 repo 서브모듈을 junction/symlink 로 링크** → 오프라인·내부망 동작. `submodule.<name>.ignore=all` 로 커밋/상태 무시(feat 커밋엔 코드만). 메인 미populate면 skip. `forge_cancel` 이 링크 먼저 제거(메인 보존).
+`git submodule update`(네트워크) 대신 **메인 repo 서브모듈을 junction(Windows)/symlink(Unix)로 링크** → 오프라인·내부망 동작. `submodule.<name>.ignore=all`로 커밋/상태 무시. 메인 미populate면 skip. **`forge-cancel`은 워크트리 링크만 해제하고 메인 repo 서브모듈 원본은 절대 건드리지 않는다**(링크 미해제 시 `git worktree remove`가 junction 따라 메인 삭제하는 사고 방지).
 
 #### .gitignore 권장
 
 ```gitignore
-phases/
+.worktree/
+.process/
 ```
 
 ### 6.5 grill-me
@@ -483,38 +427,7 @@ phases/
 
 ---
 
-### 6.10 ddr-loop
-
-```
-/claudecode-for-me:ddr-loop docs/FRD/F003.md --worktree feat-login-feature
-/claudecode-for-me:ddr-loop docs/spec.md --threshold 90 --max-iter 5
-/claudecode-for-me:ddr-loop docs/TASK.md --commit <feat 커밋 sha> --commit-each
-/claudecode-for-me:ddr-loop docs/spec.md --dry-run
-```
-
-DDR은 read-only 검증기라 단독으로는 "검증 땡, 끝"이다. `ddr-loop`은 그 위에 **검증↔개선 수렴 루프**를 씌운다.
-
-- **루프**: `DDR(Codex 검증) → conformance < 임계? → fix(claude 수정) → 재검증` 을 임계(기본 99%) 또는 cap(기본 3회)까지 반복.
-- **검증자=Codex / 수정자=Claude 분리** — 한 모델이 짠 코드를 같은 모델이 채점하는 self-grading 마스킹 방지.
-- **재사용**: 검증은 `doc_driven_review.py` subprocess, 수정은 `forge_scope.py` 의 `ClaudeInvoker`(`claude -p`). 원본 스크립트 불변.
-- **스코프**: `--worktree <branch|path>`(forge 워크트리, 격리) / `--commit <ref>` / 미지정(현재 브랜치). DDR 스코프 플래그 그대로 통과.
-- **conformance 추출**: DDR stdout 의 `Conformance: N%` 마지막 매치(마지막 줄은 `Review saved:`).
-- **커밋**: 기본 미커밋 누적(DDR `auto` scope 가 포착) → `commit-analysis`/머지로 마무리. `--commit-each` 면 라운드별 `fix: ddr-loop iter N` 커밋.
-- **종료 리포트**: conformance 궤적(`62% → 79% → 90% → 96%`) + 수렴/cap 표시. cap 미달이면 남은 Top Priorities findings 인용.
-- **exit code**: 0=임계 도달 / 7=cap 도달·임계 미달 / 2=codex 미설치 / 3=리뷰할 변경 없음.
-- **fix 모델/effort**: 기본 `claude-sonnet-4-6` + `--effort high`. `--fix-model` / `--fix-effort`(low\|medium\|high\|xhigh\|max) 로 변경.
-- **lean child claude (기본)**: fix `claude -p` 호출도 forge-scope 와 동일하게 MCP 0개·skill off·최소 `--tools` 부착(API key 무관). 전체 로드는 `--full-fleet`, 허용 tool은 `--child-tools`.
-- **`--dry-run`**: DDR 1회만 돌리고 fix 없이 conformance 출력.
-
-#### 한계
-
-- codex + claude CLI 둘 다 필수.
-- 수렴 보장 없음 — 해소 불가 항목은 cap 까지 돌고 exit 7. 정체 조기중단 없음(cap 이 backstop).
-- 단일 repo. `.review/` 보호는 fix 프롬프트 지시 의존(강제 아님).
-
----
-
-### 6.11 safe-pull
+### 6.10 safe-pull
 
 ```
 /claudecode-for-me:safe-pull                  # 현재 브랜치 추적 upstream 자동
@@ -541,7 +454,7 @@ DDR은 read-only 검증기라 단독으로는 "검증 땡, 끝"이다. `ddr-loop
 
 ---
 
-### 6.12 acceptance-design
+### 6.11 acceptance-design
 
 ```
 /claudecode-for-me:acceptance-design docs/feature.md
@@ -554,7 +467,7 @@ DDR은 read-only 검증기라 단독으로는 "검증 땡, 끝"이다. `ddr-loop
 - **1문 1답** (`AskUserQuestion`)으로 추적, 추천 2개(`(Recommended)`) + auto-`Other`. **논리 모순 시 명시 지적**, doc 근거 있으면 인용 후 되묻기.
 - 3~4 교환마다 4축 트래커. 종료 시 **4축 설계본**(출처 라인 + 완료조건/엣지/오류/검증 + Open Items + 구체화 수준) 후 확정 리뷰.
 - 확정 시 **`.requirements/{slug}-acceptance.md` 자동 저장**(slug=doc stem 영어 kebab, 동명 시 번호 suffix).
-- 산출물은 설계본까지 — **구현 plan·`ExitPlanMode` 미수행**. 후속(meta-prompter·ddr-loop 등)은 사용자가 설계본을 받아 진행.
+- 산출물은 설계본까지 — **구현 plan·`ExitPlanMode` 미수행**. 후속(meta-prompter·forge-scope 등)은 사용자가 설계본을 받아 진행.
 
 ---
 
@@ -664,11 +577,8 @@ Claudecode-For-Me/
 │   ├── acceptance-design/
 │   ├── branch-review/
 │   ├── codenav-frontmatter-gen/
-│   ├── ddr-loop/
 │   ├── doc-driven-review/
 │   ├── docs-add-task/
-│   ├── forge-cancel/
-│   ├── forge-full/
 │   ├── forge-scope/
 │   ├── grill-me/
 │   ├── meta-prompter/
@@ -684,11 +594,9 @@ Claudecode-For-Me/
 │   ├── codenav-frontmatter-gen.md
 │   ├── codenav-install.md
 │   ├── commit-analysis.md
-│   ├── ddr-loop.md
 │   ├── doc-driven-review.md
 │   ├── docs-add-task.md
 │   ├── forge-cancel.md
-│   ├── forge-full.md
 │   ├── forge-scope.md
 │   ├── grill-me.md
 │   ├── meta-prompter.md
@@ -698,12 +606,10 @@ Claudecode-For-Me/
 │   └── .templates/             # PRD/FC/FRD/ADR/ARCHITECTURE/CLAUDE/README 양식 + App/ + .rules/ (코드 룰 3종)
 ├── scripts/                     # Python 헬퍼·러너
 │   ├── doc_driven_review.py
-│   ├── ddr_loop.py
+│   ├── docs_conformance.py
 │   ├── docs_helpers.py
-│   ├── forge_full.py
-│   ├── forge_scope.py
-│   ├── forge_cancel.py
-│   └── forge_templates/         # forge 부트스트랩 리소스
+│   ├── worktree_setup.py        # forge-scope 워크트리 셋업·검증·cancel
+│   └── forge_templates/         # forge-scope build/progress 템플릿 + docs/.templates 시드
 ├── tests/                       # pytest 스위트 (forge·docs·doc-driven-review)
 ├── samples/                     # (gitignored) 로컬 C# 테스트 픽스처 — 미커밋
 ├── .gitattributes
@@ -719,7 +625,7 @@ Claudecode-For-Me/
 |---|---|---|
 | install 직후 슬래시 자동완성에 안 보임 | 매니페스트는 세션 시작 시 1회 로드 | 세션 종료 → 재시작 |
 | update 후 신규 스킬 호출 불가 | 동일 — 캐시는 갱신됐으나 세션은 구버전 보유 | 세션 재시작 |
-| `/claudecode-for-me:forge-*` 실행 즉시 종료 | `FORGE_TRUST` 미설정 | `FORGE_TRUST=1` 또는 `--trust` |
+| `forge-scope` 가 워크트리 안 만들고 종료(exit 2) | TASK 문서 미결 항목(§7 결정·§11 미확인·placeholder·`**TEMPLATE**` 배너) | 문서 완성·미결 해소 후 재시도 |
 | `docs-add-task` "App 0건" | `/CLAUDE.md` Backend Services Overview 표 + `docs/<App>/` 부재 | App 행 추가 + 폴더 부트스트랩 |
 | `codenav frontmatter gen` 결과 `generated=0` | `claude` CLI 부재 또는 stdout JSON 키 mismatch | `where claude` 확인. v1.15.0+ 는 `result`/`response` 둘 다 처리 |
 | `codenav frontmatter gen` "git working tree is dirty" 거부 | 안전장치 | commit/stash 또는 `--allow-dirty` |

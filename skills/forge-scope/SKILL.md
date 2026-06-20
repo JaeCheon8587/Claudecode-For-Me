@@ -1,7 +1,7 @@
 ---
 name: forge-scope
 description: harness_framework forge-scope 경량 TDD phase runner를 사용자 프로젝트에서 실행한다. 플러그인 캐시의 worktree_setup.py를 직접 실행(프로젝트로 복사 안 함)해 init 으로 워크트리·서브모듈 링크·가드레일 복사·.process 스캐폴딩을 셋업한다. 이후 고정 계약-TDD 파이프라인(계약+테스트→구현→빌드/유닛테스트)을 현재 세션이 워크트리 안에서 인라인으로 수행한다 (오케스트레이터·자식 spawn 없음). /claudecode-for-me:forge-scope 로 실행.
-argument-hint: "<TASK-doc-path> [--name <slug>] [--force] | cancel <slug>"
+argument-hint: "<TASK-doc-path> [--name <slug>] [--force]"
 input: TASK 문서 경로 (docs/.templates/App/TASK/APP-TASK-NNN-TEMPLATE.md 형식)
 output: .worktree/<slug>/ 워크트리 + feat-<slug> 브랜치 commit (계약+테스트 / 구현 / 빌드·테스트 통과)
 requires-user-interaction: true
@@ -61,7 +61,7 @@ git add .gitignore && git commit -m "chore: ignore forge-scope worktree/process 
 
 ## 단계 3 — 검증 + 셋업 (worktree_setup.py init)
 
-`$ARGUMENTS` 첫 토큰이 `cancel`이면 **단계 6(정리)**로 분기한다. 아니면 첫 토큰을 TASK 문서 경로로 해석한다 (앞 `/` 제거).
+`$ARGUMENTS` 첫 토큰을 TASK 문서 경로로 해석한다 (앞 `/` 제거). (정리는 이 스킬이 아니라 `/claudecode-for-me:forge-cancel` 커맨드가 담당한다.)
 
 ```bash
 python "$FORGE" init --doc <TASK-doc-path>
@@ -131,11 +131,7 @@ python "$FORGE" init --doc <TASK-doc-path>
 - 워크트리 `.worktree/<slug>` · 브랜치 `feat-<slug>` · 커밋 3개(test/feat/fix).
 - 확인: `git diff feat-<slug>` · 머지: `git merge feat-<slug>`.
 
-**정리** (`$ARGUMENTS` 첫 토큰이 `cancel`이거나 사용자가 정리를 요청할 때):
-```bash
-python "$FORGE" cancel <slug>   # $FORGE="${CLAUDE_PLUGIN_ROOT}/scripts/worktree_setup.py"
-```
-서브모듈 링크 먼저 해제(메인 타깃 보존) → `git worktree remove` → `git branch -D feat-<slug>`. 워크트리에 미완 작업이 있어도 자동 `--force`로 제거한다.
+**정리**: 워크트리·브랜치 제거는 별도 커맨드 `/claudecode-for-me:forge-cancel`을 쓴다 (서브모듈 메인 원본 보존). 이 스킬에서는 정리하지 않는다.
 
 ---
 
@@ -145,8 +141,9 @@ python "$FORGE" cancel <slug>   # $FORGE="${CLAUDE_PLUGIN_ROOT}/scripts/worktree
 |---|---|
 | `init --doc <path>` | 검증 게이트 → 워크트리 + 서브모듈 링크 + 가드레일 복사 + `.process` 스캐폴딩 → JSON 매니페스트. **셋업의 전부.** |
 | `--name <slug>` | docName/워크트리/브랜치 이름 명시 (기본: doc 파일명 stem). |
-| `--force` | 메인 repo dirty 검사 우회 (init). dirty 워크트리 강제 제거 (cancel). |
+| `--force` | 메인 repo dirty 검사 우회 (init). |
 | `--quiet` | 진행 로그 억제, JSON만 출력 (init). |
-| `cancel <slug>` | 워크트리 + 브랜치 정리. |
+
+> **정리는 별도 커맨드**: 워크트리·브랜치 제거는 `/claudecode-for-me:forge-cancel`을 쓴다.
 
 > **검증 게이트(init 내부)**: git repo · 문서 존재 · 미결 항목 없음을 검사한다. 미결 = 원시 템플릿 배너 잔존 / §11 미확인 사항 Open 행 / §7 결정 필요 결정 행 / 미치환 `{...}` placeholder. 하나라도 있으면 exit 2로 중단하고 워크트리를 만들지 않는다.

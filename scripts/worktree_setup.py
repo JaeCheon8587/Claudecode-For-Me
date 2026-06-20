@@ -407,6 +407,33 @@ def _unlink_submodule_links(worktree: Path) -> None:
                 pass
 
 
+def cmd_list(args: argparse.Namespace) -> int:
+    """forge 워크트리 나열 — .worktree/ 하위 + feat-<slug> 브랜치인 것만."""
+    root = _repo_root(Path.cwd())
+    if root is None:
+        _err("ERROR: git repository가 아닙니다.")
+
+    wt_base = (root / ".worktree").resolve()
+    r = _git(root, "worktree", "list", "--porcelain")
+    out: list[dict] = []
+    cur: Optional[Path] = None
+    for line in r.stdout.splitlines():
+        if line.startswith("worktree "):
+            cur = Path(line[len("worktree "):])
+        elif line.startswith("branch ") and cur is not None:
+            ref = line[len("branch "):].strip()  # refs/heads/<branch>
+            br = ref[len("refs/heads/"):] if ref.startswith("refs/heads/") else ref
+            try:
+                under = cur.resolve().parent == wt_base
+            except OSError:
+                under = False
+            if under and br.startswith("feat-"):
+                out.append({"slug": cur.name, "branch": br, "worktree": str(cur)})
+            cur = None
+    print(json.dumps(out, ensure_ascii=False))
+    return EXIT_OK
+
+
 def cmd_cancel(args: argparse.Namespace) -> int:
     root = _repo_root(Path.cwd())
     if root is None:
@@ -435,10 +462,9 @@ def cmd_cancel(args: argparse.Namespace) -> int:
 
     removed_worktree = False
     if target is not None:
-        # 서브모듈 링크 먼저 제거 — worktree remove 가 junction 따라 메인 삭제하는 사고 방지
+        # 서브모듈 링크만 해제 — worktree remove 가 junction 따라 메인 삭제하는 사고 방지.
+        # 메인 repo 서브모듈 원본은 절대 건드리지 않는다 (deinit 등 미수행).
         _unlink_submodule_links(target)
-        if (target / ".gitmodules").exists():
-            _run(["git", "submodule", "deinit", "-f", "--all"], cwd=target)
         # 워크트리는 .process/.gitignore 등 uncommitted 상태를 거의 항상 가짐 →
         # dirty면 자동 --force (forge_cancel.py 원본 동작).
         st = _run(["git", "status", "--porcelain"], cwd=target)
@@ -483,7 +509,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     pi.add_argument("--quiet", action="store_true", help="진행 로그 억제 (JSON만)")
     pi.set_defaults(func=cmd_init)
 
-    pc = sub.add_parser("cancel", help="워크트리 + 브랜치 정리")
+    pl = sub.add_parser("list", help="forge 워크트리 나열 (JSON)")
+    pl.set_defaults(func=cmd_list)
+
+    pc = sub.add_parser("cancel", help="워크트리 + 브랜치 정리 (서브모듈 메인 원본 보존)")
     pc.add_argument("slug", help="docName/slug (워크트리 .worktree/<slug>)")
     pc.add_argument("--force", action="store_true", help="dirty 워크트리 강제 제거")
     pc.set_defaults(func=cmd_cancel)
