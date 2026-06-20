@@ -146,17 +146,23 @@ def _gate(doc: Path) -> list[str]:
     if re.search(r"\*\*TEMPLATE\*\*", raw):
         problems.append("원시 템플릿 상태 (`**TEMPLATE**` 배너 잔존) — 실제 값으로 채우세요.")
 
-    # 2) §11 미확인 사항 — Open 행
+    # 2) §11 미확인 사항 — Open 행 (단, "없음" 행은 무항목 placeholder → 제외)
     sec11 = _section(raw, r"^##\s*11\.\s*미확인")
     if sec11 is not None:
-        opens = [ln for ln in sec11.splitlines() if ln.strip().startswith("|") and re.search(r"\bOpen\b", ln)]
+        opens = [
+            ln for ln in sec11.splitlines()
+            if ln.strip().startswith("|") and re.search(r"\bOpen\b", ln) and "없음" not in ln
+        ]
         if opens:
             problems.append(f"§11 미확인 사항에 Open 항목 {len(opens)}건 — 해소 후 재시도 (없으면 §11 절 삭제).")
 
-    # 3) §7 결정 필요 사항 — D-T 결정 행
+    # 3) §7 결정 필요 사항 — D-T 결정 행 (단, "없음" 행은 빈 placeholder → 제외)
     sec7 = _section(raw, r"^##\s*7\.\s*결정\s*필요")
     if sec7 is not None:
-        decisions = [ln for ln in sec7.splitlines() if ln.strip().startswith("|") and "D-T" in ln]
+        decisions = [
+            ln for ln in sec7.splitlines()
+            if ln.strip().startswith("|") and "D-T" in ln and "없음" not in ln
+        ]
         if decisions:
             problems.append(f"§7 결정 필요 사항에 미결 결정 {len(decisions)}건 — 확정 후 재시도 (없으면 §7 절 삭제).")
 
