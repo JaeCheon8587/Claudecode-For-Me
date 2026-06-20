@@ -2,6 +2,8 @@ __pycache__/
 *.pyc
 *.pyo
 .worktrees/
+.worktree/
+.process/
 
 # Local sandboxes (user-specific test corpora, may host their own git repo)
 samples/
