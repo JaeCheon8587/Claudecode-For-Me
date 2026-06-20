@@ -1,6 +1,6 @@
 ---
 name: forge-scope
-description: harness_framework forge-scope 경량 TDD phase runner를 사용자 프로젝트에서 실행한다. 첫 호출 시 scripts/worktree_setup.py 와 빌드/진행 템플릿을 자동 부트스트랩한 뒤 worktree_setup.py init 으로 워크트리·서브모듈 링크·가드레일 복사·.process 스캐폴딩을 셋업한다. 이후 고정 계약-TDD 파이프라인(계약+테스트→구현→빌드/유닛테스트)을 현재 세션이 워크트리 안에서 인라인으로 수행한다 (오케스트레이터·자식 spawn 없음). /claudecode-for-me:forge-scope 로 실행.
+description: harness_framework forge-scope 경량 TDD phase runner를 사용자 프로젝트에서 실행한다. 플러그인 캐시의 worktree_setup.py를 직접 실행(프로젝트로 복사 안 함)해 init 으로 워크트리·서브모듈 링크·가드레일 복사·.process 스캐폴딩을 셋업한다. 이후 고정 계약-TDD 파이프라인(계약+테스트→구현→빌드/유닛테스트)을 현재 세션이 워크트리 안에서 인라인으로 수행한다 (오케스트레이터·자식 spawn 없음). /claudecode-for-me:forge-scope 로 실행.
 argument-hint: "<TASK-doc-path> [--name <slug>] [--force] | cancel <slug>"
 input: TASK 문서 경로 (docs/.templates/App/TASK/APP-TASK-NNN-TEMPLATE.md 형식)
 output: .worktree/<slug>/ 워크트리 + feat-<slug> 브랜치 commit (계약+테스트 / 구현 / 빌드·테스트 통과)
@@ -39,26 +39,23 @@ python --version 2>&1 || py -3 --version 2>&1
 
 ---
 
-## 단계 2 — 부트스트랩 (idempotent)
+## 단계 2 — 준비 (복사 없음)
 
-cwd에 아래가 없으면 플러그인 내장본에서 복사한다. **기존 파일은 덮어쓰지 않는다** — 존재 시 skip. 플러그인 경로는 `${CLAUDE_PLUGIN_ROOT}`로 얻는다.
+**`worktree_setup.py`와 템플릿을 프로젝트로 복사하지 않는다.** 플러그인 캐시에서 직접 실행한다 — helper는 cwd(메인 repo)에서 동작하고 템플릿은 helper 옆(`${CLAUDE_PLUGIN_ROOT}/scripts/forge_templates/`)에서 읽으므로 프로젝트에 forge 도구를 남길 이유가 없다. 앱 repo 히스토리를 오염시키지 않는다.
 
-| 복사 원본 (`${CLAUDE_PLUGIN_ROOT}/…`) | 복사 대상 (cwd) |
-|---|---|
-| `scripts/worktree_setup.py` | `./scripts/worktree_setup.py` |
-| `scripts/forge_templates/forge-scope-build.md` | `./scripts/forge_templates/forge-scope-build.md` |
-| `scripts/forge_templates/forge-scope-progress.md` | `./scripts/forge_templates/forge-scope-progress.md` |
-
-`./scripts/forge_templates/`가 없으면 먼저 생성한다. 이미 부트스트랩됐어도 `worktree_setup.py`가 갱신됐으면 최신본으로 교체한다.
-
-**부트스트랩 산출물 commit (필수)**: 신규 파일이 복사됐다면 워크트리 생성 전에 메인 repo에 commit해 트리를 clean하게 둔다 (untracked 잔존 시 dirty 게이트에 걸릴 수 있음 — 단 `worktree_setup.py`는 `.worktree/`·`.process/`는 dirty 오탐에서 제외한다).
+helper 경로를 변수로 잡는다:
 
 ```bash
-git add scripts/worktree_setup.py scripts/forge_templates/forge-scope-build.md scripts/forge_templates/forge-scope-progress.md .gitignore
-git commit -m "chore: bootstrap forge-scope"
+FORGE="${CLAUDE_PLUGIN_ROOT}/scripts/worktree_setup.py"
 ```
 
-`.gitignore`에 `.worktree/`·`.process/`가 포함되는지 확인한다 (메인 repo dirty 오탐 방지). 없으면 추가 후 함께 commit.
+**`.gitignore` 확인 (생성물만)**: `.worktree/`·`.process/`(워크트리·상태 생성물)가 `.gitignore`에 있는지 확인한다. 없으면 추가하고 그 `.gitignore` 변경만 commit한다 (dirty 게이트 오탐 방지). forge 도구 자체는 프로젝트에 없으므로 commit 대상이 아니다.
+
+```bash
+git add .gitignore && git commit -m "chore: ignore forge-scope worktree/process dirs"
+```
+
+> 이미 `.worktree/`·`.process/`가 ignore돼 있으면 이 단계 전체를 생략한다.
 
 ---
 
@@ -67,7 +64,7 @@ git commit -m "chore: bootstrap forge-scope"
 `$ARGUMENTS` 첫 토큰이 `cancel`이면 **단계 6(정리)**로 분기한다. 아니면 첫 토큰을 TASK 문서 경로로 해석한다 (앞 `/` 제거).
 
 ```bash
-python ./scripts/worktree_setup.py init --doc <TASK-doc-path>
+python "$FORGE" init --doc <TASK-doc-path>
 ```
 
 - `--name <slug>`: docName/워크트리/브랜치 이름 명시 (기본: doc 파일명 stem).
@@ -136,7 +133,7 @@ python ./scripts/worktree_setup.py init --doc <TASK-doc-path>
 
 **정리** (`$ARGUMENTS` 첫 토큰이 `cancel`이거나 사용자가 정리를 요청할 때):
 ```bash
-python ./scripts/worktree_setup.py cancel <slug>
+python "$FORGE" cancel <slug>   # $FORGE="${CLAUDE_PLUGIN_ROOT}/scripts/worktree_setup.py"
 ```
 서브모듈 링크 먼저 해제(메인 타깃 보존) → `git worktree remove` → `git branch -D feat-<slug>`. 워크트리에 미완 작업이 있어도 자동 `--force`로 제거한다.
 
