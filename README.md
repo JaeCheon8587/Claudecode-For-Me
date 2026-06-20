@@ -67,6 +67,12 @@ pip install -U codenavigator
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
 
+### v3.0.0 — forge-scope 전면 재설계 (얇은 worktree_setup helper + 완전 인라인 TDD) · BREAKING
+
+`forge-scope` 를 **고정 계약-TDD 파이프라인 + 완전 세션 자율** 모델로 재설계. 기존 `forge_scope.py`(3408줄, 오케스트레이터·step splitter·`--scaffold-only`/`--record-step`/`--finalize` 상태머신·하드 강제 게이트)를 폐기하고, **얇은 `scripts/worktree_setup.py`** 로 대체한다. `worktree_setup.py` 는 **셋업·검증·정리만** 담당 — 워크트리 생성, 서브모듈 링크, 가드레일 복사, 미결 항목 검증 게이트(1개), `.process` 스캐폴딩, `cancel <slug>` teardown. **실제 코딩(계약→테스트→구현→빌드/유닛테스트)은 호출 세션이 워크트리 안에서 인라인**으로 수행 — step별 자식 `claude` spawn·백그라운드 폴링·python 하드 게이트 제거. TDD 순서·단계별 atomic commit·테스트 통과는 세션이 신규 `scripts/forge_templates/forge-scope-build.md`·`forge-scope-progress.md` 를 따라 self-discipline 으로 지킨다. 빌드/테스트는 솔루션(`*.sln`) 금지, 대상 `.csproj` 단위만.
+
+**BREAKING — 제거**: `forge-full`·`forge-cancel`·`ddr-loop` 의 command·skill·script 전부 삭제 (`forge_full.py`·`forge_cancel.py`·`ddr_loop.py`·구 `forge_scope.py`·`test_forge_scope.py`·`forge_templates/FORGE_SCOPE.md`·`PHASE_SCHEMA.md`, 총 7091 라인 삭제). `forge-cancel` 은 `forge-scope cancel <slug>` 서브커맨드로 흡수. 기존 `forge-full`/`ddr-loop` 워크플로 의존 사용자는 v3.0.0 에서 동작 안 함 — 재설계된 `forge-scope` 로 이전 필요. **세션 재시작 필수** (구버전 매니페스트가 삭제된 스킬을 그대로 보유).
+
 ### v2.17.0 — forge-scope 워크트리 복사 폐지 (읽기 ROOT / 쓰기 worktree)
 
 `forge-scope` 인라인 모드에서 워크트리로의 `CLAUDE.md`·`docs/`·`PHASE_SCHEMA.md`·`FORGE_SCOPE.md`·`.claude/rules` **부트스트랩 복사를 통째로 제거**(`_verify_worktree_bootstrap` 삭제). 인라인 전환(v2.16.0) 이후 step 코딩은 호출 세션(cwd=ROOT)이 직접 수행하고, 워크트리는 `ROOT/.worktrees/...`로 ROOT 하위에 중첩돼 있어 가드레일·docs는 **ROOT(source-of-truth)에서 직접 읽으면 충분**하기 때문. 복사가 만들던 문제 3종 제거 — **동시 실행 시 중복 복사**, **docs staleness**(이미 채워진 워크트리 docs 재복사 안 함 → ROOT 수정이 반영 안 되던 것), **읽기 출처 이원화**. `forge_scope.py` 의 docs/CLAUDE.md 읽기 경로 7곳을 `self._cfg.root`(워크트리)→`ROOT`로 전환(`GuardrailLoader`·`ScopeValidator`·`StepSplitter`·`_project_name`·`_check_frd_consistency`). 두 모드 공통 가드 `_verify_root_guardrail`(ROOT에 `CLAUDE.md` 존재만 확인)로 일반화(기존 `_verify_inplace_bootstrap` 대체). scaffold 매니페스트에 `root` 절대경로 필드 추가 — 인라인 세션이 읽기 출처를 명시적으로 받음. 격리는 불변(코드 쓰기는 worktree, 커밋은 feat 브랜치, 누수 가드는 git porcelain 기반이라 read-only는 무영향). **forge-full은 자식 claude(cwd=worktree) 의존이라 복사 유지 — 영향 없음.** SKILL.md §3/§5 와 `FORGE_SCOPE.md` 를 "읽기 ROOT / 쓰기 worktree" 모델로 정합.
