@@ -10,11 +10,13 @@
 | 항목 | 값 |
 |---|---|
 | 문서 ID | {App}-WP-{NNN} |
-| 버전 | {예: 0.1 (Ready)} |
-| 상태 | Draft / Ready / In Progress / Done / Dropped |
+| 버전 | {예: 0.1 (Draft) 또는 0.1 (Ready)} |
+| 상태 | Draft / Ready |
 | 연결 TASK | [{App}-TASK-{NNN}](../TASK/{App}-TASK-{NNN}.md) |
 | 작성 가정 | TASK 확정 및 관련 SSOT 반영 완료 |
 | 관련 문서 | [DOCUMENT_GUIDE](../../DOCUMENT_GUIDE.md) |
+
+> Work Packet 생성 시 상태는 `Draft` 또는 `Ready`만 사용한다. `In Progress` / `Done` / `Dropped`는 후속 운영 단계에서 별도 갱신할 때만 사용한다.
 
 ## 변경 이력
 | 버전 | 일자 | 변경 요약 | 작성자 |
@@ -29,26 +31,45 @@
 | 작업명 | {작업명} |
 | 작업 유형 | feature / refactor / maintenance / migration / setup / investigation / 기타 |
 | 실행 대상 | {코드 작업 대상 App/모듈} |
-| 완료 판단 | TASK §9 완료 기준 + §9.2 엣지 케이스 + §9.3 오류 처리 + 본 Work Packet §6 검증 입력 |
+| 완료 판단 | TASK §9 완료 기준 + §9.2 엣지 케이스 + §9.3 오류 처리 + 본 Work Packet §8 검증 입력 |
+| 다음 단계 | forge-scope |
 
 ## 2. TASK
 | 구분 | 링크 | 사용 목적 |
 |---|---|---|
 | Scope Authority | [{App}-TASK-{NNN}](../TASK/{App}-TASK-{NNN}.md) | 작업 범위, 비목표, 완료 기준, 엣지 케이스, 오류 처리, 테스트 기준 |
 
-## 3. Required SSOT
+## 3. Execution Gate
 
-> 이번 작업에 반드시 읽어야 하는 영구 SSOT 만 남긴다. 관련 없는 문서는 넣지 않는다.
+> `Ready`만 후속 `forge-scope` 또는 구현 에이전트가 진행할 수 있다.
+> `Draft = do not implement`: 미확정/누락/충돌을 먼저 해결해야 하며 구현을 시작하지 않는다.
 
-| 우선순위 | 문서 | 읽을 범위 | 사용 목적 |
-|---|---|---|---|
-| Required | [{App}-FRD-{NNN}](../FRD/{App}-FRD-{NNN}.md) | {예: §1, §2, §17, §18} | 기능 의도·수용 기준 확인 |
-| Required / Optional | [{App}-FC](../{App}-FC.md) | {예: 해당 기능 행} | 기능 레지스트리·상태 확인 |
-| Required / Optional | [{App}-ADR-{NNN}](../ADR/{App}-ADR-{NNN}.md) | {예: §3 결정, §4 결과} | 구조 결정·금지사항 확인 |
-| Required / Optional | [{App}-ARCHITECTURE](../{App}-ARCHITECTURE.md) | {예: 관련 호스트 책임} | App 런타임/호스트 제약 확인 |
-| Required / Optional | [ARCHITECTURE](../../ARCHITECTURE.md) | {예: §6.1 절대 금지 매트릭스} | 솔루션 레이어 제약 확인 |
+| 상태 | 실행 판단 | 기준 |
+|---|---|---|
+| Ready | forge-scope 진행 가능 | blocking 없음, Required SSOT 존재, 구현 범위 명확 |
+| Draft | 구현 금지 | 미확정/누락/충돌 존재, `Blocking / Open Questions` 해결 필요 |
 
-## 4. 실행 규칙
+| 현재 판정 | 근거 |
+|---|---|
+| Draft / Ready | {blocking 여부, Required SSOT target path 존재 여부, 구현 범위 명확성 요약} |
+
+## 4. Required SSOT Execution Matrix
+
+> `ssot-write`의 `Confirmed SSOT Action Matrix`를 기준 입력으로 삼는다.
+> `CREATE` / `UPDATE` 대상은 기본 `Required`다.
+> 실행에 직접 필요 없는 `SKIP` 대상은 넣지 않는다.
+> `Optional`은 CREATE/UPDATE를 느슨하게 낮추는 용도가 아니라, TASK 실행 판단에 실제로 도움이 되는 예외 입력에만 허용한다.
+> `CREATE/UPDATE target path`가 비어 있거나 파일이 없으면 임의 링크를 만들지 않는다.
+> 이 경우 상태는 `Draft`이며, 해당 source row를 `Blocking / Open Questions`에 기록한다.
+
+| SSOT type | Action | Document | Read range | Why required | Source matrix row | Priority |
+|---|---|---|---|---|---|---|
+| FRD | CREATE / UPDATE | [{App}-FRD-{NNN}](../FRD/{App}-FRD-{NNN}.md) | {예: §1, §2, §17, §18} | 기능 의도·수용 기준 확인 | {예: Confirmed SSOT Action Matrix row 1} | Required |
+| FC | UPDATE | [{App}-FC](../{App}-FC.md) | {예: 해당 기능 행} | 기능 레지스트리·상태 확인 | {예: Confirmed SSOT Action Matrix row 2} | Required |
+| ADR | CREATE / UPDATE | [{App}-ADR-{NNN}](../ADR/{App}-ADR-{NNN}.md) | {예: §3 결정, §4 결과} | 구조 결정·금지사항 확인 | {예: Confirmed SSOT Action Matrix row 3} | Required / Optional |
+| ARCHITECTURE | UPDATE | [{App}-ARCHITECTURE](../{App}-ARCHITECTURE.md) | {예: 관련 호스트 책임} | App 런타임/호스트 제약 확인 | {예: Confirmed SSOT Action Matrix row 4} | Required / Optional |
+
+## 5. 실행 규칙
 - TASK 에 없는 작업은 구현하지 않는다.
 - SSOT 와 충돌하는 TASK 는 실행하지 않고 충돌 내용을 보고한다.
 - TASK 가 애매하면 Required SSOT 로 해석한다.
@@ -56,7 +77,7 @@
 - 코드 현실이 TASK/SSOT 와 다르면 구현 전에 차이를 보고한다.
 - Work Packet 에 없는 문서를 임의로 넓게 탐색하지 않는다. 단, 빌드/테스트/컴파일 오류를 해결하기 위한 직접 관련 파일 탐색은 허용한다.
 
-## 5. 실행 경계
+## 6. 실행 경계
 | 구분 | 내용 |
 |---|---|
 | 반드시 수행 | {이번 실행에서 반드시 수행할 일} |
@@ -64,17 +85,44 @@
 | 허용 | {테스트 보강, 국소 리팩토링 등 허용 범위} |
 | 중단 조건 | {충돌/미확인/환경 실패 등 중단해야 하는 조건} |
 
-## 6. 검증 입력
+## 7. Blocking / Open Questions
+
+> `Ready`일 때는 `none`으로 명시한다. 미확정 사항이 하나라도 실행 판단을 막으면 상태는 `Draft`다.
+> `CREATE/UPDATE target path`가 비어 있거나 파일이 없으면 해당 source row를 반드시 기록한다.
+
+| Issue | Source | Impact | Required decision |
+|---|---|---|---|
+| none | none | none | none |
+
+## 8. 검증 입력
 | 구분 | 기준 |
 |---|---|
 | 완료 기준 | TASK §9, §9.2, §9.3 |
 | 단위 테스트 | TASK §9.1 |
-| 문서-코드 정합 검증 | `doc-driven-review` 또는 `ddr-loop` 에 TASK + Required SSOT 를 입력 |
+| 문서-코드 정합 검증 | `doc-driven-review` 또는 `ddr-loop` 에 TASK + Required SSOT Execution Matrix 를 입력 |
 | 빌드/테스트 명령 | {명령 또는 "코드베이스 기준으로 탐색"} |
 
-## 7. Readiness Checklist
+## 9. Readiness Checklist
 - [ ] TASK 상태가 `Accepted` 또는 실행 가능한 상태다.
-- [ ] Required SSOT 가 실제 존재한다.
-- [ ] TASK 와 Required SSOT 사이 명백한 충돌이 없다.
-- [ ] §4 실행 규칙과 §5 실행 경계가 비어 있지 않다.
+- [ ] Required SSOT Execution Matrix 의 링크가 실제 존재한다.
+- [ ] CREATE/UPDATE 대상 SSOT가 기본 Required 로 반영됐다.
+- [ ] Optional 은 구현 판단상 필요한 예외 입력이며 사유가 있다.
+- [ ] CREATE/UPDATE target path 누락 또는 파일 미존재가 있으면 상태가 `Draft`다.
+- [ ] SKIP 대상 SSOT가 Required 로 들어가지 않았다.
+- [ ] TASK 와 Required SSOT Execution Matrix 사이 명백한 충돌이 없다.
+- [ ] Execution Gate 가 `Ready`면 Blocking / Open Questions 가 `none`이다.
+- [ ] Execution Gate 가 `Draft`면 후속 구현 금지 의미가 명확하다.
+- [ ] §5 실행 규칙과 §6 실행 경계가 비어 있지 않다.
 - [ ] 검증 입력이 코드 작업자가 실행 가능한 수준이다.
+
+## 10. Implementation Output Contract
+
+후속 구현 에이전트는 완료 보고에 아래 항목을 반드시 포함한다.
+
+| 항목 | 필수 내용 |
+|---|---|
+| Changed files | 변경한 파일 목록 |
+| Scope match | TASK 와 Required SSOT Execution Matrix 대비 구현 범위 일치 여부 |
+| Tests run | 실행한 빌드/테스트 명령과 결과 |
+| Not run | 실행하지 못한 검증과 사유 |
+| Deviations | TASK/SSOT/Work Packet 대비 이탈, 추가 판단, 후속 조치 |

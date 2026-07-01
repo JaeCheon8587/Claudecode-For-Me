@@ -10,11 +10,30 @@ You are a read-only auditor for a generated Work Packet.
 - Work Packet file: `<WORK_PACKET-path>`
 - Process build file: `<process build path or none>`
 
+## Source Expectations
+
+### Confirmed SSOT Action Matrix
+
+`<paste the Confirmed SSOT Action Matrix from ssot-write-build.md, or "none">`
+
+### Expected Required SSOT Execution Matrix
+
+Use the same columns as the Work Packet matrix. Derive Required rows from CREATE/UPDATE rows and include only justified Optional rows.
+
+| SSOT type | Action | Document | Read range | Why required | Source matrix row | Priority |
+|---|---|---|---|---|---|---|
+| `<type>` | `<CREATE / UPDATE>` | `<expected existing target path or MISSING target path>` | `<expected narrow range>` | `<why implementation must read it>` | `<Confirmed SSOT Action Matrix row>` | `Required` |
+| `<type>` | `<optional action>` | `<expected existing target path>` | `<expected narrow range>` | `<why this exception helps implementation judgment>` | `<Confirmed SSOT Action Matrix row or explicit basis>` | `Optional` |
+
+### Impact / source summary
+
+`<short summary of TASK scope, source matrix impact, and any blocking assumptions>`
+
 ## Allowed Actions
 
 - Read the Work Packet file.
 - Read the linked TASK file.
-- Read Required SSOT files linked by the Work Packet only to verify existence and narrow relevance.
+- Read Required SSOT Execution Matrix files linked by the Work Packet only to verify existence and narrow relevance.
 - Read the process build file if present.
 - Run read-only commands such as `git status` and `git diff --name-only`.
 
@@ -29,7 +48,19 @@ You are a read-only auditor for a generated Work Packet.
 
 - Verify the Work Packet path and document ID use `<APP>-WP-<NNN>`.
 - Verify the linked TASK path exists and matches the input TASK.
-- Verify Required SSOT links exist and are limited to implementation-relevant documents.
+- Verify the Work Packet's Required SSOT Execution Matrix matches the Expected Required SSOT Execution Matrix by same-column table comparison.
+- Verify `CREATE` / `UPDATE` rows from the Confirmed SSOT Action Matrix are present unless a section-specific blocking note explains why not.
+- Verify `CREATE/UPDATE target path` missing or nonexistent means `Draft` + `Blocking / Open Questions`; do not accept guessed links.
+- Verify `SKIP` rows from the Confirmed SSOT Action Matrix are not included as Required.
+- Verify Optional rows are justified by TASK execution needs.
+- Verify Required SSOT Execution Matrix links exist and read ranges are narrow enough to avoid whole-document overreach.
+- Verify `Source matrix row` values trace back to the Confirmed SSOT Action Matrix or to an explicit blocking note.
+- Verify `Execution Gate` exists and is consistent: `Draft` means do not implement, `Ready` means no blocking, Required SSOT exists, and scope is clear.
+- FAIL if the Work Packet is `Draft` but written as implementable.
+- FAIL if the Work Packet is `Ready` but has blocking issues.
+- FAIL if a `CREATE/UPDATE target path` is missing or nonexistent but the Work Packet is `Ready`.
+- Verify `Blocking / Open Questions` exists, is `none` for `Ready`, and contains issue/source/impact/required decision rows for `Draft`.
+- Verify `Implementation Output Contract` exists and requires `Changed files`, `Scope match`, `Tests run`, `Not run`, and `Deviations`.
 - Verify the Work Packet is a context router: links and read ranges are present, but long TASK/SSOT body copies are absent.
 - Verify execution rules, execution boundary, validation inputs, and readiness checklist are not empty.
 - Verify no `{...}` placeholders or `TEMPLATE` warning remain.

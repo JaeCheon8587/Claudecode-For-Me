@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v3.4.0 · 커스텀 스킬 14종 + 슬래시 커맨드 18종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v3.4.2 · 커스텀 스킬 14종 + 슬래시 커맨드 18종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,7 +11,7 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `3.4.0` |
+| 버전 | `3.4.2` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
@@ -66,6 +66,14 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v3.4.2 — work-packet-write 실행 gate/output contract 강화
+
+`work-packet-write`의 Work Packet 템플릿에 `Execution Gate`와 `Implementation Output Contract`를 추가했다. `Draft`는 후속 구현 금지 상태로 명확히 쓰고, `Ready`는 blocking 없음·Required SSOT target path 존재·구현 범위 명확 조건을 만족할 때만 허용한다. `CREATE/UPDATE target path` 누락 또는 파일 미존재는 임의 링크 대신 `Draft + Blocking / Open Questions`로 기록하며, Phase 5 auditor는 expected matrix와 observed Work Packet matrix를 동일 컬럼 표로 비교한다.
+
+### v3.4.1 — work-packet-write matrix/auditor contract 강화
+
+`work-packet-write`의 Work Packet 템플릿을 `Required SSOT Execution Matrix` 중심으로 보강하고, `ssot-write`의 `Confirmed SSOT Action Matrix`와 `Source matrix row`를 끝까지 추적하도록 했다. `Blocking / Open Questions`를 별도 섹션으로 분리하고, Phase 5 auditor 입력/출력을 expected/observed/fix 구조로 강화했다.
 
 ### v3.4.0 — work-packet-write 추가 (forge 입력 manifest 생성)
 
@@ -194,7 +202,7 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `safe-pull` | `/claudecode-for-me:safe-pull [원격/브랜치]` | git pull 전 fetch(비파괴)로 변경·충돌·사이드이펙트 브리핑 후 AskUserQuestion 컨펌 게이트 |
 | `ssot-write` | `/claudecode-for-me:ssot-write <TASK-path> [--app <APP>] [--name <slug>] [--resume]` | TASK를 기준으로 PRD/FC/FRD/ADR/ADR-CATALOG/ARCHITECTURE 영구 SSOT를 갱신. read-only 영향 분석과 수정 후 일관성 감사를 거치며 `.process/<slug>/`에 계획과 진행로그 기록 |
 | `task-write` | `/claudecode-for-me:task-write [--app <APP>] [--from <requirements-path>] [요청]` | 요구사항 문서/자연어 요청에서 TASK 작업 범위 계약만 생성. FRD/FC/ADR/ADR-CATALOG/PRD/ARCHITECTURE 분석·수정 없음 |
-| `work-packet-write` | `/claudecode-for-me:work-packet-write <TASK-path> [--app <APP>] [--process <process-dir>] [--name <title>]` | TASK와 Required SSOT를 연결하는 forge 입력용 Work Packet 생성. TASK/SSOT/코드 수정 없이 실행 규칙·경계·검증 입력만 정리 |
+| `work-packet-write` | `/claudecode-for-me:work-packet-write <TASK-path> [--app <APP>] [--process <process-dir>] [--name <title>]` | TASK와 Required SSOT Execution Matrix를 연결하는 forge 입력용 Work Packet 생성. TASK/SSOT/코드 수정 없이 실행 규칙·경계·검증 입력만 정리 |
 
 ### Command 18종
 
@@ -217,7 +225,7 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `safe-pull` | safe-pull skill 진입. fetch 후 브리핑 → 컨펌 게이트 → pull |
 | `ssot-write` | ssot-write skill 진입. TASK 기반으로 영구 SSOT 문서를 갱신하고 read-only auditor로 영향/일관성 감사 |
 | `task-write` | task-write skill 진입. TASK 파일만 생성하고 SSOT 문서는 수정하지 않음 |
-| `work-packet-write` | work-packet-write skill 진입. TASK와 Required SSOT를 연결하는 Work Packet만 생성하고 다음 단계를 forge-scope로 넘김 |
+| `work-packet-write` | work-packet-write skill 진입. TASK와 Required SSOT Execution Matrix를 연결하는 Work Packet만 생성하고 다음 단계를 forge-scope로 넘김 |
 
 ---
 
@@ -325,7 +333,7 @@ codenav --root <repo> ui --port 9876
 - **read-only auditor 2회** — 영향 분석은 SSOT 종류별 matrix로 판정하고, 수정 후 감사는 확정 matrix 기준으로 expected/observed/fix를 파일별 점검한다.
 - **프로세스 기록** — `.process/<TASK-stem>/ssot-write-build.md`에 `Confirmed SSOT Action Matrix`, `ssot-write-progress.md`에 최신 Stage Status와 append-only Log를 남긴다.
 - **TASK 인용 금지** — 영구 SSOT 본문과 변경 이력에는 TASK markdown link/TASK ID를 남기지 않는다.
-- **실행 manifest** — `work-packet-write`는 TASK와 Required SSOT를 연결하는 `docs/<App>/WORK_PACKET/<App>-WP-<NNN>.md`만 생성한다.
+- **실행 manifest** — `work-packet-write`는 TASK와 Required SSOT Execution Matrix를 연결하는 `docs/<App>/WORK_PACKET/<App>-WP-<NNN>.md`만 생성한다.
 - **후속 단계** — Work Packet 생성 후 `Next: forge-scope`로 구현 단계에 넘긴다.
 
 ### 6.5 forge-scope / forge-cancel (harness_framework 임베디드)
