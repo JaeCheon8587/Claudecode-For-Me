@@ -1,6 +1,6 @@
 ---
-description: 타겟 문서 기준 완료조건·엣지케이스·오류케이스·검증방법 4축을 같이 설계 (grill-me 질문 루프 재사용)
-argument-hint: "<doc-path>"
+description: 타겟 문서 기준 완료조건·검증방법 중심(lite) 또는 완료조건·엣지케이스·오류케이스·검증방법 4축(full)을 같이 설계
+argument-hint: "[--lite|--full] <doc-path>"
 ---
 
 $ARGUMENTS 인자로 acceptance-design 스킬을 실행하라.

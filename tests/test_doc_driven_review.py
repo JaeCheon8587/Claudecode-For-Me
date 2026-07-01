@@ -346,15 +346,9 @@ class TestInvokeCodex:
         assert cmd[1] == "/c"
         assert "codex.CMD" in cmd[2]
 
-    def test_background_PID_출력(self, monkeypatch, tmp_path):
-        monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/codex")
-
+    def test_background_PID_출력(self, monkeypatch, tmp_path, capsys):
         class FakePopen:
             pid = 12345
-            stdin = type("FakeStdin", (), {
-                "write": lambda self, x: None,
-                "close": lambda self: None,
-            })()
 
         monkeypatch.setattr(subprocess, "Popen", lambda *a, **kw: FakePopen())
 
@@ -363,7 +357,8 @@ class TestInvokeCodex:
         fake_info_dir.mkdir(parents=True)
         monkeypatch.setattr(ddr, "_git_info_dir", lambda repo_root: fake_info_dir)
 
-        rc, stdout, stderr = ddr.invoke_codex_background("prompt", None, None, tmp_path)
+        rc = ddr._spawn_detached_foreground(["--docs", "spec.md", "--background"], tmp_path)
+        stdout = capsys.readouterr().out
         assert rc == ddr.EXIT_OK
         assert "12345" in stdout
         assert "Background" in stdout

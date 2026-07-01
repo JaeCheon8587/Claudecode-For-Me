@@ -1,0 +1,4 @@
+interface:
+  display_name: "SSOTWrite"
+  short_description: "Update SSOT docs from TASK"
+  default_prompt: "Use $ssot-write to update SSOT documents from a TASK file."

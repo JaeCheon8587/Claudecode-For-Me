@@ -7,6 +7,7 @@ Subcommands:
     parse-frd   docs/<App>/FRD/<App>-FRD-<NNN>.md 파싱
     git-user    git config user.name
     check       v0.7 파일 무결성 검사
+    check-task  task-write 전용 TASK 단일 파일 구조 검사
 
 Standard library only. Windows PowerShell 호환.
 """
@@ -66,6 +67,31 @@ VERSION_ROW_PATTERN = re.compile(r"^\|\s*버전\s*\|\s*([^|]+?)\s*\|", re.MULTIL
 AC_ID_PATTERN = lambda fid: re.compile(rf"AC-{re.escape(fid)}-(\d{{3}})")
 TC_ID_PATTERN = lambda fid: re.compile(rf"TC-{re.escape(fid)}-(\d{{3}})")
 Q_ID_PATTERN = lambda fid: re.compile(rf"Q-{re.escape(fid)}-(\d{{3}})")
+
+TASK_SECTION_HEAD_PATTERN = re.compile(r"^##\s+(\d+)\.\s+", re.MULTILINE)
+TASK_SECTION_PATTERN = lambda section_no, title: re.compile(
+    rf"^##\s+{section_no}\.\s+{re.escape(title)}\s*$",
+    re.MULTILINE,
+)
+TASK_SUBSECTION_PATTERN = lambda title: re.compile(
+    rf"^###\s+{re.escape(title)}\s*$",
+    re.MULTILINE,
+)
+UNREPLACED_PLACEHOLDER_PATTERN = re.compile(r"\{[^{}\n]+\}")
+ANGLE_PLACEHOLDER_PATTERN = re.compile(r"<[^<>\n]+>")
+SSOT_MARKDOWN_LINK_PATTERN = re.compile(
+    r"\[[^\]]+\]\(([^)]*(?:FRD/|ADR/|ADR-CATALOG|PRD\.md|ARCHITECTURE\.md)[^)]*)\)",
+)
+TASK_OPTIONAL_SECTION_PLACEHOLDER_WORDS = (
+    "YYYY-MM-DD",
+    "TODO",
+    "TBD",
+    "결정이 필요한 항목",
+    "선택지 요약",
+    "담당자 / PO / 개발 리드",
+    "확인 필요 항목",
+    "Open / Resolved",
+)
 
 ACTIVE_RANGE = range(1, 100)   # F001..F099
 BACKLOG_RANGE = range(101, 1000)  # F101..F999
@@ -616,6 +642,153 @@ def cmd_check(repo: Path, app: str | None) -> int:
 
 
 # ---------------------------------------------------------------------------
+# check-task
+# ---------------------------------------------------------------------------
+
+
+def _resolve_task_path(repo: Path, task_arg: str) -> tuple[Path, str | None]:
+    task_path = Path(task_arg)
+    if not task_path.is_absolute():
+        task_path = repo / task_path
+    task_path = task_path.resolve()
+    try:
+        rel = task_path.relative_to(repo.resolve()).as_posix()
+    except ValueError:
+        return task_path, None
+    return task_path, rel
+
+
+def _extract_markdown_section(text: str, section_no: int) -> str:
+    matches = list(TASK_SECTION_HEAD_PATTERN.finditer(text))
+    for i, m in enumerate(matches):
+        if int(m.group(1)) != section_no:
+            continue
+        start = m.start()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+        return text[start:end]
+    return ""
+
+
+def _has_empty_markdown_table_row(line: str) -> bool:
+    if _is_separator_row(line):
+        return False
+    cells = _split_md_row(line)
+    if not cells:
+        return False
+    values = [c.strip() for c in cells]
+    if not values:
+        return False
+    return all(v == "" for v in values)
+
+
+def _optional_section_has_placeholder_row(section_text: str) -> bool:
+    if not section_text:
+        return False
+    if UNREPLACED_PLACEHOLDER_PATTERN.search(section_text) or ANGLE_PLACEHOLDER_PATTERN.search(section_text):
+        return True
+    for word in TASK_OPTIONAL_SECTION_PLACEHOLDER_WORDS:
+        if word in section_text:
+            return True
+    for line in section_text.splitlines():
+        if _has_empty_markdown_table_row(line):
+            return True
+    return False
+
+
+def _check_task_file(repo: Path, app: str, task_arg: str) -> list[CheckResult]:
+    results: list[CheckResult] = []
+    task_path, rel = _resolve_task_path(repo, task_arg)
+    expected_rel_re = re.compile(
+        rf"^docs/{re.escape(app)}/TASK/{re.escape(app)}-TASK-(\d{{3}})\.md$"
+    )
+
+    rel_match = expected_rel_re.match(rel or "")
+    if rel_match:
+        results.append(CheckResult("PASS", "TASK_PATH", "valid", task_path))
+    else:
+        results.append(CheckResult(
+            "FAIL",
+            "TASK_PATH",
+            f"must match docs/{app}/TASK/{app}-TASK-<NNN>.md",
+            task_path,
+        ))
+
+    text = _read_text(task_path)
+    if text is None:
+        results.append(CheckResult("FAIL", "READ_TEXT", "cannot read", task_path))
+        return results
+    results.append(CheckResult("PASS", "READ_TEXT", "readable", task_path))
+
+    expected_id = task_path.stem
+    doc_id_match = DOC_ID_ROW_PATTERN.search(text)
+    if doc_id_match is None:
+        results.append(CheckResult("FAIL", "TASK_META", "doc id row missing", task_path))
+    elif doc_id_match.group(1).strip() != expected_id:
+        results.append(CheckResult(
+            "FAIL",
+            "TASK_META",
+            f"doc id mismatch: {doc_id_match.group(1).strip()} != {expected_id}",
+            task_path,
+        ))
+    else:
+        results.append(CheckResult("PASS", "TASK_META", "doc id matches", task_path))
+
+    if "TEMPLATE" in text:
+        results.append(CheckResult("FAIL", "TASK_TEMPLATE", "TEMPLATE warning remains", task_path))
+    else:
+        results.append(CheckResult("PASS", "TASK_TEMPLATE", "no TEMPLATE warning", task_path))
+
+    if UNREPLACED_PLACEHOLDER_PATTERN.search(text):
+        results.append(CheckResult("FAIL", "TASK_PLACEHOLDER", "unreplaced {...} placeholder remains", task_path))
+    else:
+        results.append(CheckResult("PASS", "TASK_PLACEHOLDER", "no {...} placeholder", task_path))
+
+    if TASK_SECTION_PATTERN(6, "입력 근거").search(text):
+        results.append(CheckResult("PASS", "TASK_SECTION_6", "exists", task_path))
+    else:
+        results.append(CheckResult("FAIL", "TASK_SECTION_6", "missing ## 6. 입력 근거", task_path))
+
+    for title, code in (("9.2 엣지 케이스", "TASK_SECTION_9_2"), ("9.3 오류 처리", "TASK_SECTION_9_3")):
+        if TASK_SUBSECTION_PATTERN(title).search(text):
+            results.append(CheckResult("PASS", code, "exists", task_path))
+        else:
+            results.append(CheckResult("FAIL", code, f"missing ### {title}", task_path))
+
+    for section_no, code in ((7, "TASK_SECTION_7"), (11, "TASK_SECTION_11")):
+        section_text = _extract_markdown_section(text, section_no)
+        if not section_text:
+            results.append(CheckResult("PASS", code, "omitted or absent", task_path))
+        elif _optional_section_has_placeholder_row(section_text):
+            results.append(CheckResult("FAIL", code, "placeholder or empty example row remains", task_path))
+        else:
+            results.append(CheckResult("PASS", code, "no placeholder rows", task_path))
+
+    ssot_links = SSOT_MARKDOWN_LINK_PATTERN.findall(text)
+    if ssot_links:
+        results.append(CheckResult(
+            "FAIL",
+            "TASK_SSOT_LINK",
+            f"SSOT markdown link not allowed: {', '.join(ssot_links)}",
+            task_path,
+        ))
+    else:
+        results.append(CheckResult("PASS", "TASK_SSOT_LINK", "no SSOT markdown links", task_path))
+
+    return results
+
+
+def cmd_check_task(repo: Path, app: str, task: str) -> int:
+    results = _check_task_file(repo, app, task)
+    for r in results:
+        print(_format(r, repo))
+    p = sum(1 for r in results if r.level == "PASS")
+    w = sum(1 for r in results if r.level == "WARN")
+    f = sum(1 for r in results if r.level == "FAIL")
+    print(f"Summary: {p} PASS, {w} WARN, {f} FAIL")
+    return 1 if f > 0 else 0
+
+
+# ---------------------------------------------------------------------------
 # Entry
 # ---------------------------------------------------------------------------
 
@@ -654,6 +827,11 @@ def main(argv: list[str] | None = None) -> int:
     sp_check.add_argument("--repo", required=True)
     sp_check.add_argument("--app", default=None)
 
+    sp_check_task = sub.add_parser("check-task")
+    sp_check_task.add_argument("--repo", required=True)
+    sp_check_task.add_argument("--app", required=True)
+    sp_check_task.add_argument("--task", required=True)
+
     try:
         args = parser.parse_args(argv)
     except SystemExit as e:
@@ -673,6 +851,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_git_user(repo)
     if args.cmd == "check":
         return cmd_check(repo, args.app)
+    if args.cmd == "check-task":
+        return cmd_check_task(repo, args.app, args.task)
     print(f"FAIL ARGS unknown cmd: {args.cmd}", file=sys.stderr)
     return 2
 

@@ -50,7 +50,8 @@
 | App 요구사항 | [`docs/{SYSTEM_CODE}/{SYSTEM_CODE}-PRD.md`](docs/{SYSTEM_CODE}/{SYSTEM_CODE}-PRD.md) |
 | App 기능 레지스트리 | [`docs/{SYSTEM_CODE}/{SYSTEM_CODE}-FC.md`](docs/{SYSTEM_CODE}/{SYSTEM_CODE}-FC.md) |
 | App 기능별 상세 | [`docs/{SYSTEM_CODE}/FRD/`](docs/{SYSTEM_CODE}/FRD/) |
-| App AI 실행용 작업 지시서 (휘발성) | [`docs/{SYSTEM_CODE}/TASK/`](docs/{SYSTEM_CODE}/TASK/) |
+| App 작업 지시서 | [`docs/{SYSTEM_CODE}/TASK/`](docs/{SYSTEM_CODE}/TASK/) |
+| App AI 실행 Work Packet | [`docs/{SYSTEM_CODE}/WORK_PACKET/`](docs/{SYSTEM_CODE}/WORK_PACKET/) |
 | App 결정 이력 | [`docs/{SYSTEM_CODE}/{SYSTEM_CODE}-ADR-CATALOG.md`](docs/{SYSTEM_CODE}/{SYSTEM_CODE}-ADR-CATALOG.md) |
 | 코드 레이어 규칙 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
 
@@ -58,7 +59,7 @@
 
 ## 기여
 
-{기여 정책. 예: 신규 기능은 PRD → FC → FRD 갱신 후 구현 착수. FRD 에는 코드 상세를 쓰지 않는다. AI 실행용 코드 작업 (feature / refactor / maintenance / migration / setup / investigation) 은 TASK 양식 (휘발성 + self-contained) 으로 작성한다. 상세는 docs/DOCUMENT_GUIDE.md §2. RFD 양식은 v0.7 폐기.}
+{기여 정책. 예: 신규 기능은 PRD → FC → FRD 갱신 후 구현 착수. FRD 에는 코드 상세를 쓰지 않는다. AI 코드 작업은 TASK 작성 → SSOT 갱신 → Work Packet 작성 후 진행한다. TASK 는 범위 기준, SSOT 는 진실/제약 기준, Work Packet 은 실행 manifest 다. 상세는 docs/DOCUMENT_GUIDE.md §2. RFD 양식은 v0.7 폐기.}
 
 - 커밋 메시지: {conventional commits 형식 — `feat:`, `fix:`, `docs:`, `refactor:` 등}
 - PR 전 체크리스트: [`docs/DOCUMENT_GUIDE.md` §9](docs/DOCUMENT_GUIDE.md) 검증 항목 통과.

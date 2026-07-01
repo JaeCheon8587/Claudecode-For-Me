@@ -6,8 +6,8 @@
 | 항목 | 값 |
 |---|---|
 | 문서 ID | DOCUMENT_GUIDE (단일 파일) |
-| 버전 | 0.7 (Draft) |
-| 작성 가정 | 솔루션 전체 문서 (PRD/FC/FRD/RFD/TASK/ADR/ADR-CATALOG/ARCHITECTURE) 의 작성 룰 통합 |
+| 버전 | 0.9 (Draft) |
+| 작성 가정 | 솔루션 전체 문서 (PRD/FC/FRD/RFD/TASK/WORK_PACKET/ADR/ADR-CATALOG/ARCHITECTURE) 의 작성 룰 통합 |
 | 관련 문서 | [CLAUDE](../CLAUDE.md) · [.templates/](.templates/) |
 
 ## 변경 이력
@@ -21,6 +21,7 @@
 | 0.6 | YYYY-MM-DD | TASK 문서 수정 범위 룰 추가 — TASK 본문은 자기 자신 외 SSOT 문서 직접 수정 금지, 영향은 §5·§6 에 명시만 하고 실제 갱신은 별도 작업으로 분리 | {이름} |
 | 0.7 | YYYY-MM-DD | 컨셉 재정의 — TASK = 휘발성 self-contained 작업 지시서 + 외부 SSOT 인용 금지 (양방향). 영향 SSOT 갱신은 작성 시점 사전 동반. AI 실행 시 SSOT 자동 수정 금지. RFD 양식 폐기 (리팩토링도 TASK 작업 유형 = refactor) | {이름} |
 | 0.8 | 2026-05-20 | ADR 용어 통일 (템플릿 파일명·결과 파일명·문서 ID 전부 ADR 접두사) | {이름} |
+| 0.9 | 2026-07-01 | TASK / SSOT / Work Packet 책임 분리. TASK 는 Scope Authority, SSOT 는 Truth Authority, Work Packet 은 Context Router 로 재정의 | {이름} |
 
 ## 0. 용어 정의
 
@@ -54,7 +55,8 @@ SYSTEM_CODE 후보 단일 출처(SSOT): [`/CLAUDE.md` Backend Services Overview]
 | App ARCHITECTURE | `docs/{App}/{App}-ARCHITECTURE.md` | App별 호스트 아키텍처 (런타임/진입점/책임/구성요소) | 콘텐츠 | [.templates/App/APP-ARCHITECTURE-TEMPLATE.md](.templates/App/APP-ARCHITECTURE-TEMPLATE.md) |
 | App FRD | `docs/{App}/FRD/{App}-FRD-{NNN}.md` | App별 기능 요구 문서. 코드 상세 없이 목적·흐름·정책·수용 기준·문서 반영 범위 정의 | 콘텐츠 | [.templates/App/FRD/APP-FRD-001-TEMPLATE.md](.templates/App/FRD/APP-FRD-001-TEMPLATE.md) |
 | ~~App RFD~~ | ~~`docs/{App}/RFD/{App}-RFD-{NNN}.md`~~ | **DEPRECATED (v0.7)** — RFD 양식 폐기. 리팩토링 작업은 App TASK 의 `작업 유형 = refactor` 로 처리 | — | — |
-| App TASK | `docs/{App}/TASK/{App}-TASK-{NNN}.md` | App별 AI 실행용 작업 지시서. **휘발성 + self-contained**. 작업 유형 메타 (feature/refactor/maintenance/migration/setup/investigation/etc) 로 모든 코드 작업을 표현. **외부 SSOT 인용 금지 (양방향)**: TASK 는 영구 SSOT 를 마크다운 링크로 인용하지 않으며, 영구 SSOT 도 TASK 를 인용하지 않는다. 영향 SSOT 갱신은 작성 시점에 작성자가 동반 수행하고 §6 에 텍스트로만 명시 | 휘발성 콘텐츠 | [.templates/App/TASK/APP-TASK-001-TEMPLATE.md](.templates/App/TASK/APP-TASK-001-TEMPLATE.md) |
+| App TASK | `docs/{App}/TASK/{App}-TASK-{NNN}.md` | App별 작업 범위 계약(Task Spec). **Scope Authority** 로서 목적·범위·비목표·완료 기준·엣지 케이스·오류 처리·테스트 기준을 정의한다. TASK 는 영구 SSOT 영향 후보를 분석하거나 갱신하지 않는다 | 휘발성 콘텐츠 | [.templates/App/TASK/APP-TASK-001-TEMPLATE.md](.templates/App/TASK/APP-TASK-001-TEMPLATE.md) |
+| App Work Packet | `docs/{App}/WORK_PACKET/{App}-WP-{NNN}.md` | AI 코드 실행용 context router. TASK + 관련 SSOT 링크 + 충돌 규칙 + 검증 입력을 얇게 묶는다. 본문 복제 금지 | 실행 manifest | [.templates/App/WORK_PACKET/APP-WP-001-TEMPLATE.md](.templates/App/WORK_PACKET/APP-WP-001-TEMPLATE.md) |
 | App ADR | `docs/{App}/ADR/{App}-ADR-{NNN}.md` | App별 아키텍처 결정 narrative | 콘텐츠 | [.templates/App/ADR/APP-ADR-001-TEMPLATE.md](.templates/App/ADR/APP-ADR-001-TEMPLATE.md) |
 | App ADR-CATALOG | `docs/{App}/{App}-ADR-CATALOG.md` | App별 결정 상태/영향/반영 인덱스 | 인덱스 | [.templates/App/APP-ADR-CATALOG-TEMPLATE.md](.templates/App/APP-ADR-CATALOG-TEMPLATE.md) |
 
@@ -62,12 +64,12 @@ SYSTEM_CODE 후보 단일 출처(SSOT): [`/CLAUDE.md` Backend Services Overview]
 
 **FRD 작성 원칙**: FRD 에는 코드 경로, 파일명, 클래스명, 메서드명, 구현 방식, 테스트/검증 명령, 설정 키, API 경로·스키마를 쓰지 않는다. FRD 는 기능 요구·흐름·정책·수용 기준 중심.
 
-**TASK 작성·실행 원칙 (v0.7)**:
+**TASK / SSOT / Work Packet 작성·실행 원칙 (v0.9)**:
 
-1. **TASK = 휘발성 + Self-contained 작업 지시서**. 영구 SSOT 가 아니다. 작업 완료 후 TASK 파일은 삭제될 수 있다. AI 가 코드 실행에 필요한 정보 (외부 계약 / 데이터 구조 / 정책 / 코드 변경 단위) 는 TASK 본문의 컨텍스트 임베드 절에 모두 포함한다.
-2. **외부 SSOT 인용 금지 (양방향)**: TASK 본문은 영구 SSOT (PRD/FC/FRD/ADR/ADR-CATALOG/ARCHITECTURE) 를 마크다운 링크로 인용하지 않는다 (`[FRD-006](...)` 형태 금지). 영향받는 SSOT 는 §6 영향 표에 **이름·요지·갱신 상태만 텍스트로** 명시한다. 역으로 영구 SSOT 도 TASK 를 인용하지 않는다 (휘발성 → 깨진 링크 방지).
-3. **영향 SSOT 갱신은 작성 시점 사전 동반**: TASK 작성자는 본 TASK 작성 시점에 영향 영구 SSOT (FRD 본문·FC 행·ADR 신설·ADR-CATALOG 행) 를 직접 갱신한다. TASK §6 에 갱신 상태 = "완료" 로 선언한다.
-4. **AI 실행 시 SSOT 자동 수정 금지**: AI 가 TASK 를 입력으로 받아 §8 단계를 코드로 실행할 때는 **코드 변경만** 수행한다. 영구 SSOT 자동 수정 금지 (사전 갱신 전제).
+1. **TASK = Scope Authority**. TASK 는 이번 작업의 목적·범위·비목표·완료 기준·엣지 케이스·오류 처리·테스트 기준을 정의한다. TASK 는 영구 SSOT 가 아니며, SSOT 영향 후보를 분석하거나 갱신하지 않는다.
+2. **SSOT = Truth Authority**. FRD/FC/ADR/ADR-CATALOG/ARCHITECTURE 는 제품·기능·구조 결정의 영구 진실이다. TASK 확정 후 별도 SSOT 작성 단계에서 관련 문서를 갱신한다.
+3. **Work Packet = Context Router**. Work Packet 은 TASK 와 관련 SSOT 를 링크하고, 코드 작업자가 읽을 문서·충돌 규칙·검증 입력을 지정한다. Work Packet 은 문서 본문을 길게 복제하지 않는다.
+4. **코드 실행 기준**: 코드 작업 시 TASK 는 범위 기준, SSOT 는 진실/제약 기준이다. TASK 와 SSOT 가 충돌하면 구현하지 않고 보고한다. TASK 에 없는 요구는 구현하지 않는다.
 5. **작업 유형 메타**: TASK 의 작업 유형을 `feature / refactor / maintenance / migration / setup / investigation / 기타` 중 하나로 분류한다. **리팩토링도 TASK 양식** (작업 유형 = refactor) 으로 처리 — RFD 양식 폐기.
 
 **RFD 폐기 안내**: 기존 RFD 양식 ([.templates/App/RFD/APP-RFD-001-TEMPLATE.md](.templates/App/RFD/APP-RFD-001-TEMPLATE.md)) 은 v0.7 부터 사용하지 않는다. 폴더 (`docs/{App}/RFD/`) 가 비어 있으면 그대로 두고, 기존 RFD 본문이 있으면 별도 결정으로 처리 (보존 / 삭제 / TASK 로 흡수).
@@ -78,22 +80,20 @@ SYSTEM_CODE 후보 단일 출처(SSOT): [`/CLAUDE.md` Backend Services Overview]
 
 **신규 기능 추가**: `{App}-PRD.md` §3.1·§7 갱신 → `{App}-FC.md` 5축 표 행 추가 → `docs/{App}/FRD/{App}-FRD-{NNN}.md` 신규 (코드 상세 없이 기능 요구·수용 기준 작성) → 필요 시 ADR 등재 + `{App}-ADR-CATALOG.md` 동기화 → 구현 착수.
 
-**신규 결정 등재**: `docs/{App}/ADR/{App}-ADR-{NNN}.md` 신규 (narrative) → `{App}-ADR-CATALOG.md` 의 Proposed/Accepted 행 추가 → 영향 PRD/FC/FRD/RFD/TASK 본문에 ADR 인용.
+**신규 결정 등재**: `docs/{App}/ADR/{App}-ADR-{NNN}.md` 신규 (narrative) → `{App}-ADR-CATALOG.md` 의 Proposed/Accepted 행 추가 → 영향 PRD/FC/FRD 본문에 ADR 인용. TASK 는 ADR 을 직접 인용하지 않으며, 코드 실행 시 Work Packet 이 Required SSOT 로 ADR 을 연결한다.
 
-**리팩토링 작업** (v0.7 부터): RFD 양식 폐기. **TASK 양식 + 작업 유형 = refactor** 로 처리. 작성 흐름은 아래 "AI 실행용 작업 지시서 작성" 과 동일.
+**리팩토링 작업** (v0.7 부터): RFD 양식 폐기. **TASK 양식 + 작업 유형 = refactor** 로 처리. 작성 흐름은 아래 "AI 코드 작업 준비" 와 동일.
 
-**AI 실행용 작업 지시서 작성** (TASK — 모든 코드 작업 통합 흐름):
-1. **사전: 영향 영구 SSOT 갱신** — 영향받는 FRD 본문·FC 행·ADR 신설·ADR-CATALOG 행 등을 작성자가 먼저 직접 갱신한다. (이 단계가 TASK 작성보다 선행)
-2. `docs/{App}/TASK/{App}-TASK-{NNN}.md` 신규 — 휘발성 + self-contained. 외부 SSOT 인용 금지.
-3. §6 영향 SSOT 표에 갱신 완료 상태 텍스트로 선언 (링크 X).
-4. §12 컨텍스트 임베드 — AI 가 코드 실행에 필요한 외부 계약·데이터 구조·정책을 본문에 복제·요약 임베드.
-5. §8 작업 단계 = AI 가 코드로 실행 가능한 단위로 작성 (영구 SSOT 본문 갱신 단계 포함 X — 이미 사전 완료).
-6. AI 에게 TASK 던져 §8 실행. AI 는 코드만 변경.
-7. 완료 후 본 TASK 파일은 삭제될 수 있다 (영구 추적은 영구 SSOT 본문·변경이력·ADR 에서 한다).
+**AI 코드 작업 준비** (TASK → SSOT → Work Packet):
+1. `docs/{App}/TASK/{App}-TASK-{NNN}.md` 신규 — 작업 목적·범위·비목표·완료 기준·엣지 케이스·오류 처리·테스트 기준을 작성한다. TASK 는 SSOT 영향 후보를 만들지 않는다.
+2. TASK 확정 후 SSOT 작성 단계에서 관련 PRD/FC/FRD/ADR/ADR-CATALOG/ARCHITECTURE 를 갱신한다. 신규 기능이면 FRD/FC/PRD 를, 구조 결정이면 ADR/ADR-CATALOG 를 갱신한다.
+3. `docs/{App}/WORK_PACKET/{App}-WP-{NNN}.md` 신규 — TASK 링크 + Required SSOT 링크 + 충돌 규칙 + 검증 입력을 작성한다.
+4. AI 에게 Work Packet 을 입력으로 제공한다. AI 는 Work Packet 이 지정한 TASK 와 Required SSOT 를 읽고 코드 작업을 수행한다.
+5. 완료 후 TASK/Work Packet 은 삭제될 수 있다. 영구 추적은 영구 SSOT 본문·변경이력·ADR 에 남긴다.
 
 **아키텍처 룰 변경**: ADR 등재 (배경/결정/결과/대안) → ADR-CATALOG → 솔루션 룰 파일(`.rules/DDD_ARCHITECTURE_RULES.md` 등) 본문 갱신.
 
-**신규 App 추가**: `/CLAUDE.md` Backend Services Overview 표 행 추가 (SYSTEM_CODE 확정) → `/CLAUDE.md` 설계 문서 인덱스 표 App 행 복제·추가 → `docs/{App}/` 폴더 + 하위 `FRD/`·`ADR/`·`RFD/`·`TASK/` 서브폴더 생성 → `.templates/App/` 직접 양식 복사·rename (`APP-PRD-TEMPLATE` → `{App}-PRD.md` 등) → `.templates/App/{ADR,FRD,RFD,TASK}/` 서브폴더 양식은 첫 개별 문서 작성 시 사용.
+**신규 App 추가**: `/CLAUDE.md` Backend Services Overview 표 행 추가 (SYSTEM_CODE 확정) → `/CLAUDE.md` 설계 문서 인덱스 표 App 행 복제·추가 → `docs/{App}/` 폴더 + 하위 `FRD/`·`ADR/`·`TASK/`·`WORK_PACKET/` 서브폴더 생성 → `.templates/App/` 직접 양식 복사·rename (`APP-PRD-TEMPLATE` → `{App}-PRD.md` 등) → `.templates/App/{ADR,FRD,TASK,WORK_PACKET}/` 서브폴더 양식은 첫 개별 문서 작성 시 사용.
 
 ## 3. 메타 표 공통 패턴
 
@@ -130,6 +130,7 @@ SYSTEM_CODE 후보 단일 출처(SSOT): [`/CLAUDE.md` Backend Services Overview]
 | FRD ID | `{App}-FRD-{NNN}` (NNN 3자리, 001~099 정식 / 101~ Backlog) | `LOADER-FRD-001` |
 | ~~RFD ID~~ | ~~`{App}-RFD-{NNN}`~~ — **DEPRECATED (v0.7)** | — |
 | TASK ID | `{App}-TASK-{NNN}` (NNN 3자리) | `LOADER-TASK-001` |
+| Work Packet ID | `{App}-WP-{NNN}` (NNN 3자리) | `LOADER-WP-001` |
 | ADR ID | `{App}-ADR-{NNN}` (NNN 3자리) | `LOADER-ADR-001` |
 | ADR-CATALOG ID | `{App}-ADR-CATALOG` | `LOADER-ADR-CATALOG` |
 | 수용 기준 | `AC-{NNN}-{NNN}` (FRD 내부 로컬) | `AC-001-001` |
@@ -143,14 +144,14 @@ SYSTEM_CODE 후보는 [`/CLAUDE.md` Backend Services Overview](../CLAUDE.md) 표
 
 - placeholder 형식: `{설명}` 중괄호. 실제 값 채우거나 줄 삭제.
 - 솔루션 레벨 placeholder: `{SOLUTION_CODE}`, `{프로젝트명}`.
-- App 레벨 placeholder: `{App}` (또는 `{SYSTEM_CODE}` / `{APP_CODE}` — 동의어), `{NNN}` (FRD/ADR/TASK 번호 3자리. RFD 는 v0.7 폐기).
+- App 레벨 placeholder: `{App}` (또는 `{SYSTEM_CODE}` / `{APP_CODE}` — 동의어), `{NNN}` (FRD/ADR/TASK/WP 번호 3자리. RFD 는 v0.7 폐기).
 - 빈칸 / "N/A" **금지**. 해당 없으면 **"없음" 명기**.
 - 미완성 항목은 "미작성/추후" 명기.
 - `_` 또는 `.` 시작 폴더 (예: `.templates/`) 는 기본적으로 템플릿/감사용 — SSOT 아님. 단 `docs/.rules/` 는 예외 — 코드 룰 (DDD/OOP/Behavioral) SSOT.
 
 ## 7. SSOT 인용 패턴
 
-상호 참조 시 마크다운 링크 + anchor. **영구 SSOT 끼리만 상호 인용. TASK 는 어디서도 인용되지 않고, TASK 본문도 영구 SSOT 를 인용하지 않는다** (v0.7 룰).
+상호 참조 시 마크다운 링크 + anchor. **영구 SSOT 끼리만 상호 인용한다. TASK 는 영구 SSOT 를 직접 링크하지 않고, 영구 SSOT 도 TASK 를 인용하지 않는다. Work Packet 은 실행 manifest 이므로 TASK 와 Required SSOT 를 링크할 수 있다.**
 
 ### 7.1 App 폴더 내부 상대 경로 (기준: `docs/{App}/` 내부 파일, 영구 SSOT 간 인용)
 
@@ -160,7 +161,8 @@ SYSTEM_CODE 후보는 [`/CLAUDE.md` Backend Services Overview](../CLAUDE.md) 표
 - ADR: `[{App}-ADR-001](ADR/{App}-ADR-001.md)`
 - ADR-CATALOG: `[ADR-CATALOG]({App}-ADR-CATALOG.md)`
 - ~~RFD~~: **DEPRECATED (v0.7)** — RFD 양식 폐기
-- ~~TASK~~: **인용 금지 (v0.7)** — TASK 는 휘발성. 영구 SSOT 가 TASK 를 인용하지 않으며, TASK 본문도 영구 SSOT 를 인용하지 않는다. 영향받는 SSOT 는 TASK §6 영향 표에 텍스트로만 명시
+- ~~TASK~~: **영구 SSOT 본문에서 인용 금지** — TASK 는 휘발성. 영구 SSOT 가 TASK 를 인용하지 않으며, TASK 본문도 영구 SSOT 를 직접 링크하지 않는다. Work Packet 은 예외적으로 TASK 와 Required SSOT 를 링크한다.
+- Work Packet: `[LOADER-WP-001](WORK_PACKET/LOADER-WP-001.md)` (실행 manifest 내부 또는 작업 운영 문서에서만 사용)
 
 ### 7.2 솔루션 공통 문서 참조 (기준: `docs/{App}/` 내부 파일 → 상위)
 
@@ -179,7 +181,8 @@ SYSTEM_CODE 후보는 [`/CLAUDE.md` Backend Services Overview](../CLAUDE.md) 표
 |---|---|
 | 신규 ADR | `{App}-ADR-{NNN}.md` + `{App}-ADR-CATALOG.md` + 영향 PRD/FC/FRD 본문 (TASK 인용 X) |
 | ~~신규 RFD~~ | **DEPRECATED (v0.7)** — 리팩토링은 신규 TASK 의 작업 유형 = `refactor` 로 처리 |
-| 신규 TASK | (사전) 영향 영구 SSOT (PRD/FC/FRD/ADR/ADR-CATALOG/ARCHITECTURE) 를 작성자가 직접 갱신 → (후) `docs/{App}/TASK/{App}-TASK-{NNN}.md` 신규 (self-contained, 외부 SSOT 인용 X). TASK §6 에 갱신 상태 텍스트로 선언. AI 가 §8 실행 시 코드만 변경 |
+| 신규 TASK | `docs/{App}/TASK/{App}-TASK-{NNN}.md` 신규. 목적·범위·비목표·완료 기준·엣지 케이스·오류 처리·테스트 기준만 정의. SSOT 영향 후보·갱신 대상은 작성하지 않는다 |
+| 신규 Work Packet | TASK 확정 + 관련 SSOT 갱신 후 `docs/{App}/WORK_PACKET/{App}-WP-{NNN}.md` 신규. TASK 링크, Required SSOT 링크, 충돌 규칙, 검증 입력만 작성 |
 | 신규 App | `/CLAUDE.md` Backend Services Overview + `/CLAUDE.md` 인덱스 표 + `docs/{App}/` 전체 신규 (`{App}-PRD.md` / `{App}-FC.md` / `{App}-ARCHITECTURE.md` / `{App}-ADR-CATALOG.md`) |
 | 신규 기능 `{NNN}` | `{App}-FC.md` 5축 표 행 + `{App}-FRD-{NNN}.md` 신규 + `{App}-PRD.md` §7 (해당 시) |
 | 신규 기능 `{NNN}` (cross-cutting 영향) | 위 + 솔루션 PRD §3.1·§8·§11 + 솔루션 부록 B/D/E (영향 시) |
@@ -192,8 +195,8 @@ SYSTEM_CODE 후보는 [`/CLAUDE.md` Backend Services Overview](../CLAUDE.md) 표
 
 - **신규 기능 추가 요청** → §2 의 신규 기능 추가 흐름. FRD 에 코드 상세 없이 기능 요구·흐름·수용 기준 작성.
 - **결정 등재 요청** → §2 의 신규 결정 흐름. ADR Proposed → Accepted.
-- **리팩토링 요청** → §2 의 "AI 실행용 작업 지시서 작성" 흐름 (TASK 양식 + 작업 유형 = refactor). RFD 양식은 v0.7 폐기.
-- **일회성 작업 요청** → §2 의 "AI 실행용 작업 지시서 작성" 흐름 (TASK 양식 + 적절한 작업 유형). 사전에 영향 영구 SSOT 를 작성자가 직접 갱신하고, TASK 는 휘발성 self-contained 작업 지시서로 작성한다.
+- **리팩토링 요청** → §2 의 "AI 코드 작업 준비" 흐름 (TASK 양식 + 작업 유형 = refactor). RFD 양식은 v0.7 폐기.
+- **일회성 작업 요청** → §2 의 "AI 코드 작업 준비" 흐름 (TASK → SSOT → Work Packet). TASK 는 범위 계약, Work Packet 은 실행 manifest 로 작성한다.
 - **신규 App 추가 요청** → §2 의 신규 App 추가 흐름. `/CLAUDE.md` Backend Services Overview 행 추가가 모든 다른 작업보다 선행.
-- **코드 작성 요청** → CLAUDE 인덱스의 룰 파일 (`DDD_ARCHITECTURE_RULES` / `OBJECT_ORIENTED_DESIGN_RULES` / `BEHAVIORAL_GUIDELINES_RULES`) 읽고 4단계 마커 (반드시/허용/금지/절대 금지) 준수. FRD §1·§2·§17·§18 로 기능 의도와 수용 기준을 확인하되, 구현 상세와 검증 명령은 최신 코드/빌드 환경 기준으로 판단한다.
+- **코드 작성 요청** → Work Packet 을 먼저 읽고 TASK + Required SSOT 를 확인한다. TASK 는 범위 기준, SSOT 는 진실/제약 기준이다. 충돌 시 구현하지 않고 보고한다. 공통 룰 파일 (`DDD_ARCHITECTURE_RULES` / `OBJECT_ORIENTED_DESIGN_RULES` / `BEHAVIORAL_GUIDELINES_RULES`) 의 4단계 마커 (반드시/허용/금지/절대 금지) 를 준수한다.
 - **신규 솔루션 부트스트랩 요청** → [`/CLAUDE.md` § 최초 부트스트랩](../CLAUDE.md) 절차 수행.

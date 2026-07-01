@@ -1,6 +1,6 @@
 ---
 name: forge-scope
-description: harness_framework forge-scope 경량 TDD phase runner를 사용자 프로젝트에서 실행한다. 플러그인 캐시의 worktree_setup.py를 직접 실행(프로젝트로 복사 안 함)해 init 으로 워크트리·서브모듈 링크·가드레일 복사·.process 스캐폴딩을 셋업한다. 이후 고정 계약-TDD 파이프라인(계약+테스트→구현→빌드/유닛테스트)을 현재 세션이 워크트리 안에서 인라인으로 수행한다 (오케스트레이터·자식 spawn 없음). /claudecode-for-me:forge-scope 로 실행.
+description: harness_framework forge-scope 경량 TDD workflow를 사용자 프로젝트에서 실행한다. 플러그인 캐시의 worktree_setup.py helper를 직접 실행(프로젝트로 복사 안 함)해 init 으로 워크트리·서브모듈 링크·가드레일 복사·.process 스캐폴딩을 셋업한다. 이후 고정 계약-TDD 파이프라인(계약+테스트→구현→빌드/유닛테스트)을 현재 세션이 워크트리 안에서 인라인으로 수행한다 (오케스트레이터·자식 spawn 없음). /claudecode-for-me:forge-scope 로 실행.
 argument-hint: "<TASK-doc-path> [--name <slug>] [--force]"
 input: TASK 문서 경로 (docs/.templates/App/TASK/APP-TASK-NNN-TEMPLATE.md 형식)
 output: .worktree/<slug>/ 워크트리 + feat-<slug> 브랜치 commit (계약+테스트 / 구현 / 빌드·테스트 통과)
@@ -9,7 +9,7 @@ requires-user-interaction: true
 
 # Forge Scope — Skill (인라인 TDD)
 
-`forge-scope`는 단일 TASK 문서를 **고정 계약-TDD 파이프라인**으로 빠르게 구현하는 경량 runner다.
+`forge-scope`는 단일 TASK 문서를 **고정 계약-TDD 파이프라인**으로 빠르게 구현하는 경량 workflow다.
 
 **역할 분리**: `scripts/worktree_setup.py`는 **셋업·검증·정리만** 한다 — 워크트리 생성, 서브모듈 링크, 가드레일 복사, 미결 항목 검증 게이트, `.process` 스캐폴딩, cancel teardown. **실제 코딩(계약→테스트→구현→빌드/테스트)은 이 세션이 워크트리 안에서 인라인**으로 수행한다. 오케스트레이터·step별 자식 spawn·하드 강제 게이트는 없다.
 
@@ -89,11 +89,11 @@ python "$FORGE" init --doc <TASK-doc-path>
 ## 단계 4 — 가드레일 read + build.md 작성
 
 1. **가드레일 read (1회)**: `<worktree>/CLAUDE.md`와 TASK 문서(`doc`)를 read한다. 작업 규칙·범위의 ground truth. (가드레일은 워크트리에 복사돼 있다.)
-2. **build.md 작성**: TASK 문서의 §8 작업 단계 · §9 완료 기준 · §9.1 단위 테스트 명세 · §12 컨텍스트 임베드를 읽고, `<build_md>`(`.process/<docName>/forge-scope-build.md`)의 고정 3-Step 골격에 **구체 내용을 채운다**:
+2. **build.md 작성**: TASK 문서의 §8 작업 단계 · §9 완료 기준 · §9.1 단위 테스트 명세 · §9.2 엣지 케이스 · §9.3 오류 처리 · §12 구현 참고 정보를 읽고, `<build_md>`(`.process/<docName>/forge-scope-build.md`)의 고정 3-Step 골격에 **구체 내용을 채운다**:
    - **빌드 타겟(.csproj)**: §9.1 "프로젝트" 칸에서 도출해 입력 절에 명시. (솔루션 금지 — 프로젝트만)
    - Step 1 계약: §12 외부계약/데이터구조 기반 인터페이스·DTO.
-   - Step 1 테스트: §9.1 TS 행 기반 단위 테스트(§9 AC 검증).
-   - Step 2 구현: §8 작업 단계 기반.
+   - Step 1 테스트: §9.1 TS 행 기반 단위 테스트(§9 AC 검증). §9.2/§9.3 에서 단위 테스트로 닫을 수 있는 경계·오류 조건은 테스트에 포함.
+   - Step 2 구현: §8 작업 단계 기반. §9.2/§9.3 의 경계 조건·오류 처리 정책을 구현 범위에 반영.
 
 ---
 

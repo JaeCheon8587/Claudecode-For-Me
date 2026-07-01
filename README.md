@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v3.2.1 · 커스텀 스킬 11종 + 슬래시 커맨드 15종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v3.3.0 · 커스텀 스킬 13종 + 슬래시 커맨드 17종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,12 +11,12 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `3.2.1` |
+| 버전 | `3.3.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
 | 네임스페이스 | `/claudecode-for-me:<name>` |
-| 구성요소 | Skill 11 · Command 15 · Python runner 5 (`scripts/`) |
+| 구성요소 | Skill 13 · Command 17 · Python helper 5 (`scripts/`) |
 | 외부 연동 도구 | [`codenavigator`](https://github.com/JaeCheon8587/codenavigator) (PyPI) — codenav-bootstrap / codenav-frontmatter-gen 슬래시가 호출 |
 
 플러그인은 **글로벌 캐시**에 설치되므로 한 번 설치 후 모든 프로젝트의 **새 세션**에서 자동 노출된다. 프로젝트별 재설치 불필요.
@@ -66,6 +66,10 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v3.3.0 — task-write / ssot-write 분리 파이프라인 추가
+
+`task-write`와 `ssot-write`를 추가해 기존 `docs-add-task`의 대형 문서 upsert 흐름을 두 단계로 분리했다. `task-write`는 요구사항 문서나 자연어 요청에서 TASK 작업 범위 계약만 생성하고 영구 SSOT는 분석·수정하지 않는다. `ssot-write`는 완성된 TASK를 Scope Authority로 삼아 PRD/FC/FRD/ADR/ADR-CATALOG/ARCHITECTURE를 좁게 갱신하며, read-only impact auditor의 SSOT 종류별 matrix를 Phase 3의 `Confirmed SSOT Action Matrix`로 승격한 뒤 consistency auditor에 전달한다. Work Packet 작성은 계속 별도 `work-packet-write` 후속 단계로만 안내한다. 관련 커맨드, auditor 템플릿, process build/progress 템플릿, 테스트를 함께 추가했다.
 
 ### v3.2.1 — docs-add-task helper 경로 CLAUDE_PLUGIN_ROOT fallback (Phase 13 silent-skip 버그 수정)
 
@@ -169,7 +173,7 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 
 ## 5. 플러그인 구성요소
 
-### Skill 11종
+### Skill 13종
 
 | Skill | 슬래시 커맨드 | 역할 |
 |---|---|---|
@@ -184,8 +188,10 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `meta-prompter` | `/claudecode-for-me:meta-prompter [요청]` | 거친 요청 → 구조화된 메타 프롬프트 |
 | `requirement-spec` | `/claudecode-for-me:requirement-spec [주제]` | grill-me→acceptance-design→meta-prompter→codex 검증을 자동 체인. 요구사항 도출·완료조건 4축 설계·개발 지시서 `.requirements/requirement-{slug}.md` 산출 후 정리본+설계본 대비 codex 검증↔보완 수렴 루프(최대 3회·99% 임계) |
 | `safe-pull` | `/claudecode-for-me:safe-pull [원격/브랜치]` | git pull 전 fetch(비파괴)로 변경·충돌·사이드이펙트 브리핑 후 AskUserQuestion 컨펌 게이트 |
+| `ssot-write` | `/claudecode-for-me:ssot-write <TASK-path> [--app <APP>] [--name <slug>] [--resume]` | TASK를 기준으로 PRD/FC/FRD/ADR/ADR-CATALOG/ARCHITECTURE 영구 SSOT를 갱신. read-only 영향 분석과 수정 후 일관성 감사를 거치며 `.process/<slug>/`에 계획과 진행로그 기록 |
+| `task-write` | `/claudecode-for-me:task-write [--app <APP>] [--from <requirements-path>] [요청]` | 요구사항 문서/자연어 요청에서 TASK 작업 범위 계약만 생성. FRD/FC/ADR/ADR-CATALOG/PRD/ARCHITECTURE 분석·수정 없음 |
 
-### Command 15종
+### Command 17종
 
 | Command | 설명 |
 |---|---|
@@ -204,6 +210,8 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `meta-prompter` | meta-prompter skill 진입 |
 | `requirement-spec` | requirement-spec skill 진입. grill-me→acceptance-design→meta-prompter→codex 검증 자동 체인 메타 스킬 |
 | `safe-pull` | safe-pull skill 진입. fetch 후 브리핑 → 컨펌 게이트 → pull |
+| `ssot-write` | ssot-write skill 진입. TASK 기반으로 영구 SSOT 문서를 갱신하고 read-only auditor로 영향/일관성 감사 |
+| `task-write` | task-write skill 진입. TASK 파일만 생성하고 SSOT 문서는 수정하지 않음 |
 
 ---
 
@@ -297,7 +305,22 @@ codenav --root <repo> ui --port 9876
 - **요구사항 정합 자동 검증 (codex)** — 작성 후 요구사항서↔생성문서 반영률(%) 채점, 99% 또는 3회까지 검증↔보강 수렴. 미달 시 현재 %·부족 항목 보고. 전용 리포트 `.review/req-conformance-*.md`. codex 미설치·요구사항서 부재 시 생략. (단계5 doc-driven-review=문서↔**코드** 와 축 다름: 본 검증=요구사항서↔**생성문서**.)
 - Python helper (read-only): `docs_helpers.py {list-apps|next-id|parse-fc|parse-frd|git-user|check}` · 정합 검증: `docs_conformance.py --reference <req> --targets <docs...>`. 실행 경로 = 로컬 `./scripts/` fallback → `${CLAUDE_PLUGIN_ROOT}/scripts/` (소비자 repo 에 미복사, cwd 는 대상 repo 유지)
 
-### 6.4 forge-scope / forge-cancel (harness_framework 임베디드)
+### 6.4 task-write / ssot-write (TASK 계약 → 영구 SSOT 반영)
+
+```
+/claudecode-for-me:task-write --app Billing --from .requirements/order-refund.md
+/claudecode-for-me:ssot-write docs/Billing/TASK/Billing-TASK-014.md --app Billing
+/claudecode-for-me:ssot-write docs/Billing/TASK/Billing-TASK-014.md --resume
+```
+
+- **책임 분리** — `task-write`는 TASK 파일만 생성한다. PRD/FC/FRD/ADR/ADR-CATALOG/ARCHITECTURE 분석·수정·후보 작성은 금지.
+- **SSOT 갱신 단계** — `ssot-write`는 완성된 TASK를 Scope Authority로 삼아 영구 SSOT를 좁게 생성·수정한다.
+- **read-only auditor 2회** — 영향 분석은 SSOT 종류별 matrix로 판정하고, 수정 후 감사는 확정 matrix 기준으로 expected/observed/fix를 파일별 점검한다.
+- **프로세스 기록** — `.process/<TASK-stem>/ssot-write-build.md`에 `Confirmed SSOT Action Matrix`, `ssot-write-progress.md`에 최신 Stage Status와 append-only Log를 남긴다.
+- **TASK 인용 금지** — 영구 SSOT 본문과 변경 이력에는 TASK markdown link/TASK ID를 남기지 않는다.
+- **후속 단계** — Work Packet 생성은 이 스킬이 하지 않고 `Next: work-packet-write`로만 안내한다.
+
+### 6.5 forge-scope / forge-cancel (harness_framework 임베디드)
 
 `forge-scope`는 TASK 문서 1건을 워크트리에서 **고정 계약-TDD 파이프라인**으로 구현한다. python(`worktree_setup.py`)은 **셋업·검증·정리만** 하고, 실제 코딩(계약+테스트→구현→빌드/유닛테스트)은 호출 세션이 워크트리 안에서 인라인으로 수행한다. 빌드/테스트는 **솔루션(`*.sln`) 금지, 대상 `.csproj` 단위만**.
 
@@ -612,7 +635,9 @@ Claudecode-For-Me/
 │   ├── grill-me/
 │   ├── meta-prompter/
 │   ├── requirement-spec/
-│   └── safe-pull/
+│   ├── safe-pull/
+│   ├── ssot-write/
+│   └── task-write/
 ├── commands/                    # 슬래시 커맨드 (명시 호출)
 │   ├── codenav-templates/       # /codenav-install 이 워크스페이스로 복사하는 자산
 │   │   ├── CODENAV-GUIDE-TEMPLATE.md
@@ -631,10 +656,12 @@ Claudecode-For-Me/
 │   ├── grill-me.md
 │   ├── meta-prompter.md
 │   ├── requirement-spec.md
-│   └── safe-pull.md
+│   ├── safe-pull.md
+│   ├── ssot-write.md
+│   └── task-write.md
 ├── docs/                       # v0.7 문서 시스템 자산
 │   └── .templates/             # PRD/FC/FRD/ADR/ARCHITECTURE/CLAUDE/README 양식 + App/ + .rules/ (코드 룰 3종)
-├── scripts/                     # Python 헬퍼·러너
+├── scripts/                     # Python deterministic helper
 │   ├── ddr_loop.py              # ddr-loop 워크트리·docs 검증 + .process 스캐폴딩 (init)
 │   ├── doc_driven_review.py
 │   ├── docs_conformance.py

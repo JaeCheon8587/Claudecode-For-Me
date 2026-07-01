@@ -1,6 +1,6 @@
 ---
-description: 아이디어/계획/작업을 집요한 질문으로 구체화하고 요구사항 정리
-argument-hint: "<주제>"
+description: 아이디어/계획/작업을 집요한 질문으로 구체화하고 요구사항 정리 (--lite 핵심 3문답, --full 전체 탐색)
+argument-hint: "[--lite|--full] <주제>"
 ---
 
 $ARGUMENTS 주제에 대해 grill-me 스킬을 실행하라.

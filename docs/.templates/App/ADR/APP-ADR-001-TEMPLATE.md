@@ -45,4 +45,4 @@
 - [{App}-FC](../{App}-FC.md) — {반영 절 또는 "없음"}
 - [{App}-FRD-{NNN}](../FRD/{App}-FRD-{NNN}.md) — {반영 절 또는 "없음"}
 
-> TASK 인용 X (v0.7 룰 — 영구 SSOT 는 휘발성 TASK 를 인용하지 않는다). TASK 가 본 ADR 결정을 영향받으면 TASK §6 영향 표에 본 ADR 이름을 텍스트로 명시한다.
+> TASK 인용 X — 영구 SSOT 는 휘발성 TASK 를 인용하지 않는다. 코드 실행 시 본 ADR 이 필요하면 Work Packet 의 Required SSOT 표에 본 ADR 을 링크한다.

@@ -10,5 +10,5 @@ $ARGUMENTS 인자로 doc-driven-review 스킬을 실행하라.
 - 첫 doc 경로 인자 비어있으면 "문서 경로 필수" 안내 후 종료.
 - `--wait` / `--background` 미명시 시 변경 규모 측정 후 AskUserQuestion 1회.
 - scope 미명시 시 auto (변경 있으면 working-tree, 없으면 branch).
-- Python 스크립트 stdout verbatim 노출. exit code별 한국어 안내.
+- review helper stdout verbatim 노출. exit code별 한국어 안내.
 - `OUTPUT-SCHEMA-VIOLATION` 라인 있더라도 가공 없이 그대로 노출.

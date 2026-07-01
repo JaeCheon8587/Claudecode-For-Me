@@ -1,0 +1,4 @@
+interface:
+  display_name: "TaskWrite"
+  short_description: "Create TASK scope specs only"
+  default_prompt: "Create a TASK document from the provided requirement."

@@ -7,7 +7,7 @@
 ## 용어 정의
 
 - **SOLUTION_CODE**: 솔루션(레포 전체) 식별자. 예: `XLAB`. 솔루션 공통 문서 (`ARCHITECTURE.md` 등) 에서 사용.
-- **SYSTEM_CODE** ≡ **APP_CODE** ≡ **{App}**: App(S/W 단위) 식별자. 동일 개념의 3개 별칭. 본 파일의 § Backend Services Overview 표가 단일 출처(SSOT). 예: `LOADER`. App별 문서 ID 패턴 `{SYSTEM_CODE}-PRD`, `{SYSTEM_CODE}-FC`, `{SYSTEM_CODE}-FRD-{NNN}`, `{SYSTEM_CODE}-TASK-{NNN}`, `{SYSTEM_CODE}-ADR-{NNN}` 등에 사용. (RFD 양식은 DOCUMENT_GUIDE v0.7 폐기 — 리팩토링은 TASK 작업 유형 = `refactor`.)
+- **SYSTEM_CODE** ≡ **APP_CODE** ≡ **{App}**: App(S/W 단위) 식별자. 동일 개념의 3개 별칭. 본 파일의 § Backend Services Overview 표가 단일 출처(SSOT). 예: `LOADER`. App별 문서 ID 패턴 `{SYSTEM_CODE}-PRD`, `{SYSTEM_CODE}-FC`, `{SYSTEM_CODE}-FRD-{NNN}`, `{SYSTEM_CODE}-TASK-{NNN}`, `{SYSTEM_CODE}-WP-{NNN}`, `{SYSTEM_CODE}-ADR-{NNN}` 등에 사용. (RFD 양식은 DOCUMENT_GUIDE v0.7 폐기 — 리팩토링은 TASK 작업 유형 = `refactor`.)
 
 상세 식별자 규약은 [`docs/DOCUMENT_GUIDE.md`](docs/DOCUMENT_GUIDE.md) §5 참조.
 
@@ -24,13 +24,13 @@
 | **문서 작성 룰** | [`docs/DOCUMENT_GUIDE.md`](docs/DOCUMENT_GUIDE.md) | 문서 작성 SSOT — 식별자/메타/변경 이력/SSOT 인용 패턴/AI 작업 시나리오 |
 | **솔루션 ARCHITECTURE** | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | 솔루션 공통 룰 (레이어 모델·참조 매트릭스·폴더→레이어 매핑·접미사) |
 | **(선택) 솔루션 PRD** | [`docs/PRD.md`](docs/PRD.md) | 솔루션 단일 PRD (다중 S/W 통합 시). per-app PRD 만 사용 시 미배치 — 해당 행 삭제 |
-| **App: {SYSTEM_CODE}** | [`docs/{SYSTEM_CODE}/`](docs/{SYSTEM_CODE}/) | App별 PRD/FC/ARCHITECTURE/FRD/TASK/ADR/ADR-CATALOG SSOT 폴더 |
-| **빈 템플릿 (보존)** | [`docs/.templates/`](docs/.templates/) | Active 11 종 양식 + 가이드 원본. Legacy 양식은 호환 확인용으로만 보존 |
+| **App: {SYSTEM_CODE}** | [`docs/{SYSTEM_CODE}/`](docs/{SYSTEM_CODE}/) | App별 PRD/FC/ARCHITECTURE/FRD/TASK/WORK_PACKET/ADR/ADR-CATALOG 폴더 |
+| **빈 템플릿 (보존)** | [`docs/.templates/`](docs/.templates/) | Active 12 종 양식 + 가이드 원본. Legacy 양식은 호환 확인용으로만 보존 |
 | {Forge/CI 자동화} | {경로 또는 "해당 없음"} | {도구 역할 한 줄} |
 
 App 다수 시 `App: {SYSTEM_CODE}` 행 복제. 폴더 구조 상세는 [`docs/DOCUMENT_GUIDE.md`](docs/DOCUMENT_GUIDE.md) §1.
 
-### `docs/.templates/` 구성 (Active 양식 11 + 가이드)
+### `docs/.templates/` 구성 (Active 양식 12 + 가이드)
 
 | 위치 | 양식 | 용도 |
 |---|---|---|
@@ -43,7 +43,8 @@ App 다수 시 `App: {SYSTEM_CODE}` 행 복제. 폴더 구조 상세는 [`docs/D
 | `.templates/App/APP-ADR-CATALOG-TEMPLATE.md` | App ADR Catalog | `docs/{SYSTEM_CODE}/{SYSTEM_CODE}-ADR-CATALOG.md` |
 | `.templates/App/ADR/APP-ADR-001-TEMPLATE.md` | App ADR 본문 (단일 ADR 1건 base) | `docs/{SYSTEM_CODE}/ADR/{SYSTEM_CODE}-ADR-{NNN}.md` |
 | `.templates/App/FRD/APP-FRD-001-TEMPLATE.md` | App FRD 본문 (기능 요구 문서 1건 base, 코드 상세 금지) | `docs/{SYSTEM_CODE}/FRD/{SYSTEM_CODE}-FRD-{NNN}.md` |
-| `.templates/App/TASK/APP-TASK-001-TEMPLATE.md` | App TASK 본문 (AI 실행용 휘발성 작업 지시서 base. 작업 유형 = feature / refactor / maintenance / migration / setup / investigation. RFD 흡수) | `docs/{SYSTEM_CODE}/TASK/{SYSTEM_CODE}-TASK-{NNN}.md` |
+| `.templates/App/TASK/APP-TASK-001-TEMPLATE.md` | App TASK 본문 (작업 범위 계약. 작업 유형 = feature / refactor / maintenance / migration / setup / investigation. RFD 흡수) | `docs/{SYSTEM_CODE}/TASK/{SYSTEM_CODE}-TASK-{NNN}.md` |
+| `.templates/App/WORK_PACKET/APP-WP-001-TEMPLATE.md` | App Work Packet 본문 (TASK + Required SSOT 실행 manifest) | `docs/{SYSTEM_CODE}/WORK_PACKET/{SYSTEM_CODE}-WP-{NNN}.md` |
 | `.templates/DOCUMENT_GUIDE.md` | 문서 작성 가이드 | `docs/` 루트로 그대로 복사 (가이드 SSOT) |
 
 Redirect/Legacy 양식 (`ADR-TEMPLATE.md`, `FC-TEMPLATE.md`, `FRD-TEMPLATE.md`, `README-TEMPLATE.md`, `UI_GUIDE-TEMPLATE.md`) 은 0.2 이전 전역 문서 구조 이식 확인용이다. 신규 문서 작성에는 위 Active 양식만 사용한다.
@@ -68,24 +69,23 @@ ADR 명칭은 [`docs/DOCUMENT_GUIDE.md`](docs/DOCUMENT_GUIDE.md) 0.3 기준이�
   3. `docs/{SYSTEM_CODE}/FRD/{SYSTEM_CODE}-FRD-{NNN}.md` 신규 (`.templates/App/FRD/APP-FRD-001-TEMPLATE.md` 복사·placeholder 채움. 코드 상세 금지)
   4. 필요 시 `docs/{SYSTEM_CODE}/ADR/{SYSTEM_CODE}-ADR-{NNN}.md` 등재 (`.templates/App/ADR/APP-ADR-001-TEMPLATE.md` 복사) + `{SYSTEM_CODE}-ADR-CATALOG.md` 동기화
   5. 구현 착수 전 최신 코드 기준으로 세부 설계 판단
-- **AI 실행용 작업 지시서 (TASK) 작성 흐름** — 모든 코드 작업 (feature / refactor / maintenance / migration / setup / investigation) 통합:
-  1. (사전) 영향 영구 SSOT (PRD/FC/FRD/ADR/ADR-CATALOG/ARCHITECTURE) 를 작성자가 직접 갱신
-  2. `docs/{SYSTEM_CODE}/TASK/{SYSTEM_CODE}-TASK-{NNN}.md` 신규 (`.templates/App/TASK/APP-TASK-001-TEMPLATE.md` 복사) — 휘발성 + self-contained. 외부 SSOT 마크다운 링크 인용 금지 (양방향)
-  3. TASK §6 영향 SSOT 표에 갱신 상태 = "완료" 텍스트로 선언
-  4. TASK §12 컨텍스트 임베드 — AI 코드 실행에 필요한 외부 계약·데이터 구조·정책·코드 경로를 본문에 임베드
-  5. AI 에게 TASK 던져 §8 실행. AI 는 코드만 변경
-  6. 완료 후 TASK 파일 삭제 가능
+- **AI 코드 작업 준비 흐름** — 모든 코드 작업 (feature / refactor / maintenance / migration / setup / investigation) 통합:
+  1. `docs/{SYSTEM_CODE}/TASK/{SYSTEM_CODE}-TASK-{NNN}.md` 신규 (`.templates/App/TASK/APP-TASK-001-TEMPLATE.md` 복사) — 작업 목적·범위·비목표·완료 기준·엣지 케이스·오류 처리·테스트 기준 작성
+  2. TASK 확정 후 관련 SSOT (PRD/FC/FRD/ADR/ADR-CATALOG/ARCHITECTURE) 갱신
+  3. `docs/{SYSTEM_CODE}/WORK_PACKET/{SYSTEM_CODE}-WP-{NNN}.md` 신규 (`.templates/App/WORK_PACKET/APP-WP-001-TEMPLATE.md` 복사) — TASK 링크 + Required SSOT 링크 + 충돌 규칙 작성
+  4. AI 에게 Work Packet 을 제공. AI 는 TASK 를 범위 기준, SSOT 를 진실/제약 기준으로 사용
+  5. 완료 후 TASK/Work Packet 삭제 가능. 영구 추적은 SSOT 변경 이력과 ADR 에 남김
 - ~~리팩토링 계획 작성 흐름~~ — **DEPRECATED (v0.7)**. RFD 폐기. 리팩토링도 위 TASK 흐름 (작업 유형 = `refactor`).
 - **신규 App 추가**:
   1. 본 파일 § Backend Services Overview 표 행 추가 (SYSTEM_CODE 확정)
   2. 본 파일 § 설계 문서 인덱스 표에 `App: {SYSTEM_CODE}` 행 복제·추가
-  3. `docs/{SYSTEM_CODE}/` 폴더 생성 + 하위 `FRD/`, `ADR/`, `TASK/` 서브폴더 생성 (RFD 폐기 — v0.7)
+  3. `docs/{SYSTEM_CODE}/` 폴더 생성 + 하위 `FRD/`, `ADR/`, `TASK/`, `WORK_PACKET/` 서브폴더 생성 (RFD 폐기 — v0.7)
   4. `.templates/App/` 의 4 종 직접 양식 복사·rename:
      - `APP-PRD-TEMPLATE.md` → `docs/{SYSTEM_CODE}/{SYSTEM_CODE}-PRD.md`
      - `APP-FC-TEMPLATE.md` → `docs/{SYSTEM_CODE}/{SYSTEM_CODE}-FC.md`
      - `APP-ARCHITECTURE-TEMPLATE.md` → `docs/{SYSTEM_CODE}/{SYSTEM_CODE}-ARCHITECTURE.md`
      - `APP-ADR-CATALOG-TEMPLATE.md` → `docs/{SYSTEM_CODE}/{SYSTEM_CODE}-ADR-CATALOG.md`
-  5. 첫 ADR/FRD/TASK 작성 시 `.templates/App/ADR/`, `.templates/App/FRD/`, `.templates/App/TASK/` 서브폴더 양식 사용 (RFD 폐기).
+  5. 첫 ADR/FRD/TASK/Work Packet 작성 시 `.templates/App/ADR/`, `.templates/App/FRD/`, `.templates/App/TASK/`, `.templates/App/WORK_PACKET/` 서브폴더 양식 사용 (RFD 폐기).
   6. 솔루션 공통 양식 (`.templates/PRD-TEMPLATE.md`, `.templates/ARCHITECTURE-TEMPLATE.md`) 은 신규 App 시 사용 안 함.
 - **신규 ADR 등재**: `.templates/App/ADR/APP-ADR-001-TEMPLATE.md` 복사 → `docs/{SYSTEM_CODE}/ADR/{SYSTEM_CODE}-ADR-{NNN}.md` → `{SYSTEM_CODE}-ADR-CATALOG.md` Proposed/Accepted 행 추가 → 영향 PRD/FC/FRD 본문에 ADR 인용 (TASK 인용 X — v0.7 룰).
 
@@ -98,11 +98,11 @@ ADR 명칭은 [`docs/DOCUMENT_GUIDE.md`](docs/DOCUMENT_GUIDE.md) 0.3 기준이�
 3. `docs/.templates/ARCHITECTURE-TEMPLATE.md` → `docs/ARCHITECTURE.md` 로 복사·rename. SOLUTION_CODE 등 placeholder 채움.
 4. (선택) `docs/.templates/PRD-TEMPLATE.md` 는 솔루션 단일 PRD 가 필요한 경우에만 `docs/PRD.md` 로 복사. per-app PRD 만 사용 시 미복사.
 5. 첫 App 도입은 위 § 진입 순서 "신규 App 추가" 절차 수행.
-6. `docs/.templates/` 폴더는 **원본 보존** — 추후 신규 App/ADR/FRD/TASK 추가 시 재참조.
+6. `docs/.templates/` 폴더는 **원본 보존** — 추후 신규 App/ADR/FRD/TASK/Work Packet 추가 시 재참조.
 
 ## 절대 변경 금지
 
-- `docs/.templates/**` — 원본 양식. 사용자 승인 전 수정 금지 (신규 App/ADR/FRD/TASK 부트스트랩 시 재참조).
+- `docs/.templates/**` — 원본 양식. 사용자 승인 전 수정 금지 (신규 App/ADR/FRD/TASK/Work Packet 부트스트랩 시 재참조).
 - `docs/DOCUMENT_GUIDE.md`, `docs/ARCHITECTURE.md` — 가이드 SSOT. 사용자 승인 전 수정 금지.
 - `/CLAUDE.md`(본 파일), `MEMORY.md` — 사용자 승인 전 수정 금지.
 - {`README.md`, CI 설정, Forge 도구 등 도메인별 보존 항목}.

@@ -13,3 +13,4 @@ Test/
 _inspect.py
 _dbg.py
 _debug_*.py
+.claude/doc-driven-review-logs/

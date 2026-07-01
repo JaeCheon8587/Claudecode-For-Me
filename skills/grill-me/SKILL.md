@@ -1,7 +1,7 @@
 ---
 name: grill-me
-description: 집요한 질문으로 아이디어/계획/작업을 구체화하고 요구사항 정리
-argument-hint: "[구체화할 주제/아이디어]"
+description: 집요한 질문으로 아이디어/계획/작업을 구체화하고 요구사항 정리. --lite는 최대 3문답으로 핵심만 빠르게 정리, --full은 기존 전체 탐색.
+argument-hint: "[--lite|--full] [구체화할 주제/아이디어]"
 ---
 
 # Grill Me
@@ -11,11 +11,23 @@ Claude is not a passive recorder — act as an **aggressive conversation partner
 
 ---
 
+## Mode
+
+`$ARGUMENTS`에서 실행 강도를 먼저 판정한다.
+
+- `--lite`: 핵심 목적·범위·완료조건만 빠르게 못 박는다. 최대 3문답 후 정리본을 만든다.
+- `--full`: 기존 전체 탐색을 수행한다.
+- 미지정: `--full`로 간주한다. 기존 호출의 동작을 보존한다.
+
+모드 플래그는 주제 텍스트에서 제외한다.
+
 ## Phase 0: Orient
 
 When the skill activates:
 1. **Confirm the topic in 1–2 sentences** — state your understanding of what's being concretized
-2. **Declare the approach**: "One question at a time. I'll push back if anything is unclear or doesn't add up."
+2. **Declare the approach**:
+   - lite: "Lite mode로 핵심 목적·범위·완료조건만 최대 3문답으로 좁히겠습니다. 모호하면 되묻습니다."
+   - full: "One question at a time. I'll push back if anything is unclear or doesn't add up."
 3. **If the scope is too broad**, ask this first: *"Which part do you want to nail down first?"*
 
 ---
@@ -25,6 +37,9 @@ When the skill activates:
 Before the first question, mentally map the areas to explore. Do NOT share this map with the user — use it only to guide question order.
 
 The list below is a starting point. Skip irrelevant areas, add new ones based on judgment, and always prioritize gaps that emerge from the conversation over the list itself.
+
+- **Lite mode focus**: Purpose, Scope, Success Criteria를 우선한다. Core Assumptions 또는 Key Decisions가 명백히 위험하면 그중 하나만 추가로 묻는다.
+- **Full mode focus**: 아래 전체 탐색 영역을 상황에 맞게 사용한다.
 
 - **Purpose** — Why is this needed? What happens without it?
 - **Scope** — Where does it start and where does it end?
@@ -46,6 +61,7 @@ The list below is a starting point. Skip irrelevant areas, add new ones based on
 ### Core Rules
 
 - **One question per turn. No exceptions.**
+- **Lite mode cap: 최대 3문답.** 3번째 답변 뒤에는 새 가지를 열지 말고 정리본 생성으로 이동한다. 단, 논리 모순이 남아 있으면 그 모순 1건만 해소하고 종료한다.
 - **Don't let vague answers slide.** Push back and re-ask.
 - **Call out logical inconsistencies explicitly.** "That seems to contradict X — how do you reconcile that?"
 - **After each answer, judge:**
@@ -74,7 +90,7 @@ AskUserQuestion 호출:
 
 ### Progress Tracker
 
-Every **3–4 exchanges**, briefly surface where you are:
+Full mode에서는 every **3–4 exchanges**, briefly surface where you are. Lite mode에서는 progress tracker를 생략한다.
 
 ```
 ---
@@ -93,7 +109,7 @@ If answers feel too polished or rehearsed, escalate:
 - **Second-order**: "Assume this succeeds. What new problem does that create?"
 - **Constraint test**: "What happens if you lose [key resource/assumption] halfway through?"
 
-Use sparingly — only when genuine weak spots emerge, not as filler.
+Use sparingly — only when genuine weak spots emerge, not as filler. Lite mode에서는 Escalation을 1회 이하로 제한한다.
 
 ---
 
@@ -161,7 +177,8 @@ When all areas are resolved or the user wants to wrap up, produce the deliverabl
 ## Termination Criteria
 
 The session is complete when:
-- All major areas have been explored at least one level deep, AND
+- Lite mode: Purpose, Scope, Success Criteria가 최소 한 번씩 다뤄졌거나 최대 3문답에 도달했고, AND
+- Full mode: All major areas have been explored at least one level deep, AND
 - No logical contradictions remain unresolved, AND
 - The last 2 exchanges have not surfaced any new unresolved gaps
 
