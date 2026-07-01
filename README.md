@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v3.3.0 · 커스텀 스킬 13종 + 슬래시 커맨드 17종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v3.4.0 · 커스텀 스킬 14종 + 슬래시 커맨드 18종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,12 +11,12 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `3.3.0` |
+| 버전 | `3.4.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
 | 네임스페이스 | `/claudecode-for-me:<name>` |
-| 구성요소 | Skill 13 · Command 17 · Python helper 5 (`scripts/`) |
+| 구성요소 | Skill 14 · Command 18 · Python helper 5 (`scripts/`) |
 | 외부 연동 도구 | [`codenavigator`](https://github.com/JaeCheon8587/codenavigator) (PyPI) — codenav-bootstrap / codenav-frontmatter-gen 슬래시가 호출 |
 
 플러그인은 **글로벌 캐시**에 설치되므로 한 번 설치 후 모든 프로젝트의 **새 세션**에서 자동 노출된다. 프로젝트별 재설치 불필요.
@@ -67,9 +67,13 @@ pip install -U codenavigator
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
 
+### v3.4.0 — work-packet-write 추가 (forge 입력 manifest 생성)
+
+`ssot-write` 이후 단계인 `work-packet-write`를 추가했다. 완성된 TASK와 `ssot-write`의 `Confirmed SSOT Action Matrix`를 읽어 `docs/<App>/WORK_PACKET/<App>-WP-<NNN>.md` 실행 manifest 하나만 생성한다. Work Packet은 Context Router 역할만 하며 TASK/SSOT 본문을 길게 복제하지 않고, Required SSOT 링크·읽을 범위·실행 경계·검증 입력을 정리한다. `docs_helpers.py next-id`에 `wp`/`work-packet` 번호 산출을 추가하고 read-only Phase 5 auditor 템플릿 및 테스트를 포함했다. 다음 단계는 `forge-scope`.
+
 ### v3.3.0 — task-write / ssot-write 분리 파이프라인 추가
 
-`task-write`와 `ssot-write`를 추가해 기존 `docs-add-task`의 대형 문서 upsert 흐름을 두 단계로 분리했다. `task-write`는 요구사항 문서나 자연어 요청에서 TASK 작업 범위 계약만 생성하고 영구 SSOT는 분석·수정하지 않는다. `ssot-write`는 완성된 TASK를 Scope Authority로 삼아 PRD/FC/FRD/ADR/ADR-CATALOG/ARCHITECTURE를 좁게 갱신하며, read-only impact auditor의 SSOT 종류별 matrix를 Phase 3의 `Confirmed SSOT Action Matrix`로 승격한 뒤 consistency auditor에 전달한다. Work Packet 작성은 계속 별도 `work-packet-write` 후속 단계로만 안내한다. 관련 커맨드, auditor 템플릿, process build/progress 템플릿, 테스트를 함께 추가했다.
+`task-write`와 `ssot-write`를 추가해 기존 `docs-add-task`의 대형 문서 upsert 흐름을 두 단계로 분리했다. `task-write`는 요구사항 문서나 자연어 요청에서 TASK 작업 범위 계약만 생성하고 영구 SSOT는 분석·수정하지 않는다. `ssot-write`는 완성된 TASK를 Scope Authority로 삼아 PRD/FC/FRD/ADR/ADR-CATALOG/ARCHITECTURE를 좁게 갱신하며, read-only impact auditor의 SSOT 종류별 matrix를 Phase 3의 `Confirmed SSOT Action Matrix`로 승격한 뒤 consistency auditor에 전달한다. 관련 커맨드, auditor 템플릿, process build/progress 템플릿, 테스트를 함께 추가했다.
 
 ### v3.2.1 — docs-add-task helper 경로 CLAUDE_PLUGIN_ROOT fallback (Phase 13 silent-skip 버그 수정)
 
@@ -173,7 +177,7 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 
 ## 5. 플러그인 구성요소
 
-### Skill 13종
+### Skill 14종
 
 | Skill | 슬래시 커맨드 | 역할 |
 |---|---|---|
@@ -190,8 +194,9 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `safe-pull` | `/claudecode-for-me:safe-pull [원격/브랜치]` | git pull 전 fetch(비파괴)로 변경·충돌·사이드이펙트 브리핑 후 AskUserQuestion 컨펌 게이트 |
 | `ssot-write` | `/claudecode-for-me:ssot-write <TASK-path> [--app <APP>] [--name <slug>] [--resume]` | TASK를 기준으로 PRD/FC/FRD/ADR/ADR-CATALOG/ARCHITECTURE 영구 SSOT를 갱신. read-only 영향 분석과 수정 후 일관성 감사를 거치며 `.process/<slug>/`에 계획과 진행로그 기록 |
 | `task-write` | `/claudecode-for-me:task-write [--app <APP>] [--from <requirements-path>] [요청]` | 요구사항 문서/자연어 요청에서 TASK 작업 범위 계약만 생성. FRD/FC/ADR/ADR-CATALOG/PRD/ARCHITECTURE 분석·수정 없음 |
+| `work-packet-write` | `/claudecode-for-me:work-packet-write <TASK-path> [--app <APP>] [--process <process-dir>] [--name <title>]` | TASK와 Required SSOT를 연결하는 forge 입력용 Work Packet 생성. TASK/SSOT/코드 수정 없이 실행 규칙·경계·검증 입력만 정리 |
 
-### Command 17종
+### Command 18종
 
 | Command | 설명 |
 |---|---|
@@ -212,6 +217,7 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `safe-pull` | safe-pull skill 진입. fetch 후 브리핑 → 컨펌 게이트 → pull |
 | `ssot-write` | ssot-write skill 진입. TASK 기반으로 영구 SSOT 문서를 갱신하고 read-only auditor로 영향/일관성 감사 |
 | `task-write` | task-write skill 진입. TASK 파일만 생성하고 SSOT 문서는 수정하지 않음 |
+| `work-packet-write` | work-packet-write skill 진입. TASK와 Required SSOT를 연결하는 Work Packet만 생성하고 다음 단계를 forge-scope로 넘김 |
 
 ---
 
@@ -310,6 +316,7 @@ codenav --root <repo> ui --port 9876
 ```
 /claudecode-for-me:task-write --app Billing --from .requirements/order-refund.md
 /claudecode-for-me:ssot-write docs/Billing/TASK/Billing-TASK-014.md --app Billing
+/claudecode-for-me:work-packet-write docs/Billing/TASK/Billing-TASK-014.md --app Billing
 /claudecode-for-me:ssot-write docs/Billing/TASK/Billing-TASK-014.md --resume
 ```
 
@@ -318,7 +325,8 @@ codenav --root <repo> ui --port 9876
 - **read-only auditor 2회** — 영향 분석은 SSOT 종류별 matrix로 판정하고, 수정 후 감사는 확정 matrix 기준으로 expected/observed/fix를 파일별 점검한다.
 - **프로세스 기록** — `.process/<TASK-stem>/ssot-write-build.md`에 `Confirmed SSOT Action Matrix`, `ssot-write-progress.md`에 최신 Stage Status와 append-only Log를 남긴다.
 - **TASK 인용 금지** — 영구 SSOT 본문과 변경 이력에는 TASK markdown link/TASK ID를 남기지 않는다.
-- **후속 단계** — Work Packet 생성은 이 스킬이 하지 않고 `Next: work-packet-write`로만 안내한다.
+- **실행 manifest** — `work-packet-write`는 TASK와 Required SSOT를 연결하는 `docs/<App>/WORK_PACKET/<App>-WP-<NNN>.md`만 생성한다.
+- **후속 단계** — Work Packet 생성 후 `Next: forge-scope`로 구현 단계에 넘긴다.
 
 ### 6.5 forge-scope / forge-cancel (harness_framework 임베디드)
 
@@ -637,7 +645,8 @@ Claudecode-For-Me/
 │   ├── requirement-spec/
 │   ├── safe-pull/
 │   ├── ssot-write/
-│   └── task-write/
+│   ├── task-write/
+│   └── work-packet-write/
 ├── commands/                    # 슬래시 커맨드 (명시 호출)
 │   ├── codenav-templates/       # /codenav-install 이 워크스페이스로 복사하는 자산
 │   │   ├── CODENAV-GUIDE-TEMPLATE.md
@@ -658,7 +667,8 @@ Claudecode-For-Me/
 │   ├── requirement-spec.md
 │   ├── safe-pull.md
 │   ├── ssot-write.md
-│   └── task-write.md
+│   ├── task-write.md
+│   └── work-packet-write.md
 ├── docs/                       # v0.7 문서 시스템 자산
 │   └── .templates/             # PRD/FC/FRD/ADR/ARCHITECTURE/CLAUDE/README 양식 + App/ + .rules/ (코드 룰 3종)
 ├── scripts/                     # Python deterministic helper

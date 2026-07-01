@@ -1,0 +1,4 @@
+interface:
+  display_name: "WorkPacketWrite"
+  short_description: "Create Work Packet execution docs"
+  default_prompt: "Use $work-packet-write to create a Work Packet from a TASK file."

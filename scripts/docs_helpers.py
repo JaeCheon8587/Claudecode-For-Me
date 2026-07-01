@@ -2,7 +2,7 @@
 
 Subcommands:
     list-apps   /CLAUDE.md Backend Services Overview 표 + docs/<App>/ 폴더 교차검증
-    next-id     기존 NNN 최대값 + 1 산출 (frd/task/adr, active 또는 backlog)
+    next-id     기존 NNN 최대값 + 1 산출 (frd/task/adr/wp, active 또는 backlog)
     parse-fc    docs/<App>/<App>-FC.md 5 표 파싱
     parse-frd   docs/<App>/FRD/<App>-FRD-<NNN>.md 파싱
     git-user    git config user.name
@@ -228,10 +228,11 @@ def _scan_nnn(folder: Path, pattern: re.Pattern[str]) -> list[int]:
 
 
 def cmd_next_id(repo: Path, app: str, kind: str, backlog: bool) -> int:
-    if kind not in {"frd", "task", "adr"}:
-        print(f"FAIL ARGS --kind must be frd|task|adr: {kind}", file=sys.stderr)
+    normalized_kind = {"work-packet": "wp", "work_packet": "wp"}.get(kind, kind)
+    if normalized_kind not in {"frd", "task", "adr", "wp"}:
+        print(f"FAIL ARGS --kind must be frd|task|adr|wp|work-packet: {kind}", file=sys.stderr)
         return 2
-    if backlog and kind != "frd":
+    if backlog and normalized_kind != "frd":
         print("FAIL ARGS --backlog only valid with --kind frd", file=sys.stderr)
         return 2
 
@@ -240,18 +241,21 @@ def cmd_next_id(repo: Path, app: str, kind: str, backlog: bool) -> int:
         print(f"FAIL ARGS app docs not found: {docs_dir}", file=sys.stderr)
         return 2
 
-    if kind == "frd":
+    if normalized_kind == "frd":
         folder = docs_dir / "FRD"
         pat = FRD_FILENAME_PATTERN(app)
-    elif kind == "task":
+    elif normalized_kind == "task":
         folder = docs_dir / "TASK"
         pat = TASK_FILENAME_PATTERN(app)
-    else:
+    elif normalized_kind == "adr":
         folder = docs_dir / "ADR"
         pat = ADR_FILENAME_PATTERN(app)
+    else:
+        folder = docs_dir / "WORK_PACKET"
+        pat = re.compile(rf"^{re.escape(app)}-WP-(\d{{3}})\.md$")
 
     used = _scan_nnn(folder, pat)
-    if kind == "frd":
+    if normalized_kind == "frd":
         rng = BACKLOG_RANGE if backlog else ACTIVE_RANGE
         in_range = [n for n in used if n in rng]
         if not in_range:
@@ -267,7 +271,7 @@ def cmd_next_id(repo: Path, app: str, kind: str, backlog: bool) -> int:
         else:
             next_n = max(used) + 1
             if next_n > 999:
-                print(f"FAIL LIMIT {kind} range exhausted (max={max(used)})", file=sys.stderr)
+                print(f"FAIL LIMIT {normalized_kind} range exhausted (max={max(used)})", file=sys.stderr)
                 return 2
 
     print(f"{next_n:03d}")
@@ -808,7 +812,7 @@ def main(argv: list[str] | None = None) -> int:
     sp_next = sub.add_parser("next-id")
     sp_next.add_argument("--repo", required=True)
     sp_next.add_argument("--app", required=True)
-    sp_next.add_argument("--kind", required=True, choices=("frd", "task", "adr"))
+    sp_next.add_argument("--kind", required=True, choices=("frd", "task", "adr", "wp", "work-packet", "work_packet"))
     sp_next.add_argument("--backlog", action="store_true")
 
     sp_pfc = sub.add_parser("parse-fc")

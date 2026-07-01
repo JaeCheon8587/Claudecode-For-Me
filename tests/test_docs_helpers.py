@@ -8,6 +8,26 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import docs_helpers as dh
 
 
+def test_next_id_supports_work_packet_kind_aliases(tmp_path, capsys):
+    wp_dir = tmp_path / "docs" / "XLAB" / "WORK_PACKET"
+    wp_dir.mkdir(parents=True)
+    (wp_dir / "XLAB-WP-001.md").write_text("# one\n", encoding="utf-8")
+    (wp_dir / "XLAB-WP-002.md").write_text("# two\n", encoding="utf-8")
+
+    rc = dh.main([
+        "next-id",
+        "--repo",
+        str(tmp_path),
+        "--app",
+        "XLAB",
+        "--kind",
+        "work-packet",
+    ])
+
+    assert rc == 0
+    assert capsys.readouterr().out.strip() == "003"
+
+
 def write_task(repo: Path, app: str = "XLAB", nnn: str = "001", body_extra: str = "") -> Path:
     task_dir = repo / "docs" / app / "TASK"
     task_dir.mkdir(parents=True)
