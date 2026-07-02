@@ -1,15 +1,11 @@
 ---
 name: ddr-loop
-description: harness_framework ddr-loop. forge-scope 워크트리 브랜치(feat-<slug>)의 변경점을 명시 문서(docs)와 doc-driven-review(codex)로 대조해 일치율(Conformance%)을 매기고, 미달 항목을 현재 세션이 워크트리 안에서 인라인 수정·재검한다. 최대 3회 반복, 일치율 99% 도달 시 정지. reviewer=codex / fixer=세션(자식 spawn 없음). 빌드는 대상 프로젝트(.csproj)만, 솔루션(*.sln) 금지. /claudecode-for-me:ddr-loop 로 실행.
-argument-hint: "<slug> --docs <doc-path>... [--base <ref>] [--model <m>] [--effort <e>]  (slug 생략 시 목록 선택)"
-input: forge 워크트리 slug + 비교 문서 경로 1개 이상
-output: feat-<slug> 브랜치에 회차별 fix 커밋 + .process/<docName>/ddr-loop-{build,progress}.md
-requires-user-interaction: true
+description: harness_framework ddr-loop. forge-scope 워크트리 브랜치의 변경점을 Work Packet/TASK/Required SSOT 또는 명시 docs와 doc-driven-review(codex)로 대조해 일치율(Conformance%)을 매기고, 미달 항목을 현재 세션이 워크트리 안에서 인라인 수정·재검한다. --docs 생략 시 forge-scope-build.md의 Work Packet에서 비교 문서를 자동 구성한다. 최대 3회 반복, 일치율 99% 도달 시 정지. reviewer=codex / fixer=세션(자식 spawn 없음). 빌드는 대상 프로젝트(.csproj)만, 솔루션(*.sln) 금지. /claudecode-for-me:ddr-loop 로 실행.
 ---
 
 # DDR-Loop — Skill (인라인 수렴 루프)
 
-`ddr-loop`은 forge-scope가 만든 워크트리 브랜치를 **문서(docs) 기준으로 수렴**시키는 루프다. codex(`doc_driven_review.py`)가 브랜치 변경점을 docs와 대조해 **일치율(Conformance %)**을 매기고, **현재 세션**이 미달 항목을 워크트리 안에서 인라인 수정한 뒤 재검한다. **최대 3회**, **일치율 ≥ 99%** 도달 시 정지.
+`ddr-loop`은 forge-scope가 만든 워크트리 브랜치를 **문서(docs) 기준으로 수렴**시키는 루프다. Work Packet 기반 forge-scope 산출물이 있으면 `--docs` 없이 Work Packet + 연결 TASK + Required SSOT를 비교 문서로 자동 사용한다. `--docs <doc...>`를 주면 기존처럼 명시 docs override로 동작한다. codex(`doc_driven_review.py`)가 브랜치 변경점을 docs와 대조해 **일치율(Conformance %)**을 매기고, **현재 세션**이 미달 항목을 워크트리 안에서 인라인 수정한 뒤 재검한다. **최대 3회**, **일치율 ≥ 99%** 도달 시 정지.
 
 **역할 분리**: `ddr_loop.py`는 **셋업·검증만**(워크트리·docs 확인, build/progress 스캐폴딩). 리뷰는 `doc_driven_review.py`(codex). 수정·빌드·커밋은 이 세션이 워크트리 안에서 인라인. 자식 claude spawn 없음.
 
@@ -39,27 +35,30 @@ WT="${CLAUDE_PLUGIN_ROOT}/scripts/worktree_setup.py"
 ## 단계 3 — slug 결정 + init
 
 `$ARGUMENTS` 파싱:
-- 첫 토큰이 `--`로 시작하지 않으면 **slug**(positional). `--docs` 뒤 토큰들(다음 `--`flag 전까지)이 **문서 경로**(필수). `--base`/`--model`/`--effort`는 1토큰 옵션.
+- 첫 토큰이 `--`로 시작하지 않으면 **slug**(positional). `--docs` 뒤 토큰들(다음 `--`flag 전까지)은 **명시 비교 문서 경로**. 생략하면 forge-scope Work Packet에서 자동 구성한다. `--base`/`--model`/`--effort`는 1토큰 옵션.
 - **slug 없음** → `python "$WT" list` → 마지막 줄 JSON 배열 파싱. 빈 배열(`[]`)이면 "forge 워크트리 없음 — 먼저 /forge-scope 실행" 보고 후 중단. 아니면 표로 보여주고 `AskUserQuestion`으로 1개 선택.
-- **`--docs` 없음** → "비교 문서 경로 필수(`--docs <doc...>`)" 안내 후 중단.
+- **`--docs` 없음** → `.process/<slug>/forge-scope-build.md`의 Work Packet 경로를 읽고, Work Packet + 연결 TASK + Required SSOT Execution Matrix의 Required 문서를 비교 docs로 자동 구성한다. Work Packet이 없거나 legacy TASK 기반 forge-scope라 자동 구성이 불가능하면 `--docs <doc...>` 필요 메시지로 중단.
 
 ```bash
-python "$DDR" init --slug <slug> --docs <doc...> [--base <ref>]
+python "$DDR" init --slug <slug> [--docs <doc...>] [--base <ref>]
 ```
 **결과 처리**:
 - **exit 2**: stderr(워크트리 없음 / docs 없음)를 그대로 사용자에게 전달하고 중단. **세션은 docs를 만들거나 수정하지 않는다.**
 - **exit 0**: stdout 마지막 줄 manifest JSON 파싱:
   ```json
   {"root":"<abs>","worktree":"<abs>","branch":"feat-<slug>","docName":"<slug>",
-   "docs":["<abs>",...],"base":"<ref|null>","build_md":"<abs>","progress_md":"<abs>"}
+   "docs":["<abs>",...],"docs_source":"auto-work-packet","work_packet":"<abs-or-null>",
+   "task_doc":"<abs-or-null>","required_ssot":["<abs>",...],
+   "base":"<ref|null>","build_md":"<abs>","progress_md":"<abs>"}
   ```
   `init`이 한 것: `.process/<docName>/ddr-loop-build.md`·`ddr-loop-progress.md` 생성/덮어쓰기(**forge-scope 산출물 보존**), 워크트리 `.gitignore`에 `.review/`·`.claude/doc-driven-review-logs/` 추가.
 
 ## 단계 4 — build.md 작성
 
-1. **read(1회)**: `<worktree>/CLAUDE.md` + `docs` 전부. 작업 규칙·정답의 ground truth.
+1. **read(1회)**: `<worktree>/CLAUDE.md` + manifest `docs` 전부. 자동 source면 docs는 Work Packet, 연결 TASK, Required SSOT다. 작업 규칙·정답의 ground truth.
 2. **build.md 채움**(`<build_md>`):
-   - **빌드 타겟(.csproj)**: `.process/<docName>/forge-scope-build.md`가 있으면 그 "빌드 타겟" 재사용. 없으면 docs에서 도출하거나 사용자 지정. (솔루션 금지 — 프로젝트만.)
+   - **입력 source**: `docs_source`, Work Packet, TASK, Required SSOT 목록 확인.
+   - **빌드 타겟(.csproj)**: `.process/<docName>/forge-scope-build.md`가 있으면 그 "빌드 타겟" 재사용. 없으면 manifest docs에서 도출하거나 사용자 지정. (솔루션 금지 — 프로젝트만.)
    - **base ref(vs)**: `git -C <worktree> merge-base feat-<slug> <develop|main>` 으로 분기점 확인하거나 모브랜치명(예: `develop`). manifest.base가 있으면 그걸 우선.
 
 ## 단계 5 — 인라인 수렴 루프 (핵심)
@@ -70,7 +69,7 @@ python "$DDR" init --slug <slug> --docs <doc...> [--base <ref>]
 
 ### ① 검증 (codex)
 ```bash
-python "$REVIEW" --docs <docs...> --worktree feat-<slug> --scope branch [--base <ref>] [--model <m>] [--effort <e>]
+python "$REVIEW" --docs <manifest.docs...> --worktree feat-<slug> --scope branch [--base <ref>] [--model <m>] [--effort <e>]
 ```
 - **exit 2** → codex 미설치 → 안내 후 중단.
 - **exit 3** → 변경 없음(브랜치에 커밋된 diff 없음 — forge-scope 미실행?) → 보고 후 중단.
@@ -116,7 +115,7 @@ git commit -m "fix(ddr-<slug>): iter N 일치율 N%"
 | 인자 | 설명 |
 |---|---|
 | `<slug>` | forge 워크트리 slug. 생략 시 `worktree_setup.py list`→선택 |
-| `--docs <doc...>` | **필수**. 비교 문서 1개 이상 (TASK/FRD/계약 등) |
+| `--docs <doc...>` | 선택. 비교 문서 1개 이상 명시 override. 생략 시 forge-scope Work Packet에서 Work Packet + TASK + Required SSOT 자동 구성 |
 | `--base <ref>` | branch scope 기준 ref (기본 origin/main merge-base; develop 기반이면 명시) |
 | `--model` / `--effort` | codex 모델·reasoning effort passthrough |
 

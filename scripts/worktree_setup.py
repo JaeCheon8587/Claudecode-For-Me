@@ -133,6 +133,128 @@ def _section(text: str, heading_re: str) -> Optional[str]:
     return "\n".join(body)
 
 
+def _split_md_row(line: str) -> list[str]:
+    if not line.strip().startswith("|"):
+        return []
+    return [cell.strip() for cell in line.strip().strip("|").split("|")]
+
+
+def _is_separator_row(cells: list[str]) -> bool:
+    return bool(cells) and all(re.fullmatch(r":?-{3,}:?", c.strip()) for c in cells)
+
+
+def _table_value(text: str, label: str) -> Optional[str]:
+    """문서 전체 markdown 표에서 첫 번째 컬럼이 label 인 행의 두 번째 컬럼."""
+    for line in text.splitlines():
+        cells = _split_md_row(line)
+        if len(cells) >= 2 and cells[0].strip() == label and not _is_separator_row(cells):
+            return cells[1].strip()
+    return None
+
+
+def _markdown_links(text: str) -> list[tuple[str, str]]:
+    return [(m.group(1).strip(), m.group(2).strip()) for m in re.finditer(r"\[([^\]]+)\]\(([^)]+)\)", text)]
+
+
+def _resolve_doc_link(base_doc: Path, href: str) -> Path:
+    href = href.split("#", 1)[0].strip()
+    return (base_doc.parent / href).resolve() if not Path(href).is_absolute() else Path(href)
+
+
+def _markdown_table(section_text: str) -> list[dict[str, str]]:
+    """첫 markdown 표를 header 기반 dict row 로 반환."""
+    header: Optional[list[str]] = None
+    rows: list[dict[str, str]] = []
+    for line in section_text.splitlines():
+        cells = _split_md_row(line)
+        if not cells:
+            if header and rows:
+                break
+            continue
+        if _is_separator_row(cells):
+            continue
+        if header is None:
+            header = cells
+            continue
+        padded = cells + [""] * max(0, len(header) - len(cells))
+        rows.append(dict(zip(header, padded)))
+    return rows
+
+
+def _detect_input_kind(doc: Path, raw: str) -> str:
+    parts = {p.upper() for p in doc.parts}
+    if "WORK_PACKET" in parts:
+        return "WORK_PACKET"
+    if re.search(r"-WP-\d+", doc.stem, flags=re.I):
+        return "WORK_PACKET"
+    if _table_value(raw, "연결 TASK") is not None:
+        return "WORK_PACKET"
+    return "TASK"
+
+
+def _blocking_is_none(section_text: str) -> bool:
+    rows = _markdown_table(section_text)
+    if rows:
+        return all(
+            all((value.strip().lower() == "none") for value in row.values() if value.strip())
+            for row in rows
+        )
+    normalized = re.sub(r"\s+", " ", section_text).strip().lower()
+    return normalized == "none"
+
+
+def _gate_work_packet(doc: Path, raw: str) -> tuple[list[str], Optional[Path]]:
+    """Work Packet 전용 실행 게이트. 문제 목록과 연결 TASK 경로를 반환."""
+    problems: list[str] = []
+
+    status = (_table_value(raw, "상태") or "").strip()
+    if status != "Ready":
+        problems.append(f"Work Packet 상태가 Ready가 아님: {status or '(없음)'} — Draft = do not implement.")
+
+    execution_gate = _section(raw, r"^##\s*3\.\s*Execution Gate\b")
+    if execution_gate is None:
+        problems.append("Execution Gate 섹션 없음 — Work Packet 실행 판단 불가.")
+
+    blocking = _section(raw, r"^##\s*7\.\s*Blocking\s*/\s*Open Questions\b")
+    if blocking is None:
+        problems.append("Blocking / Open Questions 섹션 없음 — Ready 여부 검증 불가.")
+    elif not _blocking_is_none(blocking):
+        problems.append("Blocking / Open Questions 가 none 이 아님 — 해결 후 재시도.")
+
+    task_doc: Optional[Path] = None
+    task_cell = _table_value(raw, "연결 TASK") or ""
+    task_links = _markdown_links(task_cell)
+    if not task_links:
+        sec2 = _section(raw, r"^##\s*2\.\s*TASK\b") or ""
+        task_links = _markdown_links(sec2)
+    if not task_links:
+        problems.append("연결 TASK 링크 없음 — Scope Authority 를 확인할 수 없음.")
+    else:
+        task_doc = _resolve_doc_link(doc, task_links[0][1])
+        if not task_doc.is_file():
+            problems.append(f"연결 TASK 파일 없음: {task_doc}")
+
+    matrix = _section(raw, r"^##\s*4\.\s*Required SSOT Execution Matrix\b")
+    if matrix is None:
+        problems.append("Required SSOT Execution Matrix 섹션 없음.")
+    else:
+        rows = _markdown_table(matrix)
+        required_rows = [row for row in rows if row.get("Priority", "").strip() == "Required"]
+        if not required_rows:
+            problems.append("Required SSOT Execution Matrix 에 Required 행 없음.")
+        for idx, row in enumerate(required_rows, start=1):
+            doc_cell = row.get("Document", "").strip()
+            links = _markdown_links(doc_cell)
+            if not links:
+                problems.append(f"Required SSOT row {idx}: Document 링크 없음.")
+                continue
+            ssot_doc = _resolve_doc_link(doc, links[0][1])
+            if not ssot_doc.is_file():
+                problems.append(f"Required SSOT row {idx}: 파일 없음: {ssot_doc}")
+
+    return problems, task_doc
+
+
 def _gate(doc: Path) -> list[str]:
     """미결/미완성 항목 목록. 비어있으면 통과."""
     problems: list[str] = []
@@ -291,14 +413,26 @@ def _copy_guardrails(root: Path, wt: Path) -> tuple[list[str], list[str]]:
     return copied, skipped
 
 
-def _scaffold_process(wt: Path, doc_name: str, doc_rel: str) -> tuple[Path, Path]:
+def _scaffold_process(
+    wt: Path,
+    doc_name: str,
+    doc_rel: str,
+    *,
+    task_doc_rel: str,
+    work_packet_rel: str,
+) -> tuple[Path, Path]:
     proc = wt / ".process" / doc_name
     if proc.exists():
         shutil.rmtree(proc, ignore_errors=True)
     proc.mkdir(parents=True, exist_ok=True)
 
     tmpl_dir = Path(__file__).resolve().parent / "forge_templates"
-    subs = {"{docName}": doc_name, "{docPath}": doc_rel}
+    subs = {
+        "{docName}": doc_name,
+        "{docPath}": doc_rel,
+        "{taskDocPath}": task_doc_rel,
+        "{workPacketPath}": work_packet_rel,
+    }
 
     def _emit(tmpl_name: str, out_name: str) -> Path:
         out = proc / out_name
@@ -337,6 +471,26 @@ def cmd_init(args: argparse.Namespace) -> int:
     if not doc.is_absolute():
         doc = (Path.cwd() / doc).resolve()
 
+    if not doc.exists():
+        problems = _gate(doc)
+        msg = "§F 검증 게이트 미통과 — 문서 미완성/미결 항목:\n" + \
+            "\n".join(f"  - {p}" for p in problems)
+        _err(msg, EXIT_BLOCKED)
+
+    raw = doc.read_text(encoding="utf-8", errors="replace")
+    input_kind = _detect_input_kind(doc, raw)
+    task_doc: Optional[Path] = doc if input_kind == "TASK" else None
+    work_packet: Optional[Path] = doc if input_kind == "WORK_PACKET" else None
+
+    if input_kind == "WORK_PACKET":
+        wp_problems, linked_task = _gate_work_packet(doc, raw)
+        if linked_task is not None:
+            task_doc = linked_task
+        if wp_problems:
+            msg = "§F Work Packet 실행 게이트 미통과:\n" + \
+                "\n".join(f"  - {p}" for p in wp_problems)
+            _err(msg, EXIT_BLOCKED)
+
     problems = _gate(doc)
     if problems:
         msg = "§F 검증 게이트 미통과 — 문서 미완성/미결 항목:\n" + \
@@ -356,7 +510,21 @@ def cmd_init(args: argparse.Namespace) -> int:
         doc_rel = doc.relative_to(root).as_posix()
     except ValueError:
         doc_rel = doc.as_posix()
-    build_md, progress_md = _scaffold_process(wt, doc_name, doc_rel)
+    if task_doc is not None:
+        try:
+            task_doc_rel = task_doc.relative_to(root).as_posix()
+        except ValueError:
+            task_doc_rel = task_doc.as_posix()
+    else:
+        task_doc_rel = "(unknown)"
+    work_packet_rel = doc_rel if work_packet is not None else "(legacy TASK direct input - none)"
+    build_md, progress_md = _scaffold_process(
+        wt,
+        doc_name,
+        doc_rel,
+        task_doc_rel=task_doc_rel,
+        work_packet_rel=work_packet_rel,
+    )
     _ensure_gitignore(wt)
 
     manifest = {
@@ -365,6 +533,9 @@ def cmd_init(args: argparse.Namespace) -> int:
         "branch": branch,
         "docName": doc_name,
         "doc": str(doc),
+        "input_kind": input_kind,
+        "work_packet": str(work_packet) if work_packet is not None else None,
+        "task_doc": str(task_doc) if task_doc is not None else None,
         "build_md": str(build_md),
         "progress_md": str(progress_md),
         "copied": copied,
@@ -509,7 +680,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     sub = p.add_subparsers(dest="cmd", required=True)
 
     pi = sub.add_parser("init", help="검증 게이트 + 워크트리 + 링크 + 복사 + .process")
-    pi.add_argument("--doc", required=True, help="TASK 문서 경로")
+    pi.add_argument("--doc", required=True, help="Work Packet 또는 TASK 문서 경로")
     pi.add_argument("--name", default=None, help="docName/slug 명시 (기본: doc 파일명 stem)")
     pi.add_argument("--force", action="store_true", help="메인 repo dirty 검사 우회")
     pi.add_argument("--quiet", action="store_true", help="진행 로그 억제 (JSON만)")

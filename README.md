@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v3.4.2 · 커스텀 스킬 14종 + 슬래시 커맨드 18종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v3.4.5 · 커스텀 스킬 14종 + 슬래시 커맨드 18종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,7 +11,7 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `3.4.2` |
+| 버전 | `3.4.5` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
@@ -66,6 +66,14 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v3.4.5 — ddr-loop Work Packet docs 자동 구성
+
+`ddr-loop`가 Work Packet 기반 `forge-scope` 산출물을 직접 소비한다. `--docs`를 생략하면 `.process/<slug>/forge-scope-build.md`의 Work Packet 경로를 읽고, Work Packet + 연결 TASK + `Required SSOT Execution Matrix`의 Required 문서를 `doc-driven-review` 비교 docs로 자동 구성한다. 명시 `--docs <doc...>`는 override로 유지하며, legacy TASK 기반 forge-scope처럼 Work Packet이 없으면 자동 구성을 중단하고 docs 명시를 요구한다.
+
+### v3.4.4 — forge-scope Work Packet gate/output contract 소비
+
+`forge-scope`를 Work Packet 우선 구현 경로로 강화했다. `/forge-scope <WORK_PACKET>` 입력 시 `Ready` 상태만 워크트리를 만들고, `Draft = do not implement`, `Blocking / Open Questions`, 연결 TASK 링크, `Required SSOT Execution Matrix`의 Required 문서 링크/파일 존재를 init 단계에서 차단한다. build 템플릿은 Work Packet + TASK + Required SSOT 입력으로 범위를 채우며, 완료 보고는 `Implementation Output Contract`(`Changed files`, `Scope match`, `Tests run`, `Not run`, `Deviations`) 형식으로 고정한다. `/forge-scope <TASK>` 직접 입력은 legacy 호환으로 유지하되 Work Packet 기반 SSOT gate는 적용되지 않는다.
 
 ### v3.4.2 — work-packet-write 실행 gate/output contract 강화
 
@@ -193,9 +201,9 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `branch-review` | `/claudecode-for-me:branch-review [ref]` | HEAD↔ref diff을 Standards/Spec 2축 병렬 검토 |
 | `codenav-frontmatter-gen` | `/claudecode-for-me:codenav-frontmatter-gen [--limit N] [--apply]` | C# 클래스 description 빈칸을 AI로 일괄 채워 `// ---` frontmatter 블록 삽입 |
 | `doc-driven-review` | `/claudecode-for-me:doc-driven-review <doc-path>... [--worktree <ref>] [--commit <ref>]` | 첨부 문서 기준 working-tree/커밋 변경을 Codex CLI로 검증. Missing/Improve/Overengineered + Conformance(%) + 인용검증 보고. linked worktree·커밋 노드 지목 지원 |
-| `ddr-loop` | `/claudecode-for-me:ddr-loop <slug> --docs <doc>...` | forge 워크트리 브랜치를 docs와 codex로 대조(일치율%), 미달분을 세션이 워크트리 안에서 인라인 수정·재검. 최대 3회·99% 정지. 빌드는 `.csproj`만. 정리는 forge-cancel |
+| `ddr-loop` | `/claudecode-for-me:ddr-loop <slug> [--docs <doc>...]` | forge 워크트리 브랜치를 Work Packet/TASK/Required SSOT 또는 명시 docs와 codex로 대조(일치율%), 미달분을 세션이 워크트리 안에서 인라인 수정·재검. `--docs` 생략 시 forge-scope Work Packet에서 자동 구성. 최대 3회·99% 정지. 빌드는 `.csproj`만. 정리는 forge-cancel |
 | `docs-add-task` | `/claudecode-for-me:docs-add-task [요청]` | v0.7 per-App 문서별 upsert — 신규 기능 FRD 신설 / 기존 영향 FRD 갱신(혼합 허용), FC/PRD/ADR-CATALOG 신설·갱신, TASK 항상 생성, ADR 은 결정 유무에 따라 신설/수정/생략 |
-| `forge-scope` | `/claudecode-for-me:forge-scope <TASK-doc-path> [--name <slug>] [--force]` | TASK 문서 1건을 워크트리에서 고정 계약-TDD 파이프라인(계약+테스트→구현→빌드/유닛테스트)으로 구현. `worktree_setup.py`(플러그인 캐시) init 셋업 후 세션이 인라인 수행. 빌드는 `.csproj` 단위만(솔루션 금지). 정리는 `forge-cancel`. |
+| `forge-scope` | `/claudecode-for-me:forge-scope <WORK_PACKET-or-TASK-doc-path> [--name <slug>] [--force]` | Work Packet을 우선 입력으로 받아 Ready gate, 연결 TASK, Required SSOT Execution Matrix를 소비해 워크트리에서 고정 계약-TDD 파이프라인(계약+테스트→구현→빌드/유닛테스트)으로 구현. TASK 직접 입력은 legacy 호환. 빌드는 `.csproj` 단위만(솔루션 금지). 정리는 `forge-cancel`. |
 | `grill-me` | `/claudecode-for-me:grill-me [주제]` | 1문 1답으로 요구사항 모호점 추적 |
 | `meta-prompter` | `/claudecode-for-me:meta-prompter [요청]` | 거친 요청 → 구조화된 메타 프롬프트 |
 | `requirement-spec` | `/claudecode-for-me:requirement-spec [주제]` | grill-me→acceptance-design→meta-prompter→codex 검증을 자동 체인. 요구사항 도출·완료조건 4축 설계·개발 지시서 `.requirements/requirement-{slug}.md` 산출 후 정리본+설계본 대비 codex 검증↔보완 수렴 루프(최대 3회·99% 임계) |
@@ -338,7 +346,7 @@ codenav --root <repo> ui --port 9876
 
 ### 6.5 forge-scope / forge-cancel (harness_framework 임베디드)
 
-`forge-scope`는 TASK 문서 1건을 워크트리에서 **고정 계약-TDD 파이프라인**으로 구현한다. python(`worktree_setup.py`)은 **셋업·검증·정리만** 하고, 실제 코딩(계약+테스트→구현→빌드/유닛테스트)은 호출 세션이 워크트리 안에서 인라인으로 수행한다. 빌드/테스트는 **솔루션(`*.sln`) 금지, 대상 `.csproj` 단위만**.
+`forge-scope`는 Work Packet을 우선 입력으로 받아 워크트리에서 **고정 계약-TDD 파이프라인**으로 구현한다. python(`worktree_setup.py`)은 **셋업·검증·정리만** 하고, 실제 코딩(계약+테스트→구현→빌드/유닛테스트)은 호출 세션이 워크트리 안에서 인라인으로 수행한다. 빌드/테스트는 **솔루션(`*.sln`) 금지, 대상 `.csproj` 단위만**. TASK 직접 입력은 legacy 호환 경로로 유지된다.
 
 #### 전제 조건
 
@@ -346,7 +354,8 @@ codenav --root <repo> ui --port 9876
 |---|---|---|
 | Python 3.10+ (`python` 또는 `py -3`) | **필수** | 미설치 시 즉시 가이드 출력 후 중단 |
 | git repository | **필수** | 워크트리 기반 동작 |
-| 채워진 TASK 문서 | **필수** | 미결 항목(§7 결정·§11 미확인)·placeholder·`**TEMPLATE**` 배너 잔존 시 검증 게이트가 exit 2로 중단 |
+| Ready Work Packet | **권장 필수** | `Draft = do not implement`. 연결 TASK와 Required SSOT 링크/파일이 없거나 Blocking 이 있으면 exit 2로 중단 |
+| 채워진 TASK 문서 | legacy 호환 | TASK 직접 입력 시 미결 항목(§7 결정·§11 미확인)·placeholder·`**TEMPLATE**` 배너 잔존 시 검증 게이트가 exit 2로 중단. Work Packet 기반 SSOT gate는 없음 |
 
 #### 복사 없음 (플러그인 캐시 직접 실행)
 
@@ -355,11 +364,14 @@ codenav --root <repo> ui --port 9876
 #### 사용 예시
 
 ```bash
-# TASK 문서 1건 구현 (워크트리 .worktree/<slug> + feat-<slug> 브랜치)
-/claudecode-for-me:forge-scope Docs/Loader/TASK/LOADER-TASK-007.md
+# Work Packet 기준 구현 (워크트리 .worktree/<slug> + feat-<slug> 브랜치)
+/claudecode-for-me:forge-scope docs/Loader/WORK_PACKET/LOADER-WP-007.md
 
 # slug 명시
-/claudecode-for-me:forge-scope Docs/App/TASK/APP-TASK-003.md --name order-api
+/claudecode-for-me:forge-scope docs/App/WORK_PACKET/APP-WP-003.md --name order-api
+
+# legacy: TASK 직접 구현 (Work Packet Required SSOT gate 없음)
+/claudecode-for-me:forge-scope docs/App/TASK/APP-TASK-003.md
 
 # 워크트리·브랜치 정리 (서브모듈 메인 원본 보존). slug 생략 시 목록에서 선택
 /claudecode-for-me:forge-cancel LOADER-TASK-007
@@ -370,14 +382,14 @@ codenav --root <repo> ui --port 9876
 
 | 커맨드 | 인자 | 설명 |
 |---|---|---|
-| `forge-scope` | `<TASK-doc-path>` | **필수**. 구현할 TASK 문서 경로 |
+| `forge-scope` | `<WORK_PACKET-or-TASK-doc-path>` | **필수**. 권장 입력은 Work Packet. TASK 경로는 legacy 호환 |
 | | `--name <slug>` | docName·워크트리·브랜치 이름 명시 (기본: 문서 파일명 stem) |
 | | `--force` | 메인 repo dirty 검사 우회 |
 | `forge-cancel` | `[<slug>]` | 제거할 워크트리 slug. 생략 시 목록에서 선택 |
 
 #### 검증 게이트 (forge-scope init)
 
-git repo·TASK 문서 존재·**미결 항목 없음**을 검사. 미결(=`**TEMPLATE**` 배너 / §11 미확인 사항 Open 행 / §7 결정 필요 행 / 미치환 `{...}` placeholder) 시 exit 2로 중단하고 워크트리를 만들지 않는다.
+git repo·입력 문서 존재·**미결 항목 없음**을 검사한다. Work Packet 입력이면 상태가 `Ready`인지, `Execution Gate`가 있는지, `Blocking / Open Questions`가 `none`인지, 연결 TASK와 Required SSOT 링크 파일이 존재하는지 먼저 검사한다. `Draft` 또는 Required SSOT 누락이면 exit 2로 중단하고 워크트리를 만들지 않는다. TASK legacy 입력은 기존 TASK 미결(=`**TEMPLATE**` 배너 / §11 미확인 사항 Open 행 / §7 결정 필요 행 / 미치환 `{...}` placeholder)을 검사한다.
 
 #### 워크트리 서브모듈
 
@@ -523,14 +535,15 @@ git repo·TASK 문서 존재·**미결 항목 없음**을 검사. 미결(=`**TEM
 ### 6.12 ddr-loop (문서↔코드 수렴 루프)
 
 ```
-/claudecode-for-me:ddr-loop LOADER-TASK-007 --docs Docs/Loader/FRD/LOADER-FRD-003.md
+/claudecode-for-me:ddr-loop LOADER-WP-007    # Work Packet 기반 forge-scope면 docs 자동 구성
 /claudecode-for-me:ddr-loop order-api --docs docs/spec.md docs/contract.md --base develop
 /claudecode-for-me:ddr-loop                # slug 생략 → forge 워크트리 목록에서 선택
 ```
 
-forge-scope가 워크트리(feat-<slug>)에 기능을 구현한 뒤, ddr-loop은 그 브랜치 변경점을 **명시 문서(docs) 기준으로 수렴**시킨다. forge-scope→ddr-loop이 자연스러운 연계.
+forge-scope가 워크트리(feat-<slug>)에 기능을 구현한 뒤, ddr-loop은 그 브랜치 변경점을 **Work Packet/TASK/Required SSOT 또는 명시 문서(docs) 기준으로 수렴**시킨다. forge-scope→ddr-loop이 자연스러운 연계다.
 
 - **build-process 방식** — forge-scope처럼 `.process/<docName>/ddr-loop-build.md`(루프 PLAN)·`ddr-loop-progress.md`(회차·일치율 추적)에 기록하며 진행. `ddr_loop.py init`은 `.process/<docName>/`를 지우지 않아 forge-scope 산출물과 공존.
+- **Work Packet 자동 docs** — `--docs`를 생략하면 `.process/<slug>/forge-scope-build.md`의 Work Packet을 읽어 Work Packet + 연결 TASK + Required SSOT 문서를 `doc-driven-review` 입력으로 자동 구성한다. 명시 `--docs`는 override다.
 - **reviewer=codex / fixer=세션** — `doc_driven_review.py`(codex)가 `--worktree feat-<slug> --scope branch`로 브랜치 diff↔docs 대조해 `Conformance: N%` 산정. 미달 항목(Top Priorities/Review Comments/Overengineered)을 **현재 세션이 워크트리 안에서 인라인 수정**(자식 spawn 없음).
 - **수렴 조건(고정)** — 최대 **3회**, 일치율 **≥ 99%** 도달 시 정지. 회차마다 빌드/테스트(**대상 `.csproj`만, 솔루션 금지**) 통과 후 `fix(ddr-<slug>): iter N 일치율 N%` 커밋.
 - **문서 자동수정 금지** — 일치율을 올리려 docs/SSOT를 고치지 않는다. 코드를 docs에 맞춘다.
@@ -702,8 +715,8 @@ Claudecode-For-Me/
 |---|---|---|
 | install 직후 슬래시 자동완성에 안 보임 | 매니페스트는 세션 시작 시 1회 로드 | 세션 종료 → 재시작 |
 | update 후 신규 스킬 호출 불가 | 동일 — 캐시는 갱신됐으나 세션은 구버전 보유 | 세션 재시작 |
-| `forge-scope` 가 워크트리 안 만들고 종료(exit 2) | TASK 문서 미결 항목(§7 결정·§11 미확인·placeholder·`**TEMPLATE**` 배너) | 문서 완성·미결 해소 후 재시도 |
-| `ddr-loop` init exit 2 "forge 워크트리 없음" | 해당 slug 워크트리 미생성 | 먼저 `/forge-scope <TASK-doc>` 실행, 또는 forge-cancel에 쓴 slug 확인 (`worktree_setup.py list`) |
+| `forge-scope` 가 워크트리 안 만들고 종료(exit 2) | Work Packet 이 Draft, Blocking 존재, 연결 TASK/Required SSOT 링크 누락, 또는 TASK 문서 미결 항목(§7 결정·§11 미확인·placeholder·`**TEMPLATE**` 배너) | Work Packet을 Ready로 확정하고 Required SSOT 파일을 생성/연결한 뒤 재시도. TASK legacy 입력이면 문서 완성·미결 해소 |
+| `ddr-loop` init exit 2 "forge 워크트리 없음" | 해당 slug 워크트리 미생성 | 먼저 `/forge-scope <WORK_PACKET>` 실행, 또는 forge-cancel에 쓴 slug 확인 (`worktree_setup.py list`) |
 | `ddr-loop` 첫 review exit 2 | codex CLI 미설치 (리뷰는 codex 의존) | `/codex:setup` 후 재시도 |
 | `docs-add-task` "App 0건" | `/CLAUDE.md` Backend Services Overview 표 + `docs/<App>/` 부재 | App 행 추가 + 폴더 부트스트랩 |
 | `codenav frontmatter gen` 결과 `generated=0` | `claude` CLI 부재 또는 stdout JSON 키 mismatch | `where claude` 확인. v1.15.0+ 는 `result`/`response` 둘 다 처리 |
