@@ -1,3 +1,8 @@
+---
+description: 신규 기능 또는 기존 수정/개선/refactor 설계 문서를 문서별 upsert로 작성 (TASK 항상 생성, ADR은 결정 유무에 따라 신설/수정/생략)
+argument-hint: "<신규 기능 또는 수정/개선/refactor 자연어>"
+---
+
 # docs-add-task
 
 신규 기능 또는 기존 수정/개선/refactor 설계 문서를 **문서별 upsert** 로 작성. AI 가 FC·ADR-CATALOG 보고 영향 자산 자동 식별 후 각 문서를 신설/갱신/생략 분기. TASK 항상 생성, ADR 은 결정 유무에 따라 신설/수정/생략.
