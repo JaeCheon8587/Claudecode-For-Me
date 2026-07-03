@@ -78,7 +78,7 @@ impact auditor output의 `Required SSOT Coverage Matrix`를 검토한다. `PRD /
 - ARCHITECTURE는 런타임 구조, 진입점, 배포/운영 흐름, 주요 의존성 경계가 바뀔 때만 갱신한다.
 - 모호한 영향 범위, 신규/기존 기능 판단, ADR 필요성 판단은 사용자에게 질문하고 중단한다.
 
-영구 SSOT 작성 규칙은 `DOCUMENT_GUIDE v0.9`와 기존 `docs-add-task`의 SSOT upsert 규칙을 좁게 재사용한다.
+영구 SSOT 작성 규칙은 `DOCUMENT_GUIDE v0.9`의 SSOT upsert 규칙을 좁게 재사용한다.
 
 진행로그에는 서브에이전트 결과의 요약과 판정만 기록한다. 전문을 복사하지 않는다.
 

@@ -2,10 +2,10 @@
 """
 Docs Conformance — 요구사항서(기준) ↔ 생성 설계문서 정합을 Codex로 1회 채점.
 
-docs-add-task 가 작성한 설계문서(FRD/TASK/ADR/FC/PRD/ADR-CATALOG)가 원래
-요구사항서를 몇 % 반영했는지 codex 로 채점하고, 부족 항목·보강 지시를 전용
-출력 템플릿으로 돌려준다. 루프(재검증·보강)는 호출자(docs-add-task SKILL)가
-관장하며, 본 스크립트는 **1회 검증**만 수행한다.
+task-write/ssot-write 가 작성한 설계문서(FRD/TASK/ADR/FC/PRD/ADR-CATALOG)가
+원래 요구사항서를 몇 % 반영했는지 codex 로 채점하고, 부족 항목·보강 지시를
+전용 출력 템플릿으로 돌려준다. 루프(재검증·보강)는 호출자(task-write/
+ssot-write SKILL)가 관장하며, 본 스크립트는 **1회 검증**만 수행한다.
 
 기준(reference)과 검증 대상(targets)을 명시 경로로 받으므로 git diff 를 쓰지
 않는다 → reference 가 대상에 섞여 자기 자신을 채점하는 오염이 구조적으로 없다.

@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v3.4.5 · 커스텀 스킬 14종 + 슬래시 커맨드 18종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v3.5.0 · 커스텀 스킬 13종 + 슬래시 커맨드 17종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,12 +11,12 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `3.4.5` |
+| 버전 | `3.5.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
 | 네임스페이스 | `/claudecode-for-me:<name>` |
-| 구성요소 | Skill 14 · Command 18 · Python helper 5 (`scripts/`) |
+| 구성요소 | Skill 13 · Command 17 · Python helper 5 (`scripts/`) |
 | 외부 연동 도구 | [`codenavigator`](https://github.com/JaeCheon8587/codenavigator) (PyPI) — codenav-bootstrap / codenav-frontmatter-gen 슬래시가 호출 |
 
 플러그인은 **글로벌 캐시**에 설치되므로 한 번 설치 후 모든 프로젝트의 **새 세션**에서 자동 노출된다. 프로젝트별 재설치 불필요.
@@ -66,6 +66,10 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v3.5.0 — docs-add-task 폐지 (task-write/ssot-write/work-packet-write 트리오로 대체)
+
+`docs-add-task`(TASK+FRD+FC+ADR+PRD+ADR-CATALOG 단일 upsert monolith)를 제거했다. `task-write`(TASK 작성) → `ssot-write`(영구 SSOT 갱신) → `work-packet-write`(forge 입력 Work Packet 생성) 트리오가 동일 범위를 책임 분리해 완전 대체하며 forge 입력 단계까지 확장한다. `docs/DEVELOPMENT_PIPELINE.md` step3을 트리오 3단 체인으로 재배선했다. 공유 helper(`docs_helpers.py`·`docs_conformance.py`)는 task-write/ssot-write가 계속 사용하므로 보존.
 
 ### v3.4.5 — ddr-loop Work Packet docs 자동 구성
 
@@ -193,7 +197,7 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 
 ## 5. 플러그인 구성요소
 
-### Skill 14종
+### Skill 13종
 
 | Skill | 슬래시 커맨드 | 역할 |
 |---|---|---|
@@ -202,7 +206,6 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `codenav-frontmatter-gen` | `/claudecode-for-me:codenav-frontmatter-gen [--limit N] [--apply]` | C# 클래스 description 빈칸을 AI로 일괄 채워 `// ---` frontmatter 블록 삽입 |
 | `doc-driven-review` | `/claudecode-for-me:doc-driven-review <doc-path>... [--worktree <ref>] [--commit <ref>]` | 첨부 문서 기준 working-tree/커밋 변경을 Codex CLI로 검증. Missing/Improve/Overengineered + Conformance(%) + 인용검증 보고. linked worktree·커밋 노드 지목 지원 |
 | `ddr-loop` | `/claudecode-for-me:ddr-loop <slug> [--docs <doc>...]` | forge 워크트리 브랜치를 Work Packet/TASK/Required SSOT 또는 명시 docs와 codex로 대조(일치율%), 미달분을 세션이 워크트리 안에서 인라인 수정·재검. `--docs` 생략 시 forge-scope Work Packet에서 자동 구성. 최대 3회·99% 정지. 빌드는 `.csproj`만. 정리는 forge-cancel |
-| `docs-add-task` | `/claudecode-for-me:docs-add-task [요청]` | v0.7 per-App 문서별 upsert — 신규 기능 FRD 신설 / 기존 영향 FRD 갱신(혼합 허용), FC/PRD/ADR-CATALOG 신설·갱신, TASK 항상 생성, ADR 은 결정 유무에 따라 신설/수정/생략 |
 | `forge-scope` | `/claudecode-for-me:forge-scope <WORK_PACKET-or-TASK-doc-path> [--name <slug>] [--force]` | Work Packet을 우선 입력으로 받아 Ready gate, 연결 TASK, Required SSOT Execution Matrix를 소비해 워크트리에서 고정 계약-TDD 파이프라인(계약+테스트→구현→빌드/유닛테스트)으로 구현. TASK 직접 입력은 legacy 호환. 빌드는 `.csproj` 단위만(솔루션 금지). 정리는 `forge-cancel`. |
 | `grill-me` | `/claudecode-for-me:grill-me [주제]` | 1문 1답으로 요구사항 모호점 추적 |
 | `meta-prompter` | `/claudecode-for-me:meta-prompter [요청]` | 거친 요청 → 구조화된 메타 프롬프트 |
@@ -212,7 +215,7 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `task-write` | `/claudecode-for-me:task-write [--app <APP>] [--from <requirements-path>] [요청]` | 요구사항 문서/자연어 요청에서 TASK 작업 범위 계약만 생성. FRD/FC/ADR/ADR-CATALOG/PRD/ARCHITECTURE 분석·수정 없음 |
 | `work-packet-write` | `/claudecode-for-me:work-packet-write <TASK-path> [--app <APP>] [--process <process-dir>] [--name <title>]` | TASK와 Required SSOT Execution Matrix를 연결하는 forge 입력용 Work Packet 생성. TASK/SSOT/코드 수정 없이 실행 규칙·경계·검증 입력만 정리 |
 
-### Command 18종
+### Command 17종
 
 | Command | 설명 |
 |---|---|
@@ -224,7 +227,6 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `doc-driven-review` | doc-driven-review skill 진입. Codex CLI 위임 read-only 리뷰. `--worktree <branch\|path>` linked worktree / `--commit <ref>` 커밋 노드 지목 지원 |
 | `ddr-loop` | ddr-loop skill 진입. forge 워크트리 브랜치↔docs 수렴 루프(codex reviewer + 세션 fixer, 최대 3회·99%) |
 | `commit-analysis` | 변경 분석 후 `[ADD]`/`[MOD]`/`[FIX]` 자동 판단 한글 커밋 생성 |
-| `docs-add-task` | docs-add-task skill 진입 (문서별 upsert — FRD 신설/갱신 혼합, TASK 항상, ADR 신설/수정/생략) |
 | `forge-cancel` | forge-scope 워크트리·`feat-<slug>` 브랜치 제거 (서브모듈 메인 원본 보존). `<slug>` 지정 또는 생략 시 목록에서 선택. 스킬 없이 커맨드 단독 |
 | `forge-scope` | forge-scope skill 진입 |
 | `grill-me` | grill-me skill 진입 |
@@ -308,26 +310,7 @@ codenav --root <repo> ui --port 9876
 
 상세는 [codenavigator README](https://github.com/JaeCheon8587/codenavigator#readme) 및 [frontmatter 규약](https://github.com/JaeCheon8587/codenavigator/blob/main/docs/frontmatter.md) 참조.
 
-### 6.3 docs-add-task (v0.7 per-App SSOT, 문서별 upsert)
-
-```
-/claudecode-for-me:docs-add-task 주문 검색 기능 추가              # 신규 기능 → FRD 신설
-/claudecode-for-me:docs-add-task 주문 검색에 cursor 페이지네이션 추가  # 기존 수정 → 영향 FRD 갱신
-```
-
-- **v0.7 per-App 전용** — `docs/.templates/App/` 양식 (20 section FRD, 5 표 FC, ADR/ADR-CATALOG/TASK)
-- **In-place 수정** — source repo 직접 쓰기. preview 없음.
-- **문서별 upsert** — NEW/CHANGE 모드 라벨 없음. `parse-fc`·ADR-CATALOG 인덱스로 영향 자산 식별 → 자산마다 신설/갱신/생략 분기. **신규 기능 + 기존 FRD 갱신 한 작업서 혼합 허용**. 신규 기능 0건이어도 모호 시 사용자 확인 1회 (자동 신설 강행 X).
-- **TASK 항상 생성** — Backlog 모드만 예외. 결정 없으면 placeholder 자동.
-- **ADR upsert (생략 허용)** — 새 결정 → ADR 신설 / 기존 결정 변경 → 기존 ADR 수정(supersede 또는 in-place, AI 판단) / 결정 없음 → ADR 생략. ADR op 따라 ADR-CATALOG(Proposed 추가 / Deprecated·Superseded 이동 / 행 갱신) 동기화. (DOCUMENT_GUIDE "필요 시 ADR 등재" 와 정렬)
-- **FRD upsert** — 신규 기능이면 20절 신설 + App-PRD §3.1·§7 + FC 5표 행 추가 / 기존 영향이면 버전 bump + 변경 이력 + 영향 section 갱신 + FC 행 상태 갱신
-- **TASK 양방향 인용 금지** (v0.7) — TASK 본문 ↔ 영구 SSOT 마크다운 링크 X
-- **자기 검증** — 쓰기 후 `docs_helpers.py check --repo .` 자동 (구조 무결성). helper 는 로컬 `./scripts/` 없으면 `${CLAUDE_PLUGIN_ROOT}/scripts/` 로 실행(forge-scope·doc-driven-review 와 동일 — 소비자 repo 무복사)
-- **요구사항서 영구 기록** — `.requirements/req-<App>-TASK-<NNN>.md` (검증 기준, 불변)
-- **요구사항 정합 자동 검증 (codex)** — 작성 후 요구사항서↔생성문서 반영률(%) 채점, 99% 또는 3회까지 검증↔보강 수렴. 미달 시 현재 %·부족 항목 보고. 전용 리포트 `.review/req-conformance-*.md`. codex 미설치·요구사항서 부재 시 생략. (단계5 doc-driven-review=문서↔**코드** 와 축 다름: 본 검증=요구사항서↔**생성문서**.)
-- Python helper (read-only): `docs_helpers.py {list-apps|next-id|parse-fc|parse-frd|git-user|check}` · 정합 검증: `docs_conformance.py --reference <req> --targets <docs...>`. 실행 경로 = 로컬 `./scripts/` fallback → `${CLAUDE_PLUGIN_ROOT}/scripts/` (소비자 repo 에 미복사, cwd 는 대상 repo 유지)
-
-### 6.4 task-write / ssot-write (TASK 계약 → 영구 SSOT 반영)
+### 6.3 task-write / ssot-write (TASK 계약 → 영구 SSOT 반영)
 
 ```
 /claudecode-for-me:task-write --app Billing --from .requirements/order-refund.md
@@ -344,7 +327,7 @@ codenav --root <repo> ui --port 9876
 - **실행 manifest** — `work-packet-write`는 TASK와 Required SSOT Execution Matrix를 연결하는 `docs/<App>/WORK_PACKET/<App>-WP-<NNN>.md`만 생성한다.
 - **후속 단계** — Work Packet 생성 후 `Next: forge-scope`로 구현 단계에 넘긴다.
 
-### 6.5 forge-scope / forge-cancel (harness_framework 임베디드)
+### 6.4 forge-scope / forge-cancel (harness_framework 임베디드)
 
 `forge-scope`는 Work Packet을 우선 입력으로 받아 워크트리에서 **고정 계약-TDD 파이프라인**으로 구현한다. python(`worktree_setup.py`)은 **셋업·검증·정리만** 하고, 실제 코딩(계약+테스트→구현→빌드/유닛테스트)은 호출 세션이 워크트리 안에서 인라인으로 수행한다. 빌드/테스트는 **솔루션(`*.sln`) 금지, 대상 `.csproj` 단위만**. TASK 직접 입력은 legacy 호환 경로로 유지된다.
 
@@ -659,7 +642,6 @@ Claudecode-For-Me/
 │   ├── codenav-frontmatter-gen/
 │   ├── ddr-loop/
 │   ├── doc-driven-review/
-│   ├── docs-add-task/
 │   ├── forge-scope/
 │   ├── grill-me/
 │   ├── meta-prompter/
@@ -680,7 +662,6 @@ Claudecode-For-Me/
 │   ├── commit-analysis.md
 │   ├── ddr-loop.md
 │   ├── doc-driven-review.md
-│   ├── docs-add-task.md
 │   ├── forge-cancel.md
 │   ├── forge-scope.md
 │   ├── grill-me.md
@@ -718,7 +699,7 @@ Claudecode-For-Me/
 | `forge-scope` 가 워크트리 안 만들고 종료(exit 2) | Work Packet 이 Draft, Blocking 존재, 연결 TASK/Required SSOT 링크 누락, 또는 TASK 문서 미결 항목(§7 결정·§11 미확인·placeholder·`**TEMPLATE**` 배너) | Work Packet을 Ready로 확정하고 Required SSOT 파일을 생성/연결한 뒤 재시도. TASK legacy 입력이면 문서 완성·미결 해소 |
 | `ddr-loop` init exit 2 "forge 워크트리 없음" | 해당 slug 워크트리 미생성 | 먼저 `/forge-scope <WORK_PACKET>` 실행, 또는 forge-cancel에 쓴 slug 확인 (`worktree_setup.py list`) |
 | `ddr-loop` 첫 review exit 2 | codex CLI 미설치 (리뷰는 codex 의존) | `/codex:setup` 후 재시도 |
-| `docs-add-task` "App 0건" | `/CLAUDE.md` Backend Services Overview 표 + `docs/<App>/` 부재 | App 행 추가 + 폴더 부트스트랩 |
+| `task-write` App 후보 없음 | `/CLAUDE.md` Backend Services Overview 표 + `docs/<App>/` 부재 | App 행 추가 + 폴더 부트스트랩 |
 | `codenav frontmatter gen` 결과 `generated=0` | `claude` CLI 부재 또는 stdout JSON 키 mismatch | `where claude` 확인. v1.15.0+ 는 `result`/`response` 둘 다 처리 |
 | `codenav frontmatter gen` "git working tree is dirty" 거부 | 안전장치 | commit/stash 또는 `--allow-dirty` |
 | `codenav ui --port 8765` 실행 시 `WinError 10013` | Windows excluded port range (8601-8900 등) | 다른 포트 사용 (예: `--port 9876`). `netsh interface ipv4 show excludedportrange protocol=tcp` 로 확인 |
