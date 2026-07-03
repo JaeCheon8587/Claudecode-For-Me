@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v3.5.0 · 커스텀 스킬 13종 + 슬래시 커맨드 17종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v3.7.0 · 커스텀 스킬 13종 + 슬래시 커맨드 17종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,12 +11,12 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `3.5.0` |
+| 버전 | `3.7.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
 | 네임스페이스 | `/claudecode-for-me:<name>` |
-| 구성요소 | Skill 13 · Command 17 · Python helper 5 (`scripts/`) |
+| 구성요소 | Skill 13 · Command 17 · Python helper 6 (`scripts/`) |
 | 외부 연동 도구 | [`codenavigator`](https://github.com/JaeCheon8587/codenavigator) (PyPI) — codenav-bootstrap / codenav-frontmatter-gen 슬래시가 호출 |
 
 플러그인은 **글로벌 캐시**에 설치되므로 한 번 설치 후 모든 프로젝트의 **새 세션**에서 자동 노출된다. 프로젝트별 재설치 불필요.
@@ -66,6 +66,12 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v3.7.0 — branch-review 4 finder 재설계 + 영속화(.process/.review) + 실전 dogfood 하드닝
+
+`branch-review`를 Standards/Spec 2축에서 **bugs/style/spec/perf 4개 독립 병렬 finder**로 재편하고, ssot-write와 동일한 관례(`templates/` + `.process/<slug>/` build·progress 문서)를 이식했다. 기존 Standards 축 하나가 정확성·컨벤션·성능 3종 판단을 동시에 져 관점이 희석되던 문제를 분해로 해결 — security는 별도 축 없이 bugs finder의 SECURITY-SURFACE 표면검사로 흡수(심층은 `/security-review`), style finder에 Standards 신뢰도 등급(STRONG/WEAK/NONE)을 신설해 Spec 축(HIGH~NONE)과의 비대칭을 해소했다. 4 finder 프롬프트를 SKILL.md 인라인 텍스트에서 `skills/branch-review/templates/*-finder.md` 6개 파일(finder 4종 + build/progress 2종)로 분리. CRITICAL/MAJOR는 400단어 cap 없이 전량 보고, Recommendation은 6단 precedence 규칙으로 명문화. 신규 Step 0가 `git rev-parse --short HEAD`를 slug로 `.process/branch-review-<slug>/`(build.md+progress.md)를 관리하고, Step 6이 최종 보고 전문을 `.review/branch-review-<slug>.md`에 저장하며 `--resume` 플래그로 중단된 청크 모드 리뷰를 재개한다. read-only 계약은 "소스 파일 미수정"으로 명확화(산출물 쓰기는 계약 밖, doc-driven-review 선례와 동일).
+
+실전 dogfood 테스트(150파일/9천+줄 diff, 청크 모드 36 서브에이전트 실제 발사)로 4건의 구조적 gap을 추가 수정했다. **(1)** 신규 `scripts/branch_review_chunk_plan.py` — Step 2 diff 크기측정·모드판정·청크분할·청크별 patch 생성을 스크립트로 결정화. `git diff --numstat`의 rename 압축표기(`{old => new}`)를 그대로 pathspec에 쓰면 매칭이 조용히 실패하는 버그를 `--no-renames`로 근본 해결(rename은 삭제+추가 별도 라인으로 분리 집계 — `--stat` 대비 파일/라인 수 차이는 정상 동작). **(2)** Step 5에 **"5-0. Cross-chunk 재검증"**(청크 모드 전용, 필수) 신설 — 청크가 서로의 diff를 못 보는 구조적 맹점으로 인한 spec/bugs 오탐(실전에서 CRITICAL 오탐 2건 실측)을 메인 에이전트의 Grep/Read 재확인으로 걸러내고 REFUTED 근거를 투명하게 남긴다(전체 대상 adversarial verify는 여전히 미구현 — Step 4.5 슬롯 참조). **(3)** 청크별 finder raw 출력을 progress.md에 verbatim 인라인하던 스펙을 `.process/branch-review-<slug>/chunk-<id>.log` 개별 파일 저장으로 현실화(대형 diff에서 원본 스펙은 비현실적이었음) — progress.md Log는 경로 참조+요약만 보유. **(4)** 청크 모드 진입 전 "청크 N개 × 4 finder = M개 서브에이전트 발사 예정" 비용 고지를 필수화하고, Step 6-2 Summary에 CRITICAL findings 전체 목록(축 무관)을 필수 추가해 Recommendation의 1등급 라벨 뒤에 다른 축 CRITICAL이 가려지는 정보손실을 보완했다.
 
 ### v3.5.0 — docs-add-task 폐지 (task-write/ssot-write/work-packet-write 트리오로 대체)
 
@@ -202,7 +208,7 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | Skill | 슬래시 커맨드 | 역할 |
 |---|---|---|
 | `acceptance-design` | `/claudecode-for-me:acceptance-design <doc-path>` | 타겟 문서를 ground truth로 읽고 완료조건·엣지케이스·오류케이스·검증방법 4축을 1문1답으로 같이 설계. grill-me 질문 루프 재사용. 확정 시 `.requirements/{slug}-acceptance.md` 저장 |
-| `branch-review` | `/claudecode-for-me:branch-review [ref]` | HEAD↔ref diff을 Standards/Spec 2축 병렬 검토 |
+| `branch-review` | `/claudecode-for-me:branch-review [ref]` | HEAD↔ref diff을 bugs/style/spec/perf 4 dimension 병렬 finder로 검토 |
 | `codenav-frontmatter-gen` | `/claudecode-for-me:codenav-frontmatter-gen [--limit N] [--apply]` | C# 클래스 description 빈칸을 AI로 일괄 채워 `// ---` frontmatter 블록 삽입 |
 | `doc-driven-review` | `/claudecode-for-me:doc-driven-review <doc-path>... [--worktree <ref>] [--commit <ref>]` | 첨부 문서 기준 working-tree/커밋 변경을 Codex CLI로 검증. Missing/Improve/Overengineered + Conformance(%) + 인용검증 보고. linked worktree·커밋 노드 지목 지원 |
 | `ddr-loop` | `/claudecode-for-me:ddr-loop <slug> [--docs <doc>...]` | forge 워크트리 브랜치를 Work Packet/TASK/Required SSOT 또는 명시 docs와 codex로 대조(일치율%), 미달분을 세션이 워크트리 안에서 인라인 수정·재검. `--docs` 생략 시 forge-scope Work Packet에서 자동 구성. 최대 3회·99% 정지. 빌드는 `.csproj`만. 정리는 forge-cancel |
@@ -247,17 +253,22 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 /claudecode-for-me:branch-review main
 /claudecode-for-me:branch-review v1.4.0
 /claudecode-for-me:branch-review          # ref 생략 시 merge-base 자동
+/claudecode-for-me:branch-review --resume # 중단된 리뷰(청크 모드) 재개
 ```
 
-- **2축 병렬**: Standards(컨벤션 준수) + Spec(요구사항 충족) 독립 서브에이전트 → masking 방지
+- **4 dimension 병렬**: bugs(정확성+표면보안) / style(컨벤션) / spec(요구사항) / perf(성능) 독립 서브에이전트 → masking 방지. security는 별도 축 없이 bugs에 표면검사로 흡수(심층은 `/security-review`)
 - **3-dot diff** (`<ref>...HEAD`) — 내 변경만, ref 진행분 노이즈 제거
-- **심각도 4단**: CRITICAL / MAJOR / MINOR / NIT (NIT 기본 억제)
-- **TYPE**: Standards = VIOLATION/JUDGMENT, Spec = MISSING/PARTIAL/SCOPE-CREEP/FLAW
-- **Diff 분기**: ≤50라인 인라인, 51~2000 표준, 초과 시 디렉토리 청크 분할
-- **Spec 5층 fallback**: 이슈본문 → docs/specs → PR description → 커밋 메시지 → 부재
+- **심각도 4단**: CRITICAL / MAJOR / MINOR / NIT (NIT 기본 억제, CRITICAL/MAJOR는 무제한 전량 보고)
+- **TYPE**: bugs = LOGIC/BOUNDARY/NULL/RESOURCE/CONCURRENCY/SECURITY-SURFACE, style = VIOLATION/JUDGMENT, spec = MISSING/PARTIAL/SCOPE-CREEP/FLAW, perf = N+1/COMPLEXITY/ALLOC/BLOCKING/REDUNDANT
+- **Diff 분기**: ≤50라인 인라인(4렌즈 1패스), 51~2000 표준(4 서브에이전트), 초과 시 디렉토리 청크 분할(청크당 4 서브에이전트, cross-chunk 교차영향은 미검출 경고)
+- **Spec 5층 fallback**: 이슈본문 → docs/specs → PR description → 커밋 메시지 → 부재 (HIGH~NONE 신뢰도 등급)
+- **Standards 신뢰도 등급 (신규)**: lint설정+CLAUDE.md/CONTRIBUTING 존재 여부로 STRONG/WEAK/NONE — 규칙 문서 없는 레포에서 style 의견이 과신되는 것 방지
+- **Recommendation precedence**: bugs CRITICAL → Conflicts → Intent mismatch → spec MISSING/PARTIAL≥2 → 임의축 MAJOR → SHIP 순으로 상위 1개만 채택
+- **templates/**: 4 finder 프롬프트(`bugs/style/spec/perf-finder.md`) + process 문서 2종을 `skills/branch-review/templates/`에서 관리 (ssot-write와 동일 관례)
+- **영속화**: `.process/branch-review-<sha>/`(build+progress) + `.review/branch-review-<sha>.md`(최종보고). `--resume`으로 중단된 청크 리뷰 재개(완료 청크는 재실행 없이 재사용)
 - **다언어**: TS/JS · Python · Go · Rust · Java/Kotlin · C#/.NET · Ruby · Swift
 - **충돌**: 축간 모순 finding을 별도 "Conflicts" 섹션
-- **Recommendation**: SHIP / FIX-MINOR-THEN-SHIP / FIX-CRITICAL-FIRST / BLOCK-SPEC-MISMATCH / RESOLVE-CONFLICTS / RECONFIRM-INTENT
+- **Recommendation**: SHIP / FIX-MAJOR-THEN-SHIP / FIX-CRITICAL-FIRST / BLOCK-SPEC-MISMATCH / RESOLVE-CONFLICTS / RECONFIRM-INTENT
 
 ### 6.2 codenav-bootstrap / codenav-frontmatter-gen (CodeNavigator 워크플로)
 
@@ -674,6 +685,7 @@ Claudecode-For-Me/
 ├── docs/                       # v0.7 문서 시스템 자산
 │   └── .templates/             # PRD/FC/FRD/ADR/ARCHITECTURE/CLAUDE/README 양식 + App/ + .rules/ (코드 룰 3종)
 ├── scripts/                     # Python deterministic helper
+│   ├── branch_review_chunk_plan.py  # branch-review diff 크기측정·모드판정·청크분할·patch 생성
 │   ├── ddr_loop.py              # ddr-loop 워크트리·docs 검증 + .process 스캐폴딩 (init)
 │   ├── doc_driven_review.py
 │   ├── docs_conformance.py
