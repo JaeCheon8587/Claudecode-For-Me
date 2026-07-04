@@ -1,0 +1,4 @@
+interface:
+  display_name: "PipelineRunner"
+  short_description: "Plan and run post-requirement skill pipelines"
+  default_prompt: "Use $pipeline-runner to design and run the post-requirement work pipeline."
