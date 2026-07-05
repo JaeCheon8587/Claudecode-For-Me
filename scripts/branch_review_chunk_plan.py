@@ -57,7 +57,9 @@ EXIT_KBI = 130
 DEFAULT_MAX_LINES = 1500
 DEFAULT_MAX_FILES = 30
 
-# Step 2 제외 패턴과 동일 — 확장자/파일명 기준
+# Step 2 제외 패턴과 동일 — 확장자/파일명 기준.
+# 산출물 디렉터리는 top-level 경로만 제외한다. 예: build/app.js 는 제외,
+# src/build/helpers.py 는 소스 경로로 보고 유지한다.
 EXCLUDE_SUFFIXES = (
     ".lock", ".min.js", ".min.css", ".map",
     ".png", ".jpg", ".jpeg", ".gif", ".ico",
@@ -104,8 +106,8 @@ def is_excluded(path: str) -> bool:
         return True
     if any(path.endswith(suf) for suf in EXCLUDE_SUFFIXES):
         return True
-    segments = path.split("/")
-    if any(seg in EXCLUDE_DIR_SEGMENTS for seg in segments):
+    first_segment = path.split("/", 1)[0]
+    if first_segment in EXCLUDE_DIR_SEGMENTS:
         return True
     return False
 
@@ -215,6 +217,14 @@ def group_into_chunks(rows: list, max_lines: int, max_files: int) -> list:
     return chunks
 
 
+def oversized_files(rows: list, max_lines: int) -> list:
+    return [
+        (path, add + delete)
+        for add, delete, path in rows
+        if add + delete > max_lines
+    ]
+
+
 def write_patch(repo_root: Path, ref: str, files: list, out_path: Path) -> None:
     args = ["diff", "--no-renames", f"{ref}...HEAD"]
     if files:
@@ -225,7 +235,7 @@ def write_patch(repo_root: Path, ref: str, files: list, out_path: Path) -> None:
 
 def render_markdown(mode: str, total_files: int, total_lines: int,
                      excluded_files: int, excluded_lines: int,
-                     chunks: list, patch_paths: dict) -> str:
+                     chunks: list, patch_paths: dict, warnings: list) -> str:
     lines = []
     lines.append(f"모드: {mode}")
     lines.append(
@@ -245,6 +255,11 @@ def render_markdown(mode: str, total_files: int, total_lines: int,
     else:
         patch_name = patch_paths.get("single", "")
         lines.append(f"patch: {patch_name}")
+    if warnings:
+        lines.append("")
+        lines.append("## Warnings")
+        for warning in warnings:
+            lines.append(f"- {warning}")
     return "\n".join(lines) + "\n"
 
 
@@ -284,6 +299,7 @@ def main() -> int:
         info_dir.mkdir(parents=True, exist_ok=True)
         patch_paths = {}
         chunks = []
+        warnings = []
 
         if mode == "none":
             pass
@@ -293,13 +309,19 @@ def main() -> int:
             patch_paths["single"] = str(patch_file)
         else:  # chunk
             chunks = group_into_chunks(kept_rows, args.max_lines, args.max_files)
+            for path, lines in oversized_files(kept_rows, args.max_lines):
+                warnings.append(
+                    f"단일 파일 {path} 가 {lines} lines로 청크 라인 cap "
+                    f"{args.max_lines}을 초과합니다(파일 단위 분할 한계)."
+                )
             for c in chunks:
                 patch_file = info_dir / f"branch-review-{short_sha}-{c['id']}.patch"
                 write_patch(repo_root, args.ref, c["files"], patch_file)
                 patch_paths[c["id"]] = str(patch_file)
 
         print(render_markdown(mode, total_files, total_lines,
-                               excluded_files, excluded_lines, chunks, patch_paths))
+                               excluded_files, excluded_lines, chunks, patch_paths,
+                               warnings))
         return EXIT_OK
     except ChunkPlanError as e:
         print(f"오류: {e}", file=sys.stderr)
