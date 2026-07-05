@@ -150,6 +150,8 @@ Phase 5 검증은 서브 에이전트에 위임해야 한다. 서브 에이전�
 - 입력 템플릿: `templates/phase5-auditor-input.md`
 - 출력 템플릿: `templates/phase5-auditor-output.md`
 
+서브 에이전트 호출 시 `model: "sonnet"` 을 지정한다 (구조 표 비교·체크리스트 감사 — Sonnet 충분, 비용 절감). effort는 세션 값을 상속한다. 서브 에이전트 실행 기능이 없으면 종전대로 `AUDIT_BLOCKED` 처리.
+
 서브 에이전트 입력에는 반드시 다음을 채워 전달한다.
 
 - `Confirmed SSOT Action Matrix`

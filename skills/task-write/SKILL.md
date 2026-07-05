@@ -164,6 +164,8 @@ Phase 5 검증은 서브 에이전트에 위임해야 한다. 서브 에이전�
 - 입력 템플릿: `templates/phase5-auditor-input.md`
 - 출력 템플릿: `templates/phase5-auditor-output.md`
 
+서브 에이전트 호출 시 `model: "sonnet"` 을 지정한다 (구조 체크리스트 감사 — Sonnet 충분, 비용 절감). effort는 세션 값을 상속한다.
+
 메인 에이전트는 입력 템플릿의 placeholder 만 실제 값으로 치환해 서브 에이전트에 전달한다. 서브 에이전트는 출력 템플릿 형식만 반환해야 한다. TASK 작성 의도나 기대 판정은 전달하지 않는다.
 
 - [ ] TASK 파일 외 문서를 수정하지 않았다.

@@ -67,6 +67,10 @@ pip install -U codenavigator
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
 
+### v3.8.0 — 구조 검증 서브에이전트 Sonnet 다운시프트
+
+read-only 서브에이전트 중 **구조 검증·체크리스트·규칙 대조** 성격의 작업을 `model: "sonnet"`으로 내려 비용·지연을 줄였다. 대상: `work-packet-write`·`task-write` Phase 5 auditor, `ssot-write` Phase 5 consistency auditor, `branch-review` **style** finder. 정확성·보안 추론(`branch-review` bugs finder)과 아키텍처 영향 판단(`ssot-write` Phase 3 impact auditor)은 미탐·오판 비용이 커 세션 모델(Opus)을 그대로 유지한다. Task/Agent 도구는 per-call `effort`를 지원하지 않으므로 effort는 세션 값을 상속한다 — 최고 effort가 필요하면 해당 스킬을 high/max effort 세션에서 실행한다. `subagent_type`(예: `general-purpose`)은 그대로 두고 model 오버라이드만 추가하므로 기존 동작과 backward-compatible.
+
 ### v3.7.0 — branch-review 4 finder 재설계 + 영속화(.process/.review) + 실전 dogfood 하드닝
 
 `branch-review`를 Standards/Spec 2축에서 **bugs/style/spec/perf 4개 독립 병렬 finder**로 재편하고, ssot-write와 동일한 관례(`templates/` + `.process/<slug>/` build·progress 문서)를 이식했다. 기존 Standards 축 하나가 정확성·컨벤션·성능 3종 판단을 동시에 져 관점이 희석되던 문제를 분해로 해결 — security는 별도 축 없이 bugs finder의 SECURITY-SURFACE 표면검사로 흡수(심층은 `/security-review`), style finder에 Standards 신뢰도 등급(STRONG/WEAK/NONE)을 신설해 Spec 축(HIGH~NONE)과의 비대칭을 해소했다. 4 finder 프롬프트를 SKILL.md 인라인 텍스트에서 `skills/branch-review/templates/*-finder.md` 6개 파일(finder 4종 + build/progress 2종)로 분리. CRITICAL/MAJOR는 400단어 cap 없이 전량 보고, Recommendation은 6단 precedence 규칙으로 명문화. 신규 Step 0가 `git rev-parse --short HEAD`를 slug로 `.process/branch-review-<slug>/`(build.md+progress.md)를 관리하고, Step 6이 최종 보고 전문을 `.review/branch-review-<slug>.md`에 저장하며 `--resume` 플래그로 중단된 청크 모드 리뷰를 재개한다. read-only 계약은 "소스 파일 미수정"으로 명확화(산출물 쓰기는 계약 밖, doc-driven-review 선례와 동일).

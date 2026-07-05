@@ -241,14 +241,16 @@ Step 2의 `branch_review_chunk_plan.py`가 이미 생성해 둔 patch 파일을 
 
 각 finder 서브에이전트 프롬프트는 SKILL.md에 인라인으로 두지 않고 `skills/branch-review/templates/`의 전용 템플릿을 참조한다:
 
-| finder | 템플릿 파일 | 치환 placeholder |
-|---|---|---|
-| bugs | `templates/bugs-finder.md` | `{{DIFF_PATH}}` `{{FILE_LIST}}` `{{INTENT}}` `{{REPO_ROOT}}` |
-| style | `templates/style-finder.md` | 위 + `{{STANDARDS_BUNDLE}}` `{{STANDARDS_CONFIDENCE}}` |
-| spec | `templates/spec-finder.md` | `{{DIFF_PATH}}` `{{FILE_LIST}}` `{{INTENT}}` + `{{SPEC_BUNDLE}}` `{{SPEC_CONFIDENCE}}` |
-| perf | `templates/perf-finder.md` | `{{DIFF_PATH}}` `{{FILE_LIST}}` `{{INTENT}}` `{{REPO_ROOT}}` |
+| finder | 템플릿 파일 | 모델 | 치환 placeholder |
+|---|---|---|---|
+| bugs | `templates/bugs-finder.md` | 세션 상속 (Opus) | `{{DIFF_PATH}}` `{{FILE_LIST}}` `{{INTENT}}` `{{REPO_ROOT}}` |
+| style | `templates/style-finder.md` | `sonnet` | 위 + `{{STANDARDS_BUNDLE}}` `{{STANDARDS_CONFIDENCE}}` |
+| spec | `templates/spec-finder.md` | 세션 상속 | `{{DIFF_PATH}}` `{{FILE_LIST}}` `{{INTENT}}` + `{{SPEC_BUNDLE}}` `{{SPEC_CONFIDENCE}}` |
+| perf | `templates/perf-finder.md` | 세션 상속 | `{{DIFF_PATH}}` `{{FILE_LIST}}` `{{INTENT}}` `{{REPO_ROOT}}` |
 
 절차: 각 템플릿을 Read → Step 3-4 라우팅 매트릭스에서 정한 실제 값으로 `{{...}}`를 치환 → 치환된 전문을 해당 서브에이전트 프롬프트로 그대로 전달. 4개 템플릿 모두 청크 단위로 (즉, 청크마다 그 청크의 diff 하위집합에 맞는 `{{FILE_LIST}}` 등으로) 독립 치환한다.
+
+style finder는 Task 호출 시 `model: "sonnet"`을 지정한다 (컨벤션 규칙 대조 위주 — Sonnet 충분, 비용 절감). effort는 세션 값을 상속한다. 나머지 finder(bugs/spec/perf)는 세션 모델을 상속한다(정확성·intent 추론이라 다운그레이드 안 함). `subagent_type`은 4개 모두 `general-purpose` 유지(위 실행 환경 규칙 참조) — model 오버라이드와 직교.
 
 ---
 

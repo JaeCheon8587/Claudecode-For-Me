@@ -128,6 +128,8 @@ impact auditor output의 `Required SSOT Coverage Matrix`를 검토한다. `PRD /
 
 read-only 서브에이전트에 `templates/consistency-auditor-input.md`를 실제 값으로 치환해 전달한다. 출력은 `templates/consistency-auditor-output.md` 형식만 받는다.
 
+이 consistency 감사 서브에이전트는 `model: "sonnet"` 으로 호출한다 (매트릭스 행 대조·ID 일관성 검증 — Sonnet 충분). effort는 세션 값을 상속한다. (Phase 3 impact auditor는 아키텍처 영향 판단이라 이 지정에서 제외 — 세션 모델 유지.)
+
 감사 입력에는 Phase 3에서 확정해 build 파일에 기록한 `Confirmed SSOT Action Matrix`와 impact audit result summary를 포함한다.
 
 감사 범위:
