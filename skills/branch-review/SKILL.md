@@ -315,143 +315,25 @@ NIT 항목은 기본 모드에서 finder 자체가 Step 4 공통 출력 제약("
 
 ### Step 6 — 종합 보고 및 영속화
 
-#### 6-1. Verbatim 노출
+**출력 스켈레톤·Summary·Recommendation·예시는 `templates/report-template.md`가 단일 출처다** (SKILL.md에 하드코딩하지 않음 — finder 프롬프트와 동일하게 외부화). 메인 에이전트는 그 파일을 Read → 값 치환 → 사용자 노출 + `.review/`에 Write.
 
-4개 finder 출력을 **재정렬·재작성 없이** 그대로 노출 (bugs / style / spec / perf 4섹션). 메인 에이전트의 편향 차단.
+핵심 규칙 요약 (상세는 report-template.md):
 
-#### 6-1.5. Cross-axis 중복 노출
-
-Step 5-1에서 2개 이상 축이 겹친다고 판정된 그룹만 4개 verbatim 섹션 + Conflicts 다음, Summary 이전에 노출:
-```
-[axis+axis+...] <path>:<line 또는 symbol> | max=<SEVERITY>
-  <axis1>: <원문 1줄 요약>
-  <axis2>: <원문 1줄 요약>
-```
-겹친 그룹이 0개면 이 섹션 자체를 생략한다(빈 섹션 노출 금지). 4개 verbatim 섹션(6-1)은 이 섹션과 무관하게 원문 그대로 유지 — 이 섹션은 추가이지 대체가 아니다.
-
-#### 6-2. 최종 요약
-
-```
-## Summary
-- bugs:  <N> findings (Critical: X, Major: Y, Minor: Z, Nit: W — suppressed)
-- style: <N> findings (Critical: X, Major: Y, Minor: Z, Nit: W — suppressed) | Standards source: <STRONG|WEAK|NONE>
-- spec:  <N> findings (Missing: A, Partial: B, Scope-creep: C, Flaw: D) | Spec source: <라벨 + 신뢰도>
-- perf:  <N> findings (Critical: X, Major: Y, Minor: Z, Nit: W — suppressed)
-- Conflicts: <N>
-- Tests: <added | partial | missing | n/a>
-- Intent mismatches: <N>
-[청크 모드였다면] ⚠ 청크 분할 리뷰 — 청크간 ripple(교차 영향) 미검출.
-[spec 등급이 FALLBACK 또는 NONE] ⚠ spec 근거 빈약 — MISSING/PARTIAL 판정 보수적으로 자제된 상태, bugs/perf 결과에 상대적으로 더 의존할 것.
-[standards 등급이 NONE] ⚠ style 근거 문서·lint 설정 전무 — 주변 코드 대비 명백 일탈만 보고됨.
-[CRITICAL이 1건이라도 있으면 필수] CRITICAL 목록: <axis> <path>:<line> — <한줄 요약> (전건 나열, 축 무관)
-```
-
-**CRITICAL 목록이 필수인 이유**: 6-3 precedence 규칙은 "가장 우선한 규칙 1개"만 Recommendation 라벨로 노출한다 — 즉 한 축의 CRITICAL 때문에 `FIX-CRITICAL-FIRST`가 뜨면 다른 축 CRITICAL들은 라벨 하나에 가려질 수 있다. Summary에 축 무관 전체 CRITICAL을 별도로 나열해 이 정보손실을 막는다.
-
-#### 6-3. Recommendation — precedence 규칙
-
-복수 조건이 동시에 성립하면 **번호가 빠른(상위) 규칙 1개만** 채택한다:
-
-```
-1. 임의 축(bugs/style/spec/perf)에 CRITICAL ≥ 1   → FIX-CRITICAL-FIRST (머지 보류)
-2. Conflicts ≥ 1                                  → RESOLVE-CONFLICTS (의도 재확인 필요)
-3. Intent mismatch ≥ 1                            → RECONFIRM-INTENT (작성자 의도 확인 필요)
-4. spec MISSING/PARTIAL ≥ 2 (등급 HIGH 또는 MEDIUM) → BLOCK-SPEC-MISMATCH (재작업 필요)
-5. 임의 축(bugs/style/spec/perf)에 MAJOR ≥ 1        → FIX-MAJOR-THEN-SHIP (수정 후 머지)
-6. (위 전부 미해당)                                → SHIP (머지 가능)
-```
-
-**부연설명 (조건부 필수)**: 채택된 규칙이 1~4번(5번 "임의 축 MAJOR≥1"보다 먼저 매치)이면서 4축 MAJOR 총합이 2건 이상이면, Recommendation 아래 1줄 필수: "참고: 채택된 규칙(<번호>)이 MAJOR <N>건보다 우선순위가 높아 라벨을 차지함 — Summary 참조." (6-2 CRITICAL 목록 요구사항과 동일한 정보손실 방지 목적.)
-
-#### 6-4. 결과 영속화
-
-최종 보고 전문(4섹션 verbatim + Summary + Recommendation)을 `.review/branch-review-<slug>.md`에 Write한다. 저장 직후 `.gitignore`에 `.review/` 항목이 없으면 1줄 advisory만 출력한다 (예: `참고: .gitignore에 .review/ 추가를 권장합니다`) — **`.gitignore` 파일 자체는 자동 편집하지 않는다** (read-only 계약 유지, doc-driven-review와 동일).
+- **BLUF 1줄**: 리포트 최상단에 결정 라벨 + 카운트를 항상 먼저 노출. 결정을 찾으러 스크롤하는 비용 제거.
+- **모드**: 기본(verbatim 먼저) / 요약우선(청크 모드·대형 diff·"결정만 먼저" 요청 시 Summary·Recommendation 먼저, verbatim 상세는 하단).
+- **verbatim 원칙**: 4 finder 출력 재정렬·재작성 없이 그대로. finding 포맷은 finder 템플릿이 출처.
+- **Cross-axis 중복**: 2축 이상 겹친 그룹만 노출, 0개면 섹션 생략.
+- **CRITICAL 열거 단일화**: 축 무관 전건 CRITICAL 목록은 **Summary 1곳에서만** 열거. BLUF는 카운트, Recommendation은 "Summary 참조"로 가리킴 (3중 노출 → 열거 1곳 + 카운트 2곳으로 정리).
+- **Recommendation precedence**: CRITICAL→Conflicts→Intent→spec-mismatch→MAJOR→SHIP 6단계, 최우선 규칙 1개만 라벨화. 채택 규칙이 1~4번인데 MAJOR≥2면 부연설명 1줄 필수.
+- **영속화**: 최종 보고 전문을 `.review/branch-review-<slug>.md`에 Write. `.gitignore`에 `.review/` 없으면 1줄 advisory만 (파일 자동 편집 금지 — read-only 계약).
 
 **기록**: progress.md `Step6-보고` → `done`.
 
 ---
 
-## 출력 포맷 옵션
+## 출력 포맷 옵션 · 예시
 
-| 옵션 | 트리거 | 동작 |
-|---|---|---|
-| 기본 | (없음) | 위 long-form, NIT 억제 |
-| compact / 1줄 / 짧게 | 사용자 요청 | finding마다 1줄, 섹션 헤더 최소화 |
-| verbose / 전체 / NIT 포함 | 사용자 요청 | NIT 펼침 + JUDGMENT 별도 섹션 |
-
-Compact 예시:
-```
-[CRITICAL][bugs][BOUNDARY] src/auth.ts:42 토큰 만료 `<` 사용. Fix: `<=`.
-[MAJOR][spec][PARTIAL] PRD §3.2 리프레시 grace period 누락. Fix: 5분 window 추가.
-[MAJOR][perf][N+1] src/orders.ts:60 루프당 DB 호출. Fix: 배치 조회.
-[MINOR][style][JUDGMENT] src/utils.ts:88 export 불필요.
-```
-
----
-
-## 예시 출력 (표준 모드)
-
-```
-## Branch Review: feature/auth-refactor
-
-기준점: origin/main (merge-base = abc1234)
-변경 규모: 12 files, 487 lines (+312/-175), 제외 후
-Spec source: GitHub issue #234 [HIGH]
-Standards source: CLAUDE.md + eslint.config.js [STRONG]
-Intent: "Add JWT refresh rotation per security audit Q1"
-
----
-
-## bugs (verbatim)
-
-src/auth/middleware.ts:42 | CRITICAL | BOUNDARY | 토큰 만료 비교에 `<` 사용 — 경계 시각 통과. Fix: `<=`.
-src/auth/refresh.ts:88 | MAJOR | LOGIC | async 함수 try/catch 누락. Fix: try/catch 감싸기 + logger.error.
-
-Tests: added (src/auth/__tests__/refresh.test.ts)
-Intent mismatch: none.
-
----
-
-## style (verbatim)
-
-src/utils/jwt.ts:15 | MINOR | JUDGMENT | private 함수 export. 레포 패턴 위반. Rule: "N/A (관례)". Fix: export 제거.
-
----
-
-## spec (verbatim)
-
-§3.2 리프레시 토큰 회전 | MAJOR | PARTIAL | 회전 구현됐으나 "직전 토큰 5분 grace period" 누락. Spec: "회전 후 직전 토큰은 5분간 유효해야 한다". Fix: refresh.ts grace window 추가.
-src/utils/logger.ts | MINOR | SCOPE-CREEP | 이슈 #234 범위 밖. Spec: 로깅 변경 요구 없음. Fix: 별도 PR 분리.
-
----
-
-## perf (verbatim)
-
-없음.
-
----
-
-## Conflicts
-없음.
-
----
-
-## Summary
-- bugs:  2 findings (Critical: 1, Major: 1, Minor: 0, Nit: 0)
-- style: 1 findings (Critical: 0, Major: 0, Minor: 1, Nit: 0) | Standards source: STRONG
-- spec:  2 findings (Missing: 0, Partial: 1, Scope-creep: 1, Flaw: 0) | Spec source: issue #234 [HIGH]
-- perf:  0 findings
-- Conflicts: 0
-- Tests: added
-- Intent mismatches: 0
-- CRITICAL 목록: bugs src/auth/middleware.ts:42 — 토큰 만료 비교 `<` 사용
-
-## Recommendation
-FIX-CRITICAL-FIRST: 토큰 만료 비교 버그 보안 영향. 머지 전 수정 필수.
-
----
-저장됨: .review/branch-review-abc1234.md
-```
+`templates/report-template.md` §6(출력 변형: 기본/요약우선/compact/verbose)·§7(전체 예시) 참조. SKILL.md에 중복 기재하지 않는다.
 
 ---
 

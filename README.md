@@ -269,7 +269,8 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 - **Spec 5층 fallback**: `--spec <path>` → 이슈본문 → docs/specs → PR description → 커밋 메시지 → 부재 (HIGH~NONE 신뢰도 등급)
 - **Standards 신뢰도 등급 (신규)**: lint설정+CLAUDE.md/CONTRIBUTING 존재 여부로 STRONG/WEAK/NONE — 규칙 문서 없는 레포에서 style 의견이 과신되는 것 방지
 - **Recommendation precedence**: 임의 축 CRITICAL → Conflicts → Intent mismatch → spec MISSING/PARTIAL≥2 → 임의축 MAJOR → SHIP 순으로 상위 1개만 채택
-- **templates/**: 4 finder 프롬프트(`bugs/style/spec/perf-finder.md`) + process 문서 2종을 `skills/branch-review/templates/`에서 관리 (ssot-write와 동일 관례)
+- **templates/**: 4 finder 프롬프트(`bugs/style/spec/perf-finder.md`) + 최종 출력 스켈레톤(`report-template.md`) + process 문서 2종을 `skills/branch-review/templates/`에서 관리 (ssot-write와 동일 관례). 출력 포맷은 SKILL.md에 하드코딩하지 않고 `report-template.md` 단일 출처
+- **BLUF + 요약우선**: 리포트 최상단 1줄 결정 라벨+카운트, 청크/대형 diff는 Summary·Recommendation을 verbatim보다 먼저 노출. CRITICAL 전건 열거는 Summary 1곳으로 단일화
 - **영속화**: `.process/branch-review-<sha>/`(build+progress) + `.review/branch-review-<sha>.md`(최종보고). `--resume`으로 중단된 청크 리뷰 재개(완료 청크는 `chunk-<id>.log` raw 출력으로 재사용)
 - **다언어**: TS/JS · Python · Go · Rust · Java/Kotlin · C#/.NET · Ruby · Swift
 - **충돌**: 축간 모순 finding을 별도 "Conflicts" 섹션
