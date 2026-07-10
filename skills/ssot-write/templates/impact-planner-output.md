@@ -1,18 +1,14 @@
-# ssot-write Impact Audit
+# ssot-write Impact Plan
 
-Result: PASS | FAIL | AUDIT_BLOCKED
+Result: READY | BLOCKED | FAIL
 
-Result rule:
-- Use `Result: PASS` only when every SSOT type is judged as `CREATE`, `UPDATE`, or `SKIP`, and there are no `BLOCKED` rows.
-- Use `Result: FAIL` when impact is ambiguous, TASK is insufficient, any row is `BLOCKED`, or user clarification is required.
-- Use `Result: AUDIT_BLOCKED` only when the read-only auditor could not inspect required inputs.
-
-## Impact Summary
+## Input Validation
 
 - TASK: `<TASK-path>`
 - App: `<APP>`
 - Work type: `<feature|refactor|maintenance|migration|setup|investigation|other>`
-- Judgment: `<new feature|existing feature change|operational only|mixed|ambiguous>`
+- TASK structure: `<PASS|FAIL and short evidence>`
+- Permanent SSOT link guard: `<PASS|FAIL and location if failed>`
 
 ## Required SSOT Coverage Matrix
 
@@ -25,35 +21,29 @@ Result rule:
 | ADR-CATALOG | CREATE/UPDATE/SKIP/BLOCKED | `<path or none>` | `<ID or none>` | `<section/table/file or none>` | `<TASK evidence>` | `<SSOT evidence>` | `<content-based reason>` | high/medium/low | `<question or none>` |
 | ARCHITECTURE | CREATE/UPDATE/SKIP/BLOCKED | `<path or none>` | `<ID or none>` | `<section/table/file or none>` | `<TASK evidence>` | `<SSOT evidence>` | `<content-based reason>` | high/medium/low | `<question or none>` |
 
-## Feature Judgment
+## Actor-Ready Decision
 
 - New vs existing: `<new feature|existing feature change|operational only|mixed|ambiguous>`
-- Rationale: `<why this judgment follows from TASK and SSOT>`
+- Number allocation: `<method for every new ID or none>`
+- Required template paths: `<paths or none>`
+- Edit ordering constraints: `<ordered paths or none>`
+- Prohibited scope expansion: `<paths/sections the actor must not touch>`
 
-## Blocking Questions
+## Blocking Question
 
-- `<question or "none">`
-
-## Evidence Summary
-
-- TASK evidence: `<short summary>`
-- SSOT evidence: `<short summary>`
-- Missing evidence: `<none or gaps>`
-
-## Guardrail Checklist
-
-- PASS | FAIL: Auditor was read-only.
-- PASS | FAIL: Auditor made no edit and no write.
-- PASS | FAIL: Every SSOT type has exactly one matrix row.
-- PASS | FAIL: Each matrix row uses only `CREATE`, `UPDATE`, `SKIP`, or `BLOCKED`.
-- PASS | FAIL: `Result: PASS` has no `BLOCKED` rows and no blocking question.
-- PASS | FAIL: Recommended SSOT text contains no TASK markdown link.
-- PASS | FAIL: Recommended SSOT text contains no TASK ID citation.
-- PASS | FAIL: Operational work does not force a new FRD.
-- PASS | FAIL: Ambiguous impact is reported as FAIL, not guessed.
+`<one highest-priority question or none>`
 
 ## Evidence
 
 - Files read: `<paths>`
-- Commands run: `<read-only commands or "none">`
-- Notes: `<short evidence summary>`
+- Commands run: `<read-only commands or none>`
+- Missing evidence: `<none or gaps>`
+
+## Guardrail Checklist
+
+- PASS | FAIL: TASK and permanent SSOT files were not modified.
+- PASS | FAIL: Only owned `.process` artifacts were written.
+- PASS | FAIL: Every SSOT type has exactly one matrix row.
+- PASS | FAIL: `READY` has no `BLOCKED` row or blocking question.
+- PASS | FAIL: Every `CREATE/UPDATE` row has an exact target and edit scope.
+- PASS | FAIL: Proposed permanent SSOT text contains no TASK link or ID citation.

@@ -1,158 +1,161 @@
 ---
 name: ssot-write
-description: TASK 문서를 입력으로 받아 PRD/FC/FRD/ADR/ADR-CATALOG/ARCHITECTURE 같은 영구 SSOT 문서를 갱신한다. process 디렉터리에 실행계획과 진행로그를 남기고, read-only 서브에이전트의 영향 분석/일관성 감사를 받은 뒤 메인 에이전트가 SSOT 파일을 직접 수정한다. ssot-write, "TASK 기반 SSOT 갱신", "TASK 다음 단계로 설계문서 반영" 요청 시 사용한다.
+description: TASK 문서를 입력으로 받아 PRD/FC/FRD/ADR/ADR-CATALOG/ARCHITECTURE 같은 영구 SSOT 문서를 멀티 에이전트로 갱신한다. 메인 Opus는 원문을 직접 읽거나 파일을 수정하지 않고 오케스트레이션만 수행하며, Opus planner/auditor가 판단하고 Sonnet actor가 확정 범위의 파일 수정을 수행한다. ssot-write, "TASK 기반 SSOT 갱신", "TASK 다음 단계로 설계문서 반영", "컨텍스트를 보존하며 SSOT 갱신" 요청 시 사용한다.
 ---
 
 # ssot-write
 
-`docs/<App>/TASK/<App>-TASK-<NNN>.md`를 Scope Authority 로 삼아 영구 SSOT 문서를 좁게 갱신한다.
+`docs/<App>/TASK/<App>-TASK-<NNN>.md`를 Scope Authority로 삼아 영구 SSOT 문서를 좁게 갱신한다.
 
-**책임 경계**:
-- 이 스킬은 TASK 이후 단계다. TASK 자체를 새로 작성하지 않는다.
-- 메인 에이전트가 절차 오케스트레이터이자 최종 수정 책임자다.
-- 서브에이전트는 read-only 영향 분석과 read-only 수정 후 감사만 수행한다.
-- 실제 PRD/FC/FRD/ADR/ADR-CATALOG/ARCHITECTURE 수정은 메인 에이전트만 수행한다.
+## 실행 아키텍처
+
+이 스킬은 메인 에이전트의 컨텍스트를 보존하는 멀티 에이전트 오케스트레이션이다.
+
+| 역할 | 모델 | 책임 | 쓰기 권한 |
+|---|---|---|---|
+| Main orchestrator | Opus 세션 | 인자 해석, 에이전트 호출, 상태 gate, 사용자 질문, 최종 보고 | 없음 |
+| Planning thinker | `model: "opus"` | TASK 검증, SSOT 영향 분석, 수정 계획 확정 | 전용 `.process` 계획 산출물만 |
+| SSOT actor | `model: "sonnet"` | 확정 계획에 따른 SSOT 생성·수정, 명시된 보정 | 대상 SSOT와 전용 `.process` 실행 산출물 |
+| Consistency auditor | `model: "opus"` | 수정 결과, 구조·ID·문서 간 일관성 감사 | 전용 `.process` 감사 산출물만 |
+
+모든 서브에이전트는 `subagent_type: "general-purpose"`로 호출하고 effort는 세션 값을 상속한다. 이 스킬은 메인 모델을 바꾸지 못하므로 Opus 세션에서 시작해야 한다.
+
+### 메인 컨텍스트 보존 계약
+
+- 메인은 TASK 본문, SSOT 본문, 전체 diff, 에이전트 산출물 전문을 읽지 않는다.
+- 메인은 서브에이전트에 파일 내용을 복사하지 않고 repo root, 입력 경로, process 경로, 역할 템플릿 경로만 전달한다.
+- 상세 분석과 인계는 `.process/<slug>/` 파일로 전달한다. 다음 에이전트가 그 파일을 직접 읽는다.
+- 각 서브에이전트는 메인에 아래 envelope만 반환한다. `SUMMARY`는 최대 5개 bullet이다.
+
+```text
+STATUS: READY | PASS | FAIL | BLOCKED
+ARTIFACT: <process artifact path>
+SUMMARY: <maximum 5 bullets>
+QUESTION: <none or one blocking question>
+CHANGED: <paths or none>
+```
+
+- 메인은 envelope의 `STATUS`, `QUESTION`, `CHANGED`만으로 다음 단계를 결정한다.
+- `BLOCKED`면 질문을 그대로 사용자에게 전달하고, 답을 받은 뒤 해당 역할을 새로 호출한다.
+- 서브에이전트를 사용할 수 없으면 메인이 대신 분석하거나 수정하지 않는다. `AUDIT_BLOCKED - required subagent unavailable`로 중단한다.
+
+## 책임 경계
+
+- 이 스킬은 TASK 이후 단계다. TASK 자체를 새로 작성하거나 수정하지 않는다.
+- planning thinker가 판단하고, SSOT actor만 영구 SSOT를 수정한다.
+- actor는 확정된 `Confirmed SSOT Action Matrix` 밖의 결정을 내리지 않는다.
 - 후속 실행 문서 작성은 `work-packet-write` 단계로 넘긴다.
 
 **절대 금지**:
-- 서브에이전트가 파일을 생성·수정·삭제하지 않는다.
-- 영구 SSOT 본문에 TASK markdown link 또는 TASK ID 직접 인용을 남기지 않는다.
-- SSOT 변경 이력에 TASK ID 를 쓰지 않는다. "작업 범위 반영", "기능 요구 갱신" 같은 내용 중심 요약을 쓴다.
-- TASK 영향 범위가 애매하거나 신규/기존 기능 판단이 불명확한데 임의로 SSOT 를 수정하지 않는다.
+
+- 메인 orchestrator가 TASK/SSOT 본문을 읽거나 파일을 생성·수정·삭제하지 않는다.
+- planning thinker 또는 auditor가 TASK/SSOT를 생성·수정·삭제하지 않는다.
+- actor가 TASK를 수정하거나 확정 matrix 밖의 SSOT를 수정하지 않는다.
+- 영구 SSOT 본문이나 변경 이력에 TASK markdown link 또는 TASK ID 직접 인용을 남기지 않는다.
+- 영향 범위, 신규/기존 기능, ADR 필요성이 애매한데 임의로 진행하지 않는다.
 
 ---
 
-## Phase 0: 입력과 프로세스 파일
+## Phase 0: bootstrap / resume 위임
 
-1. `$ARGUMENTS`에서 인자를 해석한다.
+1. 메인이 `$ARGUMENTS`에서 다음만 해석한다.
    - 필수: `<TASK-path>`
    - 선택: `--app <APP>`
-   - 선택: `--name <slug>`; 없으면 TASK 파일 stem 사용
+   - 선택: `--name <slug>`; 없으면 TASK 파일 stem
    - 선택: `--resume`
-2. TASK 경로는 `docs/<App>/TASK/<App>-TASK-<NNN>.md` 형식이어야 한다.
-   - `--app`이 있으면 경로의 `<App>`과 일치해야 한다.
-   - `--app`이 없으면 경로에서 App 을 추출한다.
-3. helper 경로를 결정한다.
-   - 우선: `./scripts/docs_helpers.py`
-   - 없으면: `${CLAUDE_PLUGIN_ROOT}/scripts/docs_helpers.py`
-4. 가능하면 TASK 구조를 검증한다.
-   ```bash
-   python <HELP> check-task --repo . --app <APP> --task <TASK-path>
-   ```
-   실패하면 중단하고 보정 필요 사항을 보고한다.
-5. `.process/<slug>/`를 생성 또는 재사용한다.
-   - 실행계획: `ssot-write-build.md`
-   - 진행로그: `ssot-write-progress.md`
-6. 새 실행이면 `templates/ssot-write-build.md`와 `templates/ssot-write-progress.md`를 복사해 실제 값으로 채운다.
-7. `--resume`이면 기존 `ssot-write-progress.md`를 읽고 `done`이 아닌 첫 단계부터 재개한다. 없으면 중단한다.
+2. 메인은 Sonnet actor를 bootstrap 모드로 호출한다.
+3. bootstrap actor는 다음을 수행한다.
+   - TASK 경로와 App 일치 여부 확인
+   - helper 탐색 및 가능하면 `check-task` 실행
+   - 새 실행이면 템플릿으로 `.process/<slug>/ssot-write-build.md`와 `ssot-write-progress.md` 생성
+   - resume이면 progress를 읽어 재개할 첫 단계를 판정
+4. bootstrap actor는 progress를 갱신하고 envelope만 반환한다. TASK 검증의 내용 판단은 하지 않는다.
+
+bootstrap에도 `templates/ssot-actor-input.md`를 사용하고 `Mode: bootstrap`을 지정한다.
 
 ---
 
-## Phase 1: TASK 검증
+## Phase 1-3: Opus planning thinker
 
-TASK 본문만 먼저 읽어 다음을 확인한다.
+`templates/impact-planner-input.md`의 경로 placeholder만 dispatch prompt에 제공한다. planner가 템플릿을 직접 읽어 실행하게 한다.
 
-- 목적, 목표 상태, 비목표, 영향 범위, 완료 기준이 SSOT 갱신 판단에 충분한지.
-- §9.2 엣지 케이스와 §9.3 오류 처리가 존재하는지.
-- TASK 안에 영구 SSOT markdown link 가 있으면 TASK 품질 문제로 보고한다. SSOT 갱신은 중단한다.
+planner는 다음을 한 호출에서 수행한다.
 
-필수 정보가 부족하면 사용자에게 질문하고 중단한다. 질문은 영향 SSOT 판단에 필요한 최소 항목만 한다.
+1. TASK의 목적, 목표 상태, 비목표, 영향 범위, 완료 기준, §9.2 엣지 케이스, §9.3 오류 처리를 검증한다.
+2. TASK에 영구 SSOT markdown link가 있거나 정보가 부족하면 `BLOCKED`로 판정한다.
+3. PRD, FC, FRD, ADR, ADR-CATALOG, ARCHITECTURE를 각각 `CREATE / UPDATE / SKIP / BLOCKED`로 판정한다.
+4. 모호점이 없으면 `.process/<slug>/ssot-write-impact.md`를 작성한다.
+5. `.process/<slug>/ssot-write-build.md`의 `Confirmed SSOT Action Matrix`를 확정하고 progress를 갱신한다.
+6. 메인에는 envelope만 반환한다.
 
-진행로그에 `TASK 검증` 단계를 `doing` 후 `done` 또는 `blocked`로 append 한다.
+판단 기준:
 
----
-
-## Phase 2: 영향 SSOT 분석
-
-read-only 서브에이전트에 `templates/impact-auditor-input.md`를 실제 값으로 치환해 전달한다. 출력은 `templates/impact-auditor-output.md` 형식만 받는다.
-
-서브에이전트가 없으면 메인 에이전트가 분석을 수행할 수 있지만, 결과 보고의 Audit 은 `AUDIT_BLOCKED - read-only subagent unavailable` 로 표시한다.
-
-impact auditor output의 `Required SSOT Coverage Matrix`를 검토한다. `PRD / FC / FRD / ADR / ADR-CATALOG / ARCHITECTURE`가 모두 판정되어야 하며, `BLOCKED` 행이나 blocking question이 있으면 사용자 질문 후 중단한다.
-
-영향 분석 기준:
 - 신규 기능이면 필요한 PRD/FC/FRD를 갱신 또는 생성한다.
 - 기존 기능 변경이면 기존 FC/FRD를 좁게 갱신한다.
-- 구조·정책·경계 결정이 있으면 ADR을 생성 또는 갱신하고 ADR-CATALOG를 동기화한다.
-- 운영성 작업(`refactor`, `maintenance`, `setup`, `migration`, `investigation`)이면 FRD 신설을 강제하지 않는다.
-- ARCHITECTURE는 런타임 구조, 진입점, 배포/운영 흐름, 주요 의존성 경계가 바뀔 때만 갱신한다.
-- 모호한 영향 범위, 신규/기존 기능 판단, ADR 필요성 판단은 사용자에게 질문하고 중단한다.
+- 구조·정책·경계 결정이면 ADR과 ADR-CATALOG를 동기화한다.
+- 운영성 작업(`refactor`, `maintenance`, `setup`, `migration`, `investigation`)은 FRD 신설을 강제하지 않는다.
+- ARCHITECTURE는 런타임 구조, 진입점, 배포·운영 흐름, 주요 의존성 경계가 바뀔 때만 갱신한다.
+- 영구 SSOT 작성 규칙은 `DOCUMENT_GUIDE v0.9`의 SSOT upsert 규칙을 좁게 재사용한다.
 
-영구 SSOT 작성 규칙은 `DOCUMENT_GUIDE v0.9`의 SSOT upsert 규칙을 좁게 재사용한다.
-
-진행로그에는 서브에이전트 결과의 요약과 판정만 기록한다. 전문을 복사하지 않는다.
+planner는 `model: "opus"`로 호출한다. 메인은 planner의 상세 matrix를 자기 컨텍스트로 다시 읽거나 재판단하지 않는다. 구조적으로 완결된 `READY` envelope이면 Phase 4로 라우팅한다.
 
 ---
 
-## Phase 3: SSOT 수정 계획 확정
+## Phase 4: Sonnet SSOT actor
 
-메인 에이전트가 영향 분석 결과를 검토해 수정 계획을 확정한다.
+`templates/ssot-actor-input.md`를 사용해 `Mode: apply`로 Sonnet actor를 호출한다. actor는 TASK, impact artifact, build의 confirmed matrix, 대상 SSOT와 관련 템플릿을 직접 읽는다.
 
-계획에는 다음만 포함한다.
-- `CREATE` 또는 `UPDATE` 대상 SSOT 경로
-- 각 파일에서 바꿀 절 또는 표
-- 변경 이유 한 줄
-- 신규 번호가 필요하면 번호 산출 방식
-- 사용자 확인이 필요한 모호점
+actor 규칙:
 
-확정된 계획은 `.process/<slug>/ssot-write-build.md`의 `Confirmed SSOT Action Matrix`에 기록한다. 이 matrix는 Phase 4 수정 범위와 Phase 5 감사 입력의 기준이다.
-
-사용자 확인이 필요한 항목이 있으면 여기서 중단한다. 확인 없이 임의 생성·임의 갱신하지 않는다.
-
----
-
-## Phase 4: SSOT 파일 수정
-
-메인 에이전트가 직접 파일을 수정한다.
-
-수정 원칙:
-- 변경은 TASK가 요구하는 범위로 제한한다.
-- 템플릿이 있으면 관련 SSOT 템플릿을 읽고 구조를 맞춘다.
+- `CREATE`와 `UPDATE` 행만 실행한다. `SKIP` 행은 수정하지 않는다.
+- 확정 matrix에 없는 경로·절·표로 범위를 확장하지 않는다.
+- 아키텍처·정책·신규 번호 판단을 새로 하지 않는다. 계획이 불충분하면 `BLOCKED`로 반환한다.
 - 기존 문서의 표기, 버전, 변경 이력 형식을 따른다.
 - 변경 이력에는 TASK ID 대신 내용 중심 요약을 쓴다.
-- 영구 SSOT 본문에 TASK 파일 링크, TASK ID, `.process` 링크를 남기지 않는다.
-- FC와 FRD 번호, ADR과 ADR-CATALOG 행, PRD 주요 기능 요약이 서로 일치하도록 한다.
+- FC/FRD 번호, ADR/ADR-CATALOG 행, PRD 주요 기능 요약을 서로 일치시킨다.
+- `.process/<slug>/ssot-write-action.md`와 progress를 갱신한다.
+- 메인에는 변경 경로를 포함한 envelope만 반환하고 diff 본문을 보내지 않는다.
 
-권장 순서:
-1. ADR 또는 ARCHITECTURE처럼 결정·구조 기준이 되는 문서
+권장 수정 순서:
+
+1. ADR 또는 ARCHITECTURE
 2. FRD
 3. PRD
 4. FC
 5. ADR-CATALOG
 
-실제 수정 결과를 진행로그에 append 한다.
+actor는 `model: "sonnet"`으로 호출한다.
 
 ---
 
-## Phase 5: 수정 후 일관성 감사
+## Phase 5: Opus consistency auditor
 
-read-only 서브에이전트에 `templates/consistency-auditor-input.md`를 실제 값으로 치환해 전달한다. 출력은 `templates/consistency-auditor-output.md` 형식만 받는다.
-
-이 consistency 감사 서브에이전트는 `model: "sonnet"` 으로 호출한다 (매트릭스 행 대조·ID 일관성 검증 — Sonnet 충분). effort는 세션 값을 상속한다. (Phase 3 impact auditor는 아키텍처 영향 판단이라 이 지정에서 제외 — 세션 모델 유지.)
-
-감사 입력에는 Phase 3에서 확정해 build 파일에 기록한 `Confirmed SSOT Action Matrix`와 impact audit result summary를 포함한다.
+`templates/consistency-auditor-input.md`를 사용해 Opus auditor를 호출한다. auditor는 TASK, impact/build/action artifacts, 변경된 SSOT, git status/diff, helper 결과를 직접 검사한다.
 
 감사 범위:
-- 이번 실행에서 생성·수정한 SSOT 파일
-- TASK 파일
-- `.process/<slug>/ssot-write-build.md`
-- `.process/<slug>/ssot-write-progress.md`
-- `git status`와 `git diff --name-only`
-- 가능하면 `python <HELP> check --repo . --app <APP>`
 
-감사 실패 시 메인 에이전트가 SSOT 파일을 보강하고 감사를 다시 요청할 수 있다. 서브에이전트는 어떤 경우에도 파일을 수정하지 않는다.
+- confirmed matrix의 모든 `CREATE / UPDATE / SKIP` 행
+- actor가 실제 변경한 SSOT 파일과 누락·범위 초과 여부
+- FC/FRD 및 ADR/ADR-CATALOG ID 일관성
+- PRD/FC/FRD/ADR/ARCHITECTURE 간 의미 일관성
+- TASK 링크·ID가 영구 SSOT에 남지 않았는지
+- 가능하면 `python <HELP> check --repo . --app <APP>` 결과
+
+auditor는 `.process/<slug>/ssot-write-audit.md`와 progress만 쓸 수 있고 SSOT는 수정하지 않는다. `model: "opus"`로 호출하며 메인에는 envelope만 반환한다.
+
+`FAIL`이면 메인은 감사 전문을 읽지 않고 Sonnet actor를 `Mode: repair`로 다시 호출한다. repair actor가 audit artifact의 file-specific fixes만 적용한 뒤 Opus 감사를 다시 실행한다. repair/audit 반복은 최대 2회다. 이후에도 실패하면 남은 artifact 경로와 요약을 보고하고 중단한다.
 
 ---
 
 ## Phase 6: 결과 보고
 
-최종 응답은 다음 형식으로 간결히 보고한다.
+감사가 통과하면 Sonnet actor를 `Mode: finalize`로 호출해 progress의 결과 보고 단계를 완료하고 최종 changed-path envelope를 받는다. 메인은 이 envelope와 process 경로만 사용해 간결히 보고한다.
 
 ```text
 UPDATE/CREATE <SSOT paths>
 Process: .process/<TASK-stem>/
-Audit: PASS | FAIL | AUDIT_BLOCKED - read-only subagent unavailable
+Audit: PASS | FAIL | AUDIT_BLOCKED - required subagent unavailable
 Next: work-packet-write
 ```
 
-감사가 `FAIL`이면 실패 항목과 남은 수정 필요 사항을 1줄씩 덧붙인다.
+감사가 `FAIL`이면 `.process/<slug>/ssot-write-audit.md` 경로와 남은 수정 요약만 덧붙인다.

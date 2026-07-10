@@ -8,35 +8,55 @@
 - Process dir: `.process/<TASK-stem>/`
 - Resume: `<true|false>`
 
+## Agent Contract
+
+| Role | Model | Reads | Writes |
+|---|---|---|---|
+| Main orchestrator | Opus session | status envelopes only | none |
+| Planning thinker | opus | TASK, SSOT, guides/templates | impact/build/progress artifacts only |
+| SSOT actor | sonnet | confirmed plan and target inputs | confirmed SSOT targets/action/progress |
+| Consistency auditor | opus | TASK, plan, action, changed SSOT/diff | audit/progress artifacts only |
+
 ## SSOT Work Plan
 
-| Stage | Name | Status | Output |
-|---|---|---|---|
-| 1 | TASK 검증 | pending | TASK path/app/check-task validation |
-| 2 | 영향 SSOT 분석 | pending | Read-only impact auditor summary |
-| 3 | SSOT 수정 계획 확정 | pending | CREATE/UPDATE target list and edit scope |
-| 4 | SSOT 파일 수정 | pending | Main-agent SSOT edits only |
-| 5 | 수정 후 일관성 감사 | pending | Read-only consistency audit result |
-| 6 | 결과 보고 | pending | UPDATE/CREATE, Process, Audit, Next |
+Status values are `pending / doing / done / blocked`.
+
+| Stage | Name | Owner | Status | Output |
+|---|---|---|---|---|
+| 0 | bootstrap / resume | Sonnet actor | pending | Process files and resume stage |
+| 1 | TASK 검증 | Opus planner | pending | Validation in impact artifact |
+| 2 | 영향 SSOT 분석 | Opus planner | pending | Required SSOT Coverage Matrix |
+| 3 | SSOT 수정 계획 확정 | Opus planner | pending | Confirmed SSOT Action Matrix |
+| 4 | SSOT 파일 수정 | Sonnet actor | pending | SSOT edits and action artifact |
+| 5 | 수정 후 일관성 감사 | Opus auditor | pending | Audit artifact and repair contract |
+| 6 | 결과 정리/보고 | Sonnet finalizer / Main orchestrator | pending | Final envelope, UPDATE/CREATE, Process, Audit, Next |
 
 ## Confirmed SSOT Action Matrix
 
-Phase 3 writes the final main-agent decision here after reviewing the impact auditor output. Use this matrix as the source of truth for Phase 4 edits and Phase 5 consistency audit input.
+The Opus planner writes the final decision here. This matrix is the only authority for Sonnet actor edits and the Opus consistency audit.
 
 | SSOT type | Action | Target path | Existing ID | Edit scope | Reason | Source impact row | User question |
 |---|---|---|---|---|---|---|---|
-| PRD | CREATE/UPDATE/SKIP | `<path or none>` | `<ID or none>` | `<section/table/file or none>` | `<content-based reason>` | `<summary>` | `<none or resolved question>` |
-| FC | CREATE/UPDATE/SKIP | `<path or none>` | `<ID or none>` | `<section/table/file or none>` | `<content-based reason>` | `<summary>` | `<none or resolved question>` |
-| FRD | CREATE/UPDATE/SKIP | `<path or none>` | `<ID or none>` | `<section/table/file or none>` | `<content-based reason>` | `<summary>` | `<none or resolved question>` |
-| ADR | CREATE/UPDATE/SKIP | `<path or none>` | `<ID or none>` | `<section/table/file or none>` | `<content-based reason>` | `<summary>` | `<none or resolved question>` |
-| ADR-CATALOG | CREATE/UPDATE/SKIP | `<path or none>` | `<ID or none>` | `<section/table/file or none>` | `<content-based reason>` | `<summary>` | `<none or resolved question>` |
-| ARCHITECTURE | CREATE/UPDATE/SKIP | `<path or none>` | `<ID or none>` | `<section/table/file or none>` | `<content-based reason>` | `<summary>` | `<none or resolved question>` |
+| PRD | CREATE/UPDATE/SKIP/BLOCKED | `<path or none>` | `<ID or none>` | `<section/table/file or none>` | `<content-based reason>` | `<summary>` | `<none or unresolved question>` |
+| FC | CREATE/UPDATE/SKIP/BLOCKED | `<path or none>` | `<ID or none>` | `<section/table/file or none>` | `<content-based reason>` | `<summary>` | `<none or unresolved question>` |
+| FRD | CREATE/UPDATE/SKIP/BLOCKED | `<path or none>` | `<ID or none>` | `<section/table/file or none>` | `<content-based reason>` | `<summary>` | `<none or unresolved question>` |
+| ADR | CREATE/UPDATE/SKIP/BLOCKED | `<path or none>` | `<ID or none>` | `<section/table/file or none>` | `<content-based reason>` | `<summary>` | `<none or unresolved question>` |
+| ADR-CATALOG | CREATE/UPDATE/SKIP/BLOCKED | `<path or none>` | `<ID or none>` | `<section/table/file or none>` | `<content-based reason>` | `<summary>` | `<none or unresolved question>` |
+| ARCHITECTURE | CREATE/UPDATE/SKIP/BLOCKED | `<path or none>` | `<ID or none>` | `<section/table/file or none>` | `<content-based reason>` | `<summary>` | `<none or unresolved question>` |
+
+## Handoff Artifacts
+
+| Artifact | Owner | Consumer | Status |
+|---|---|---|---|
+| `ssot-write-impact.md` | Opus planner | Sonnet actor, Opus auditor | pending |
+| `ssot-write-action.md` | Sonnet actor | Opus auditor | pending |
+| `ssot-write-audit.md` | Opus auditor | Sonnet repair actor, main envelope | pending |
 
 ## Guardrails
 
-- Status values are `pending / doing / done / blocked`.
-- Subagents are read-only and must not edit files.
-- Main agent is the only writer for PRD/FC/FRD/ADR/ADR-CATALOG/ARCHITECTURE.
-- Do not leave TASK markdown links or TASK ID citations in permanent SSOT bodies.
-- Ambiguous SSOT impact or new/existing feature judgment blocks for user clarification.
+- Main orchestrator does not read raw TASK/SSOT/diff content and writes no file.
+- Planning thinker and auditor do not modify TASK or permanent SSOT.
+- Sonnet actor modifies only `CREATE/UPDATE` targets and scopes in the confirmed matrix.
+- Permanent SSOT contains no TASK markdown link or TASK ID citation.
+- Ambiguous impact or design blocks for user clarification.
 - Final `Next` is `work-packet-write`.

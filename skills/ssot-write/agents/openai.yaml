@@ -1,4 +1,4 @@
 interface:
   display_name: "SSOTWrite"
-  short_description: "Update SSOT docs from TASK"
-  default_prompt: "Use $ssot-write to update SSOT documents from a TASK file."
+  short_description: "Orchestrate Opus planning and Sonnet SSOT edits"
+  default_prompt: "Use $ssot-write to update SSOT documents from a TASK with context-isolated multi-agent orchestration."

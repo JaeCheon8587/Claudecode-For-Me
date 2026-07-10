@@ -6,40 +6,59 @@ Status values: `pending / doing / done / blocked`
 
 ## Stage Status
 
-Latest resume snapshot. Update these rows in place as stages advance.
+Latest resume snapshot. The assigned subagent updates these rows in place; the main orchestrator does not read or edit this file.
 
-| Stage | Name | Status | Last Update | Notes |
-|---|---|---|---|---|
-| 1 | TASK 검증 | pending | - | - |
-| 2 | 영향 SSOT 분석 | pending | - | - |
-| 3 | SSOT 수정 계획 확정 | pending | - | - |
-| 4 | SSOT 파일 수정 | pending | - | - |
-| 5 | 수정 후 일관성 감사 | pending | - | - |
-| 6 | 결과 보고 | pending | - | - |
+| Stage | Name | Owner | Status | Last Update | Notes |
+|---|---|---|---|---|---|
+| 0 | bootstrap / resume | Sonnet actor | pending | - | - |
+| 1 | TASK 검증 | Opus planner | pending | - | - |
+| 2 | 영향 SSOT 분석 | Opus planner | pending | - | - |
+| 3 | SSOT 수정 계획 확정 | Opus planner | pending | - | - |
+| 4 | SSOT 파일 수정 | Sonnet actor | pending | - | - |
+| 5 | 수정 후 일관성 감사 | Opus auditor | pending | - | - |
+| 6 | 결과 정리/보고 | Sonnet finalizer / Main orchestrator | pending | - | - |
 
 ## Log
 
-Append-only log. Add new entries; do not rewrite previous log entries.
+Append-only log. Assigned agents add compact entries; do not rewrite previous entries.
 
-### `<YYYY-MM-DD HH:mm>` - Stage 1 TASK 검증 - pending
+### `<YYYY-MM-DD HH:mm>` - Stage 0 bootstrap / resume - pending
 
-- Summary: `<TASK validation summary>`
+- Actor: `sonnet`
+- Summary: `<path/helper/process initialization summary>`
+- Resume from: `<stage or new run>`
 - Decision: `<continue|blocked>`
 
-### `<YYYY-MM-DD HH:mm>` - Stage 2 영향 SSOT 분석 - pending
+### `<YYYY-MM-DD HH:mm>` - Stage 1-3 planning - pending
 
-- Auditor: `<read-only impact auditor|main-agent fallback>`
-- Result: `<PASS|FAIL|AUDIT_BLOCKED>`
-- Impact audit digest: `<impact summary only; do not paste full subagent transcript>`
-- Matrix digest: `<PRD/FC/FRD/ADR/ADR-CATALOG/ARCHITECTURE judgments>`
+- Thinker: `opus`
+- Result: `<READY|BLOCKED|FAIL>`
+- Impact artifact: `ssot-write-impact.md`
+- Impact audit digest: `<maximum 5 bullets>`
+- Matrix digest: `<CREATE/UPDATE/SKIP/BLOCKED counts and targets only>`
+- Blocking question: `<none or one question>`
 
-### `<YYYY-MM-DD HH:mm>` - Stage 3 SSOT 수정 계획 확정 - pending
+### `<YYYY-MM-DD HH:mm>` - Stage 4 action - pending
 
-- Confirmed plan digest: `<CREATE/UPDATE/SKIP matrix summary and any resolved questions>`
-- Decision: `<continue|blocked>`
+- Actor: `sonnet`
+- Mode: `<apply|repair>`
+- Result: `<PASS|BLOCKED|FAIL>`
+- Action artifact: `ssot-write-action.md`
+- Changed paths: `<paths or none>`
+- Summary: `<maximum 5 bullets>`
 
-### `<YYYY-MM-DD HH:mm>` - Stage 5 수정 후 일관성 감사 - pending
+### `<YYYY-MM-DD HH:mm>` - Stage 5 audit - pending
 
-- Auditor: `<read-only consistency auditor|unavailable>`
-- Result: `<PASS|FAIL|AUDIT_BLOCKED>`
-- Consistency audit digest: `<file audit and required fixes summary only; do not paste full subagent transcript>`
+- Auditor: `opus`
+- Iteration: `<1|2|3>`
+- Result: `<PASS|FAIL|BLOCKED>`
+- Audit artifact: `ssot-write-audit.md`
+- Consistency audit digest: `<maximum 5 bullets>`
+- Repair contract: `<fix count or none>`
+
+### `<YYYY-MM-DD HH:mm>` - Stage 6 finalize - pending
+
+- Actor: `sonnet`
+- Audit: `<PASS>`
+- Final changed SSOT paths: `<paths>`
+- Decision: `<ready to report|blocked>`

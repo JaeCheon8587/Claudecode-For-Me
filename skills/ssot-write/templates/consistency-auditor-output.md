@@ -1,36 +1,47 @@
-# ssot-write Consistency Audit
+# ssot-write Opus Consistency Audit
 
-Result: PASS | FAIL | AUDIT_BLOCKED
-
-Result rule:
-- Use `Result: PASS` only when every File Audit row and every Checklist item is PASS.
-- Use `Result: FAIL` if any File Audit row or Checklist item is FAIL.
-- Use `Result: AUDIT_BLOCKED` only when the read-only auditor could not inspect required inputs.
+Result: PASS | FAIL | BLOCKED
+Iteration: `<1|2|3>`
 
 ## File Audit
 
-| Path | Expected change | Observed change | Result | Required fix |
+| Path | Expected change | Observed change | Scope match | Semantic consistency | Result | Required fix |
+|---|---|---|---|---|---|---|
+| `<SSOT path>` | `<confirmed action and scope>` | `<observed summary or missing>` | PASS/FAIL | PASS/FAIL | PASS/FAIL/BLOCKED | `<file-specific executable fix or none>` |
+
+## Cross-Document Audit
+
+| Relationship | Expected | Observed | Result | Required fix |
 |---|---|---|---|---|
-| `<SSOT path>` | `<expected CREATE/UPDATE/SKIP and scope from confirmed matrix>` | `<observed change or missing>` | PASS/FAIL/BLOCKED | `<file-specific fix or none>` |
+| FC ↔ FRD | `<expected IDs/meaning>` | `<observed>` | PASS/FAIL/BLOCKED | `<fix or none>` |
+| ADR ↔ ADR-CATALOG | `<expected ID/status>` | `<observed>` | PASS/FAIL/BLOCKED | `<fix or none>` |
+| PRD ↔ FC/FRD | `<expected feature summary>` | `<observed>` | PASS/FAIL/BLOCKED | `<fix or none>` |
+| ARCHITECTURE ↔ ADR/FRD | `<expected boundary/flow>` | `<observed>` | PASS/FAIL/BLOCKED | `<fix or none>` |
 
 ## Checklist
 
-- PASS | FAIL: Auditor was read-only.
-- PASS | FAIL: Auditor made no edit and no write.
-- PASS | FAIL: Changed SSOT paths match the confirmed plan.
-- PASS | FAIL: No SSOT file expected by the confirmed matrix is missing from changed paths.
-- PASS | FAIL: FC and FRD identifiers are consistent where applicable.
-- PASS | FAIL: ADR and ADR-CATALOG identifiers/statuses are consistent where applicable.
-- PASS | FAIL: SSOT bodies contain no TASK markdown link.
-- PASS | FAIL: SSOT bodies contain no TASK ID citation.
-- PASS | FAIL: SSOT change history uses content-based summaries instead of TASK IDs.
-- PASS | FAIL: `.process` build/progress reflects TASK 검증, 영향 SSOT 분석, SSOT 파일 수정, 일관성 감사.
+- PASS | FAIL: TASK and permanent SSOT files were not modified by the auditor.
+- PASS | FAIL: Only owned `.process` artifacts were written by the auditor.
+- PASS | FAIL: Changed paths match the confirmed matrix.
+- PASS | FAIL: No confirmed target is missing.
+- PASS | FAIL: No unplanned scope or design decision was introduced.
+- PASS | FAIL: FC/FRD identifiers and meaning are consistent.
+- PASS | FAIL: ADR/ADR-CATALOG identifiers and statuses are consistent.
+- PASS | FAIL: Permanent SSOT contains no TASK markdown link or TASK ID citation.
+- PASS | FAIL: Change history uses content-based summaries.
+- PASS | FAIL: Build, progress, impact, and action artifacts agree.
 
-## Required Fixes
+## Repair Contract
 
-- `<SSOT path>`: `<required file-specific fix, or "none">`
+List only mechanical, file-specific fixes. A Sonnet actor must be able to execute each row without a new architectural judgment.
 
-If `Result: FAIL`, every failed File Audit row or checklist item must be grounded in a file-specific required fix or a blocking note here.
+| Fix ID | Path | Exact scope | Required change | Verification |
+|---|---|---|---|---|
+| FIX-001 | `<path>` | `<section/table/row>` | `<directly executable fix>` | `<specific check>` |
+
+## Blocking Question
+
+`<one question or none>`
 
 ## Evidence
 

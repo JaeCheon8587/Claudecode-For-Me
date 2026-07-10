@@ -5,7 +5,7 @@
 | 항목 | 값 |
 |---|---|
 | 문서 ID | DEVELOPMENT_PIPELINE (단일 파일) |
-| 버전 | 0.3 (Draft) |
+| 버전 | 0.4 (Draft) |
 | 작성 가정 | 기존 스킬(grill-me/acceptance-design/meta-prompter/task-write/ssot-write/work-packet-write/forge-scope/doc-driven-review) 실존. v0.7 per-App SSOT 체계 전제 |
 | 관련 문서 | [DOCUMENT_GUIDE](.templates/DOCUMENT_GUIDE.md) · [CLAUDE](../CLAUDE.md) |
 
@@ -15,6 +15,7 @@
 | 0.1 | 2026-05-31 | 초안 — 6단계 파이프라인 정의, step3 분기, 향후 보완 backlog | jaecheon.jeong |
 | 0.2 | 2026-06-09 | step 1.5 acceptance-design(완료조건·엣지·오류·검증 4축 설계) 삽입 | jaecheon.jeong |
 | 0.3 | 2026-07-03 | docs-add-task 폐지 — step3 을 task-write→ssot-write→work-packet-write 트리오로 분할 | jaecheon.jeong |
+| 0.4 | 2026-07-10 | ssot-write를 Opus 오케스트레이터·planner·auditor와 Sonnet actor의 컨텍스트 격리 멀티 에이전트 흐름으로 전환 | jaecheon.jeong |
 
 ## 0. 목적
 
@@ -31,7 +32,7 @@ flowchart TD
     A["1. grill-me<br/>요구사항 구체화"] --> A2["1.5 acceptance-design<br/>완료조건·검증 4축 설계"]
     A2 --> B["2. meta-prompter<br/>설계 프롬프트 정제"]
     B --> C1["3a. task-write<br/>TASK 작성 (Scope Authority)"]
-    C1 --> C2["3b. ssot-write<br/>TASK 기반 영구 SSOT 갱신"]
+    C1 --> C2["3b. ssot-write<br/>Opus 판단 + Sonnet SSOT 갱신"]
     C2 --> C3["3c. work-packet-write<br/>TASK+SSOT → Work Packet"]
     C3 --> F["4. forge-scope<br/>Work Packet 기반 개발"]
     F --> G["5. doc-driven-review<br/>Codex 문서 기준 검증"]
@@ -47,7 +48,7 @@ flowchart TD
 | 1.5 | `acceptance-design` | grill-me 정리본 (doc) | 완료조건·엣지케이스·오류케이스·검증방법 4축 설계본 (대화형) | doc 기준 "끝의 정의"와 검증을 같이 설계 |
 | 2 | `meta-prompter` | grill-me 결과 + 4축 설계본 | 한국어 개조식 메타프롬프트 (마크다운 코드블록) | 요구사항을 다음 단계가 안정 수행할 구조화 프롬프트로 정제 |
 | 3a | `task-write` | 요구사항 문서 또는 자연어 요청 | `docs/<App>/TASK/<App>-TASK-<NNN>.md` (Scope Authority — 목적·범위·비목표·완료기준·엣지·오류·테스트만). 영구 SSOT 는 생성·수정·분석하지 않음 | TASK 작성 + read-only 서브에이전트 자체 검증 |
-| 3b | `ssot-write` | task-write 산출 TASK | 영향 PRD/FC/FRD/ADR/ADR-CATALOG upsert (신규 기능: FRD 신설 + PRD §3.1/§7 + FC 행 / 기존 영향: FRD 갱신 + FC 행 상태 갱신). ADR 은 결정 유무에 따라 신설/수정/생략, op 따라 ADR-CATALOG 동기화 | read-only 서브에이전트 영향 분석·감사 후 메인 에이전트가 SSOT 직접 수정 |
+| 3b | `ssot-write` | task-write 산출 TASK | 영향 PRD/FC/FRD/ADR/ADR-CATALOG/ARCHITECTURE upsert + `.process/<TASK-stem>/` build/progress/impact/action/audit artifacts | 메인 Opus는 오케스트레이션만 수행. Opus planner가 영향·계획을 확정하고 Sonnet actor가 matrix 범위의 SSOT를 수정하며 Opus auditor가 독립 감사 |
 | 3c | `work-packet-write` | task-write TASK + ssot-write 반영 SSOT | `App-WORK_PACKET/App-WP-<NNN>.md` — Ready gate, 연결 TASK, Required SSOT Execution Matrix, Implementation Output Contract | TASK/SSOT 연결해 forge 실행용 Work Packet만 생성 (TASK/SSOT/코드 수정 안 함) |
 | 4 | `forge-scope` | work-packet-write 산출 Work Packet | `phases/scoped/<phase-dir>/index.json` + `step{N}.md` + 코드 | Work Packet 기반 경량 scoped 개발 실행 |
 | 5 | `doc-driven-review` | doc-path (1개 이상) | Missing / Improve / Overengineered / Conformance(%) | Codex 위임 — 문서가 코드 변경점에 반영됐는지 검증 |
@@ -63,18 +64,21 @@ step3 는 **task-write → ssot-write → work-packet-write** 3단 체인. 옛 `
   - **기존 수정/개선/refactor** → FC 에 이미 기능 행 **존재** (또는 운영성 work_type). 영향 FRD 다수 자동 식별 후 영향 FRD 갱신, FC 행 상태 갱신.
   - **혼합 허용** — 한 TASK 에서 신규 FRD 신설 + 기존 FRD 갱신 동시 가능.
   - **ADR 은 필요 시** — 새 결정이면 신설, 기존 결정 변경이면 기존 ADR 수정(supersede/in-place), 결정 없으면 생략. op 따라 ADR-CATALOG 동기화.
-  - read-only 서브에이전트 영향 분석·감사 후 메인 에이전트가 SSOT 직접 수정 (in-place).
+  - **역할 분리** — 메인 Opus는 경로·상태 envelope·사용자 질문만 관리한다. Opus planner가 TASK/SSOT를 직접 읽어 `Confirmed SSOT Action Matrix`를 확정하고, Sonnet actor만 영구 SSOT를 수정하며, Opus auditor가 계획 대비 결과를 감사한다.
+  - **파일 기반 인계** — 상세 판단과 결과는 `.process/<TASK-stem>/ssot-write-{impact,action,audit}.md`로 전달한다. 메인은 원문·전체 diff·artifact 전문을 읽지 않아 컨텍스트를 보존한다.
+  - **보정 루프** — 감사 실패는 Opus의 file-specific repair contract → Sonnet repair → Opus 재감사 순서로 최대 2회 보정한다. 필수 서브에이전트가 없으면 메인 fallback 없이 중단한다.
 - **work-packet-write (3c)** — TASK + 반영된 SSOT 를 연결해 forge 실행용 Work Packet 만 생성. TASK/SSOT/코드는 수정하지 않는다.
 
 TASK 는 휘발성 + 외부 SSOT 인용 금지 ([DOCUMENT_GUIDE §1.2](.templates/DOCUMENT_GUIDE.md) 룰).
 
-요구사항 정합 검증은 단계별로 분산됐다(monolith 의 "요구↔전체생성문서" 단일 99%/3회 루프는 폐지): task-write 는 TASK 파일 1개만 `docs_conformance.py` 로 채점, ssot-write 는 read-only 서브에이전트 감사로 대체. **step5 `doc-driven-review`(문서↔코드)와는 검증 축이 다르다**: step3 검증 = 요구↔문서, step5 = 문서↔코드.
+요구사항 정합 검증은 단계별로 분산됐다(monolith 의 "요구↔전체생성문서" 단일 99%/3회 루프는 폐지): task-write 는 TASK 파일 1개만 `docs_conformance.py` 로 채점하고, ssot-write 는 Opus planning/audit와 Sonnet actor 보정 루프로 요구↔영구 SSOT를 검증한다. **step5 `doc-driven-review`(문서↔코드)와는 검증 축이 다르다**: step3 검증 = 요구↔문서, step5 = 문서↔코드.
 
 ## 4. 데이터 흐름 / SSOT
 
 - 설계 문서(FRD/TASK)가 **단일 진실원천**. step4 forge-scope 와 step5 doc-driven-review 가 **같은 문서**를 참조 → 개발 의도와 검증 기준 일치.
 - forge-scope 산출물(`phases/scoped/<dir>/`)은 개발 추적용. 영구 추적은 docs/ SSOT + 코드.
 - doc-driven-review 는 working-tree + untracked 변경점을 문서 기준으로 대조 → Conformance% 산출.
+- ssot-write의 `ssot-write-build.md`는 메인 전용 문서가 아니라 Opus planner가 확정하고 Sonnet actor·Opus auditor·후속 work-packet-write가 직접 소비하는 공유 실행 계약이다. 실행 상태와 resume 기준은 `ssot-write-progress.md`가 담당한다.
 
 ## 5. 향후 보완 (Backlog)
 

@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v3.10.0 · 커스텀 스킬 13종 + 슬래시 커맨드 17종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v3.11.0 · 커스텀 스킬 13종 + 슬래시 커맨드 17종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,7 +11,7 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `3.10.0` |
+| 버전 | `3.11.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
@@ -66,6 +66,10 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v3.11.0 — ssot-write 컨텍스트 격리 멀티 에이전트 오케스트레이션
+
+`ssot-write`를 메인 에이전트가 TASK/SSOT 원문을 직접 읽고 수정하던 인라인 흐름에서 **Opus main orchestrator → Opus planning thinker → Sonnet SSOT actor → Opus consistency auditor** 역할 분리 구조로 전환했다. 메인 Opus는 경로·상태 envelope·사용자 질문만 보유하고 파일을 수정하지 않으며, 상세 판단과 실행 결과는 `.process/<TASK-stem>/ssot-write-{impact,action,audit}.md`로 직접 인계해 메인 컨텍스트를 보존한다. Opus planner가 `Confirmed SSOT Action Matrix`를 확정하고, Sonnet actor는 matrix의 `CREATE/UPDATE` 대상과 범위만 수정한다. 감사 실패는 Opus가 file-specific repair contract를 만들고 Sonnet repair actor가 최대 2회 보정하며, 마지막 Sonnet finalizer가 progress를 닫는다. 필수 서브에이전트를 사용할 수 없으면 메인 fallback 없이 중단한다. 기존 impact auditor 템플릿은 planning 책임에 맞게 `impact-planner-*`로 이름을 바꾸고 Sonnet actor 입출력 템플릿을 추가했다.
 
 ### v3.10.0 — requirement-spec → pipeline-runner 핸드오프 게이트
 
@@ -251,7 +255,7 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `meta-prompter` | meta-prompter skill 진입 |
 | `requirement-spec` | requirement-spec skill 진입. grill-me→acceptance-design→meta-prompter→codex 검증 자동 체인 메타 스킬. 확정 후 pipeline-runner 실행 여부 컨펌 게이트 |
 | `safe-pull` | safe-pull skill 진입. fetch 후 브리핑 → 컨펌 게이트 → pull |
-| `ssot-write` | ssot-write skill 진입. TASK 기반으로 영구 SSOT 문서를 갱신하고 read-only auditor로 영향/일관성 감사 |
+| `ssot-write` | ssot-write skill 진입. 메인 Opus는 오케스트레이션만 수행하고 Opus planner/auditor가 판단, Sonnet actor가 확정 범위의 영구 SSOT를 수정 |
 | `task-write` | task-write skill 진입. TASK 파일만 생성하고 SSOT 문서는 수정하지 않음 |
 | `work-packet-write` | work-packet-write skill 진입. TASK와 Required SSOT Execution Matrix를 연결하는 Work Packet만 생성하고 다음 단계를 forge-scope로 넘김 |
 
@@ -345,9 +349,13 @@ codenav --root <repo> ui --port 9876
 ```
 
 - **책임 분리** — `task-write`는 TASK 파일만 생성한다. PRD/FC/FRD/ADR/ADR-CATALOG/ARCHITECTURE 분석·수정·후보 작성은 금지.
-- **SSOT 갱신 단계** — `ssot-write`는 완성된 TASK를 Scope Authority로 삼아 영구 SSOT를 좁게 생성·수정한다.
-- **read-only auditor 2회** — 영향 분석은 SSOT 종류별 matrix로 판정하고, 수정 후 감사는 확정 matrix 기준으로 expected/observed/fix를 파일별 점검한다.
-- **프로세스 기록** — `.process/<TASK-stem>/ssot-write-build.md`에 `Confirmed SSOT Action Matrix`, `ssot-write-progress.md`에 최신 Stage Status와 append-only Log를 남긴다.
+- **Opus 메인 전제** — 스킬은 메인 모델을 바꾸지 못하므로 Opus 세션에서 시작한다. 메인은 TASK/SSOT 본문·전체 diff·상세 artifact를 읽거나 파일을 수정하지 않고 에이전트 생성, gate, 사용자 질문, 최종 보고만 수행한다.
+- **역할 분리** — Opus planner가 TASK 검증·영향 분석·수정 계획을 확정하고, Sonnet actor가 `bootstrap/apply/repair/finalize` 행동을 수행하며, Opus auditor가 의미·구조·ID 일관성을 독립 검증한다.
+- **SSOT 갱신 권한** — 영구 SSOT를 쓸 수 있는 역할은 Sonnet actor뿐이다. actor는 `Confirmed SSOT Action Matrix`의 `CREATE/UPDATE` 경로와 edit scope 밖으로 범위를 확장하거나 새 설계 판단을 할 수 없다.
+- **컨텍스트 격리** — 메인은 repo/TASK/process/template 경로와 최대 5개 bullet의 `STATUS/ARTIFACT/SUMMARY/QUESTION/CHANGED` envelope만 전달·수신한다. 상세 인계는 공유 파일을 다음 에이전트가 직접 읽는다.
+- **프로세스 기록** — `ssot-write-build.md`는 planner가 확정하고 actor/auditor 및 후속 `work-packet-write`가 소비하는 실행 계약이다. `ssot-write-progress.md`는 resume 상태, `ssot-write-impact.md`·`ssot-write-action.md`·`ssot-write-audit.md`는 역할별 상세 결과를 보존한다.
+- **수정·감사 루프** — audit `FAIL`이면 Opus auditor의 file-specific repair contract만 Sonnet repair actor가 적용하고 Opus가 재감사한다. 최대 2회 보정 후에도 실패하면 중단한다.
+- **fallback 금지** — 필수 서브에이전트를 생성할 수 없으면 메인이 대신 분석·수정하지 않고 `AUDIT_BLOCKED - required subagent unavailable`로 종료한다.
 - **TASK 인용 금지** — 영구 SSOT 본문과 변경 이력에는 TASK markdown link/TASK ID를 남기지 않는다.
 - **실행 manifest** — `work-packet-write`는 TASK와 Required SSOT Execution Matrix를 연결하는 `docs/<App>/WORK_PACKET/<App>-WP-<NNN>.md`만 생성한다.
 - **후속 단계** — Work Packet 생성 후 `Next: forge-scope`로 구현 단계에 넘긴다.
