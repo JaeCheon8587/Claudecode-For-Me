@@ -1,6 +1,6 @@
 ---
 name: requirement-spec
-description: 요구사항을 대화로 도출하고 완료조건·검증을 설계한 뒤 개발 지시서로 정제하고 codex로 자기검증하는 메타 스킬. grill-me로 요구사항 도출 → acceptance-design으로 완료조건·엣지·오류·검증 4축 설계 → meta-prompter로 개발 지시서 정제 → .requirements/requirement-{slug}.md 저장 → codex 검증↔보완 수렴 루프(최대 3회·99% 임계). "요구사항 지시서 만들어줘", "요구사항부터 같이 정리해서 작업지시서까지", "요구사항 도출하고 검증까지", "requirement-spec" 요청 시 트리거.
+description: 요구사항을 대화로 도출하고 완료조건·검증을 설계한 뒤 개발 지시서로 정제하고 codex로 자기검증하는 메타 스킬. grill-me로 요구사항 도출 → acceptance-design으로 완료조건·엣지·오류·검증 4축 설계 → meta-prompter로 개발 지시서 정제 → .requirements/requirement-{slug}.md 저장 → codex 검증↔보완 수렴 루프(최대 3회·99% 임계) → 확정 후 pipeline-runner 실행 여부를 물어 인라인 핸드오프. "요구사항 지시서 만들어줘", "요구사항부터 같이 정리해서 작업지시서까지", "요구사항 도출하고 검증까지", "requirement-spec" 요청 시 트리거.
 argument-hint: "[요구사항 도출할 주제]"
 ---
 
@@ -16,9 +16,9 @@ argument-hint: "[요구사항 도출할 주제]"
 
 ## 동작 원칙
 
-- **자동 인라인 체인**: Phase 1~6을 자동으로 이어 간다. **사용자 상호작용은 grill-me 인터뷰(Phase 1)·acceptance-design 인터뷰(Phase 1.5)·최종 리뷰(Phase 5)에서만** 발생한다.
+- **자동 인라인 체인**: Phase 1~6을 자동으로 이어 간다. **사용자 상호작용은 grill-me 인터뷰(Phase 1)·acceptance-design 인터뷰(Phase 1.5)·최종 리뷰(Phase 5)·후속 핸드오프(Phase 6)에서만** 발생한다.
 - **인라인 실행**: 다른 스킬을 호출할 때는 해당 `SKILL.md`를 읽어 **그 지침을 이 대화에서 그대로 수행**한다(별도 프로세스·핸드오프 아님).
-- **산출물 경계**: 지시서 저장/갱신까지가 이 스킬의 끝이다. **구현 코드를 작성하지 않고, `ExitPlanMode`를 호출하지 않는다.** (단, 정리본·지시서를 `.requirements/`에 저장하는 파일 쓰기는 허용.)
+- **산출물 경계**: 지시서 저장/갱신까지가 이 스킬 **자체의** 산출물이다. **구현 코드를 직접 작성하지 않고, `ExitPlanMode`를 호출하지 않는다.** (단, 정리본·지시서를 `.requirements/`에 저장하는 파일 쓰기는 허용. 또한 Phase 6에서 **사용자가 명시적으로 선택하면** pipeline-runner로 인라인 핸드오프하며, pipeline-runner 자체 승인 게이트가 다시 막으므로 이 스킬이 구현으로 직행하지 않는다.)
 - **Phase 게이트(전역)**: 각 Phase는 게이트다. 해당 Phase의 **전이 조건(완료 조건)을 충족하기 전에는 절대로 다음 Phase로 넘어가지 않는다.** 건너뛰기·앞당기기 금지. 각 Phase 머리의 ⛔ 게이트 문구를 매번 확인한다.
 
 ---
@@ -206,13 +206,22 @@ trajectory(예: `82% → 94% → 99%`)·최종 Coverage·반영 라운드 수·�
 
 ---
 
-## Phase 6 — 종료
+## Phase 6 — 종료 및 후속 핸드오프
 
-> ⛔ **게이트**: Phase 5의 사용자 선택에 따라서만 동작한다. 이 Phase로 스킬이 **종료**되며, 구현·코드 작성 단계로 넘어가지 않는다.
+> ⛔ **게이트**: Phase 5의 사용자 선택에 따라 지시서를 먼저 마감한 뒤, 후속 핸드오프 질문을 **반드시 AskUserQuestion으로** 묻는다. 이 스킬은 구현 코드를 직접 작성하지 않는다 — 후속 진행 여부는 오직 사용자 선택으로만 결정된다.
 
+### 6-1. 지시서 마감
 - **확정 선택**: 현 지시서를 그대로 확정하고 최종 경로 + 최종 Coverage를 한 줄로 보고한다.
 - **보완 1회 더 선택**: 마지막 `Gaps to Fix`를 지시서에 반영해 `.requirements/requirement-{slug}.md`를 덮어쓴다(meta-prompter 출력 규약 유지). 갱신 후 최종 경로를 보고한다. (재검증은 하지 않는다 — 루프는 Phase 4에서 이미 종료.)
-- 종료. 구현 단계로 넘어가지 않는다.
+
+### 6-2. 후속 파이프라인 핸드오프 (AskUserQuestion, 1회)
+- 6-1에서 지시서가 마감된 **직후**(확정/보완 어느 경로든), **반드시** `AskUserQuestion`으로 후속 실행 여부를 묻는다. 텍스트로만 묻고 넘어가지 않는다.
+- question: "지시서 확정 완료 (`{최종 경로}`). 후속 파이프라인(pipeline-runner)을 실행할까요?"
+- options (2개):
+  - **지금 바로 실행 (Recommended)** — 이 세션에서 pipeline-runner를 인라인 실행
+  - **여기서 종료** — 파이프라인 실행 안 함
+- **지금 바로 실행** 선택 시: `skills/pipeline-runner/SKILL.md`를 읽어 **그 지침을 이 대화에서 그대로 수행**한다(인라인 실행 — 별도 프로세스·핸드오프 아님). 입력은 방금 확정한 `.requirements/requirement-{slug}.md`(= pipeline-runner Phase 0의 `<requirement-path>`), slug는 동일 값을 사용한다. pipeline-runner는 자체 승인 게이트(`Approval: pending`)에서 다시 멈추므로 즉시 구현으로 진입하지 않는다.
+- **여기서 종료** 선택 시: 종료. 아무 후속 동작도 하지 않는다.
 
 ---
 

@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v3.7.0 · 커스텀 스킬 13종 + 슬래시 커맨드 17종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v3.10.0 · 커스텀 스킬 13종 + 슬래시 커맨드 17종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,7 +11,7 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `3.7.0` |
+| 버전 | `3.10.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
@@ -66,6 +66,14 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v3.10.0 — requirement-spec → pipeline-runner 핸드오프 게이트
+
+`requirement-spec`이 지시서를 확정한 직후 **후속 파이프라인 실행 여부를 `AskUserQuestion`으로 묻고 인라인 핸드오프**하도록 Phase 6을 확장했다. 기존엔 지시서 저장 후 "종료. 구현 단계로 넘어가지 않는다"로 멈춰 사용자가 매번 `pipeline-runner`를 수동 재호출해야 했다. Phase 6을 `6-1 지시서 마감`(확정/보완) + `6-2 핸드오프`(2지선다 — `지금 바로 실행 (Recommended)` / `여기서 종료`)로 분리하고, `지금 바로 실행` 선택 시 기존 인라인 실행 관례대로 `skills/pipeline-runner/SKILL.md`를 읽어 방금 확정한 `.requirements/requirement-{slug}.md`를 입력으로 그대로 수행한다. pipeline-runner는 자체 승인 게이트(`Approval: pending`)에서 다시 멈추므로 구현으로 직행하지 않는다. `/clear`는 클라이언트 명령이라 스킬이 툴로 실행할 수 없고 클리어 시 후속 지시가 소실되므로 메뉴에서 제외. 동작 원칙의 사용자 상호작용 지점에 Phase 6을 추가하고, 산출물 경계 문구를 "사용자 선택형 인라인 핸드오프는 예외"로 정합화. SKILL.md·frontmatter만 변경 — 스크립트 무수정.
+
+### v3.9.0 — branch-review 출력 템플릿 외부화(report-template.md) + BLUF/요약우선
+
+`branch-review`의 최종 보고 출력 구조를 SKILL.md 인라인에서 `skills/branch-review/templates/report-template.md`로 외부화하고, 결론부터 제시하는 BLUF(Bottom Line Up Front)·요약 우선 포맷을 도입했다.
 
 ### v3.8.0 — 구조 검증 서브에이전트 Sonnet 다운시프트
 
@@ -219,7 +227,7 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `forge-scope` | `/claudecode-for-me:forge-scope <WORK_PACKET-or-TASK-doc-path> [--name <slug>] [--force]` | Work Packet을 우선 입력으로 받아 Ready gate, 연결 TASK, Required SSOT Execution Matrix를 소비해 워크트리에서 고정 계약-TDD 파이프라인(계약+테스트→구현→빌드/유닛테스트)으로 구현. TASK 직접 입력은 legacy 호환. 빌드는 `.csproj` 단위만(솔루션 금지). 정리는 `forge-cancel`. |
 | `grill-me` | `/claudecode-for-me:grill-me [주제]` | 1문 1답으로 요구사항 모호점 추적 |
 | `meta-prompter` | `/claudecode-for-me:meta-prompter [요청]` | 거친 요청 → 구조화된 메타 프롬프트 |
-| `requirement-spec` | `/claudecode-for-me:requirement-spec [주제]` | grill-me→acceptance-design→meta-prompter→codex 검증을 자동 체인. 요구사항 도출·완료조건 4축 설계·개발 지시서 `.requirements/requirement-{slug}.md` 산출 후 정리본+설계본 대비 codex 검증↔보완 수렴 루프(최대 3회·99% 임계) |
+| `requirement-spec` | `/claudecode-for-me:requirement-spec [주제]` | grill-me→acceptance-design→meta-prompter→codex 검증을 자동 체인. 요구사항 도출·완료조건 4축 설계·개발 지시서 `.requirements/requirement-{slug}.md` 산출 후 정리본+설계본 대비 codex 검증↔보완 수렴 루프(최대 3회·99% 임계). 확정 후 `AskUserQuestion`으로 pipeline-runner 실행 여부를 물어 인라인 핸드오프 |
 | `safe-pull` | `/claudecode-for-me:safe-pull [원격/브랜치]` | git pull 전 fetch(비파괴)로 변경·충돌·사이드이펙트 브리핑 후 AskUserQuestion 컨펌 게이트 |
 | `ssot-write` | `/claudecode-for-me:ssot-write <TASK-path> [--app <APP>] [--name <slug>] [--resume]` | TASK를 기준으로 PRD/FC/FRD/ADR/ADR-CATALOG/ARCHITECTURE 영구 SSOT를 갱신. read-only 영향 분석과 수정 후 일관성 감사를 거치며 `.process/<slug>/`에 계획과 진행로그 기록 |
 | `task-write` | `/claudecode-for-me:task-write [--app <APP>] [--from <requirements-path>] [요청]` | 요구사항 문서/자연어 요청에서 TASK 작업 범위 계약만 생성. FRD/FC/ADR/ADR-CATALOG/PRD/ARCHITECTURE 분석·수정 없음 |
@@ -241,7 +249,7 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `forge-scope` | forge-scope skill 진입 |
 | `grill-me` | grill-me skill 진입 |
 | `meta-prompter` | meta-prompter skill 진입 |
-| `requirement-spec` | requirement-spec skill 진입. grill-me→acceptance-design→meta-prompter→codex 검증 자동 체인 메타 스킬 |
+| `requirement-spec` | requirement-spec skill 진입. grill-me→acceptance-design→meta-prompter→codex 검증 자동 체인 메타 스킬. 확정 후 pipeline-runner 실행 여부 컨펌 게이트 |
 | `safe-pull` | safe-pull skill 진입. fetch 후 브리핑 → 컨펌 게이트 → pull |
 | `ssot-write` | ssot-write skill 진입. TASK 기반으로 영구 SSOT 문서를 갱신하고 read-only auditor로 영향/일관성 감사 |
 | `task-write` | task-write skill 진입. TASK 파일만 생성하고 SSOT 문서는 수정하지 않음 |
