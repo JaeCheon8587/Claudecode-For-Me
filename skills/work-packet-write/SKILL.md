@@ -52,8 +52,10 @@ description: TASK 문서와 반영된 영구 SSOT를 연결해 AI 코드 실행�
 
 - TASK 파일
 - `--process`가 있으면 `<process-dir>/ssot-write-build.md`
+- `--process`가 있으면 `<process-dir>/state.json`도 먼저 읽는다. Contract v8은 `run_status: terminal`, `terminal_result: DONE|NOOP`, `disposition: ACTIVE|NOOP`, `downstream: WORK_PACKET`을 모두 요구한다. 기존 Contract v5/v6/v7 process는 해당 runner의 성공 상태 계약을 따른다. 하나라도 다르면 Work Packet을 만들지 않고 BLOCKED한다.
 - `--process`가 없으면 `.process/<TASK-stem>/ssot-write-build.md`가 존재할 때만 읽는다.
 - build 파일의 `Confirmed SSOT Action Matrix`
+- build 파일의 `Input Precedence and Downstream Constraints`(v7에서는 approved relation/authority/governance constraint generated view)
 - `Confirmed SSOT Action Matrix`에서 `CREATE` 또는 `UPDATE` 대상인 SSOT 파일
 - TASK가 직접 실행 경계 판단에 필요한 최소 기존 SSOT 파일
 - Work Packet 템플릿: `docs/.templates/App/WORK_PACKET/APP-WP-001-TEMPLATE.md`
@@ -64,6 +66,10 @@ description: TASK 문서와 반영된 영구 SSOT를 연결해 AI 코드 실행�
 - `CREATE/UPDATE target path`가 비어 있거나 파일이 없으면 임의 링크를 만들지 않는다.
 - `CREATE/UPDATE target path` 누락 또는 파일 미존재 행은 Work Packet 상태를 `Draft`로 만들고, 해당 `Source matrix row`를 `Blocking / Open Questions`에 기록한다.
 - 실행에 직접 필요 없는 `SKIP` 행은 Required SSOT Execution Matrix에 넣지 않는다.
+- `Input Precedence and Downstream Constraints`의 ADR/authority relation 문서는 예외적으로 `Required`에 넣는다. matrix action이 `SKIP`이어도 approved contract가 구현 판단의 Truth Authority로 지정하면 제외하지 않는다.
+- 기존 Contract v5 build의 `CURRENT_SSOT_WINS` 행은 같은 authority relation으로 해석한다.
+- constraint의 `Source matrix row`는 `Downstream constraint <Relation ID>`로 기록하고 `Work Packet instruction`을 실행 규칙에 그대로 반영한다.
+- `BLOCKED` precedence 행이나 명시적 supersession 근거 없는 충돌이 있으면 Work Packet을 `Draft`로 만들고 구현을 금지한다.
 - `Optional`은 CREATE/UPDATE를 느슨하게 낮추는 용도가 아니라, TASK 실행 판단에 실제로 도움이 되는 예외 입력에만 허용한다.
 - Work Packet에는 각 행의 `Source matrix row`를 남겨 ssot-write 판단과 연결한다.
 
@@ -97,10 +103,12 @@ description: TASK 문서와 반영된 영구 SSOT를 연결해 AI 코드 실행�
 - `Required SSOT Execution Matrix`에는 `SSOT type / Action / Document / Read range / Why required / Source matrix row / Priority` 컬럼을 둔다.
 - `Required SSOT Execution Matrix`에는 이번 구현자가 반드시 읽어야 하는 문서만 넣는다.
 - `CREATE` / `UPDATE` 행은 기본 `Required`로 반영한다. target path가 없거나 파일이 없으면 matrix에 임의 링크를 만들지 말고 `Blocking / Open Questions`에 해당 source row를 기록한다.
-- `Source matrix row`에는 `Confirmed SSOT Action Matrix`의 행 번호 또는 식별 가능한 원문 행 라벨을 적는다.
+- approved ADR/authority relation의 current authority는 `Required`로 반영하고 read range는 controlling decision 범위로 좁힌다.
+- `Source matrix row`에는 `Confirmed SSOT Action Matrix`의 행 번호, action ID 또는 relation ID를 적는다.
 - `읽을 범위`는 파일 전체보다 절·표·행 단위로 좁게 쓴다.
 - `Blocking / Open Questions`를 반드시 작성한다. `Ready`이면 `none`으로 명시하고, 미확정 사항이 있으면 `Draft`로 둔다.
 - `실행 규칙`에는 TASK 우선/SSOT 충돌/모호성 중단 규칙을 남긴다.
+- `실행 규칙`에는 모든 approved authority relation의 Work Packet instruction을 반영한다. TASK 목적·범위는 유지하되 충돌한 설계 결정은 명시된 current authority를 따른다.
 - `실행 경계`에는 반드시 수행, 금지, 허용, 중단 조건을 채운다.
 - `검증 입력`에는 TASK §9, §9.1, §9.2, §9.3과 실행할 빌드/테스트 후보를 적는다. 모르면 `"코드베이스 기준으로 탐색"`이라고 쓴다.
 - `Readiness Checklist`는 실제 상태에 맞게 체크한다. 확인하지 못한 항목은 체크하지 않는다.
@@ -120,6 +128,7 @@ description: TASK 문서와 반영된 영구 SSOT를 연결해 AI 코드 실행�
 - [ ] `Ready`이면 blocking issue가 없고 Required SSOT target path가 모두 존재한다.
 - [ ] `Draft`이면 후속 구현 금지 의미가 Execution Gate에 명확하다.
 - [ ] CREATE/UPDATE 대상 누락, SKIP 대상 오포함, 과도한 read range가 없다.
+- [ ] approved authority relation이 Required에 포함되고 해당 Work Packet instruction이 실행 규칙에 반영됐다.
 - [ ] Blocking / Open Questions가 존재하고 상태와 일치한다.
 - [ ] Implementation Output Contract가 존재하고 필수 완료 보고 항목 5개를 포함한다.
 - [ ] SSOT 본문을 길게 복제하지 않았다.
@@ -157,6 +166,7 @@ Phase 5 검증은 서브 에이전트에 위임해야 한다. 서브 에이전�
 - `Confirmed SSOT Action Matrix`
 - `Expected Required SSOT Execution Matrix` (Work Packet matrix와 동일 컬럼: `SSOT type / Action / Document / Read range / Why required / Source matrix row / Priority`)
 - `Impact / source summary`
+- `Input Precedence and Downstream Constraints`
 
 감사는 Work Packet에 적힌 링크만 신뢰하지 않고, expected matrix 대비 실제 Work Packet의 누락/불필요/범위 과대 여부를 확인한다.
 감사는 expected matrix와 observed Work Packet matrix를 같은 컬럼의 표 대 표로 비교한다.

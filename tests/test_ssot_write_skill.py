@@ -2,176 +2,103 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
-SKILL_DIR = ROOT / "skills" / "ssot-write"
+SKILL = ROOT / "skills/ssot-write/SKILL.md"
+COMMAND = ROOT / "commands/ssot-write.md"
+RUNNER = ROOT / "scripts/ssot_runner_v8.py"
+CONTRACT = ROOT / "scripts/ssot_contract_v8.py"
+WRAPPER = ROOT / "scripts/ssot_runner.py"
 
 
-def read(rel: str) -> str:
-    return (ROOT / rel).read_text(encoding="utf-8")
+def text(path: Path) -> str:
+    return path.read_text(encoding="utf-8")
 
 
-def test_skill_frontmatter_and_multi_agent_trigger():
-    text = read("skills/ssot-write/SKILL.md")
-    frontmatter = text.split("---", 2)[1]
-    assert text.startswith("---\n")
-    assert "name: ssot-write" in frontmatter
-    assert "멀티 에이전트" in frontmatter
-    assert "컨텍스트" in frontmatter
-    assert "[TODO" not in text
+def test_skill_declares_contract_v8_transactional_pipeline():
+    value = text(SKILL)
+    assert "Contract v8" in value
+    assert "ClaimSpec" in value
+    assert "Authority Critic" in value
+    assert "Change Critic" in value
+    assert "Outcome Critic" in value
+    assert "evidence" in value
+    assert "runner만" in value
+    assert "rollback" in value
 
 
-def test_command_invokes_skill_and_preserves_main_context():
-    text = read("commands/ssot-write.md")
-    for expected in (
-        "skills/ssot-write/SKILL.md",
-        "<TASK-path>",
-        "--resume",
-        ".process/<slug>/ssot-write-progress.md",
-        "메인은 오케스트레이션만 수행",
-        "메인이 fallback하지 않고",
-    ):
-        assert expected in text
+def test_cognitive_roles_and_models_are_separated():
+    value = text(RUNNER)
+    assert '"authority_critic": "opus"' in value
+    assert '"thinker": "opus"' in value
+    assert '"change_critic": "opus"' in value
+    assert '"renderer": "sonnet"' in value
+    assert '"outcome_critic": "opus"' in value
+    skill = text(SKILL)
+    assert "새 컨텍스트" in skill
+    assert "이전 역할 대화" in skill
 
 
-def test_role_model_mapping_is_explicit():
-    text = read("skills/ssot-write/SKILL.md")
-    for expected in (
-        "Main orchestrator",
-        "Planning thinker",
-        "SSOT actor",
-        "Consistency auditor",
-        'model: "opus"',
-        'model: "sonnet"',
-        'subagent_type: "general-purpose"',
-    ):
-        assert expected in text
-    assert "Opus planner/auditor" in text
-    assert "Sonnet actor" in text
-
-
-def test_main_is_orchestrator_only_and_uses_status_envelopes():
-    docs = read("skills/ssot-write/SKILL.md") + read("commands/ssot-write.md")
-    for expected in (
-        "메인은 TASK 본문, SSOT 본문, 전체 diff",
-        "메인은 서브에이전트에 파일 내용을 복사하지 않고",
-        "STATUS: READY | PASS | FAIL | BLOCKED",
-        "SUMMARY",
-        "QUESTION",
-        "CHANGED",
-        "required subagent unavailable",
-    ):
-        assert expected in docs
-
-
-def test_process_templates_define_role_owned_stages_and_handoffs():
-    combined = (
-        read("skills/ssot-write/templates/ssot-write-build.md")
-        + "\n"
-        + read("skills/ssot-write/templates/ssot-write-progress.md")
+def test_v8_role_templates_are_present_and_renderer_is_artifact_only():
+    names = (
+        "v8-authority-critic-input.md", "v8-claim-thinker-input.md",
+        "v8-change-critic-input.md", "v8-prose-renderer-input.md",
+        "v8-outcome-critic-input.md",
     )
+    for name in names:
+        value = text(ROOT / "skills/ssot-write/templates" / name)
+        assert "Contract v8" in value
+    renderer = text(ROOT / "skills/ssot-write/templates/v8-prose-renderer-input.md")
+    assert "JSON artifact" in renderer
+    assert "Do not modify permanent documents, staging" in renderer
+    thinker = text(ROOT / "skills/ssot-write/templates/v8-claim-thinker-input.md")
+    assert "evidence_catalog" in thinker
+    assert "evidence_ids" in thinker
+    assert "한국어 강제 계약" in thinker
+    assert "document_template" in thinker
+    outcome = text(ROOT / "skills/ssot-write/templates/v8-outcome-critic-input.md")
+    assert "render-receipt.json" in outcome
+
+
+def test_runner_has_compiled_preview_governance_and_journaled_commit():
+    value = text(RUNNER) + text(CONTRACT)
     for expected in (
-        "pending / doing / done / blocked",
-        "TASK 검증",
-        "영향 SSOT 분석",
-        "SSOT 수정 계획 확정",
-        "SSOT 파일 수정",
-        "수정 후 일관성 감사",
-        "결과 정리/보고",
-        "Opus planner",
-        "Sonnet actor",
-        "Opus auditor",
-        "ssot-write-impact.md",
-        "ssot-write-action.md",
-        "ssot-write-audit.md",
+        "FC_FRD_TRACE", "ADR_DISPOSITION", "approved-contract.json",
+        "compiled-preview.patch", "governance.json", "REPLACE_EXACT",
+        "RUNNER_CREATE_FROM_CLAIMS", "CERTIFICATE_CHECK_COVERAGE",
+        "validation-root", "commit-journal.json", "commit-backup",
+        "RESULT_PATH_MISMATCH", "STALE_DISPATCH", "COMMIT_FAILED_ROLLED_BACK",
+        "template_sha256", "input_digest", "actual_model",
+        "_advisory_file_lock", "_recover_interrupted_commit", '"PREPARING"',
     ):
-        assert expected in combined
+        assert expected in value
 
 
-def test_opus_planner_owns_decisions_but_not_permanent_ssot_writes():
-    text = read("skills/ssot-write/templates/impact-planner-input.md")
-    for expected in (
-        'model: "opus"',
-        "Think and decide",
-        "Do not edit TASK or permanent SSOT files",
-        "Confirmed SSOT Action Matrix",
-        "CREATE / UPDATE / SKIP / BLOCKED",
-        "ssot-write-impact.md",
-        "Return only this envelope",
+def test_command_uses_runner_prompt_path_and_verbatim_report():
+    value = text(COMMAND)
+    assert "Contract v8" in value
+    assert "prompt_path" in value
+    assert "accept-artifact" in value
+    assert "allow_additional_text" in value
+    assert "final-report.txt" in value
+
+
+def test_wrapper_routes_old_processes_without_migration():
+    value = text(WRAPPER)
+    assert "New runs use Contract v8" in value
+    assert "version == 5" in value
+    assert "version == 6" in value
+    assert "version == 7" in value
+    assert "version == 8" in value
+    assert "ssot_runner_v5" in value
+    assert "ssot_runner_v6" in value
+    assert "ssot_runner_v7" in value
+
+
+def test_skill_has_distinct_terminal_semantics_and_risk_gate():
+    value = text(SKILL)
+    for result in (
+        "NOOP", "OBSOLETE", "REWRITE_REQUIRED", "USER_REJECTED",
+        "MANUAL_REQUIRED", "PLAN_REJECTED", "VERIFY_FAILED", "RECOVERY_REQUIRED",
     ):
-        assert expected in text
-
-
-def test_impact_output_requires_actor_ready_all_ssot_matrix():
-    text = read("skills/ssot-write/templates/impact-planner-output.md")
-    for expected in (
-        "Required SSOT Coverage Matrix",
-        "PRD",
-        "FC",
-        "FRD",
-        "ADR",
-        "ADR-CATALOG",
-        "ARCHITECTURE",
-        "CREATE/UPDATE/SKIP/BLOCKED",
-        "Actor-Ready Decision",
-        "Prohibited scope expansion",
-    ):
-        assert expected in text
-
-
-def test_sonnet_actor_is_only_permanent_ssot_writer_and_has_modes():
-    skill = read("skills/ssot-write/SKILL.md")
-    actor = read("skills/ssot-write/templates/ssot-actor-input.md")
-    combined = skill + "\n" + actor
-    for expected in (
-        'model: "sonnet"',
-        "Mode: `<bootstrap|apply|repair|finalize>`",
-        "Mode: bootstrap",
-        "Mode: apply",
-        "Mode: repair",
-        "Mode: finalize",
-        "Execute only `CREATE` and `UPDATE` rows",
-        "Never modify TASK",
-        "SSOT actor만 영구 SSOT를 수정",
-    ):
-        assert expected in combined
-
-
-def test_opus_auditor_produces_mechanical_repair_contract():
-    auditor_input = read("skills/ssot-write/templates/consistency-auditor-input.md")
-    auditor_output = read("skills/ssot-write/templates/consistency-auditor-output.md")
-    combined = auditor_input + "\n" + auditor_output
-    for expected in (
-        'model: "opus"',
-        "Do not modify TASK or permanent SSOT files",
-        "Confirmed SSOT Action Matrix",
-        "Repair Contract",
-        "file-specific",
-        "Sonnet actor",
-        "TASK markdown link or TASK ID citation",
-    ):
-        assert expected in combined
-
-
-def test_progress_template_separates_snapshot_from_append_only_log():
-    text = read("skills/ssot-write/templates/ssot-write-progress.md")
-    for expected in (
-        "Latest resume snapshot",
-        "updates these rows in place",
-        "Append-only log",
-        "Impact audit digest",
-        "Changed paths",
-        "Consistency audit digest",
-    ):
-        assert expected in text
-
-
-def test_ssot_write_hands_off_to_work_packet_write_only():
-    docs = read("skills/ssot-write/SKILL.md") + "\n" + read("commands/ssot-write.md")
-    assert "Next: work-packet-write" in docs
-    for phrase in (
-        "Work Packet 파일",
-        "WORK_PACKET",
-        "work-packet-write/SKILL.md",
-        "CREATE work-packet",
-        "CREATE Work Packet",
-    ):
-        assert phrase not in docs
+        assert result in value
+    assert "compiled contract SHA" in value
+    assert "사용자 승인" in value

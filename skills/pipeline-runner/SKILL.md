@@ -183,6 +183,12 @@ Gate 실패 처리:
 2. `references/skill-catalog.md`에서 해당 스킬의 입력, 출력, 게이트를 확인한다.
 3. `Append-only Log`에 start 이벤트를 추가한다.
 4. 해당 `skills/<skill>/SKILL.md`를 읽고 그대로 인라인 수행한다.
+   - `ssot-write`는 Contract v8의 `scripts/ssot_runner.py`를 control plane으로 사용한다. `init` 후 `next -> prompt_path role dispatch -> accept-artifact`를 반복하고 `ask_user`는 `resolve`로 기록한다. runner가 evidence catalog와 Authority 후보 inventory를 만들고 역할은 evidence ID만 선택한다. fresh Opus Authority Critic은 모든 후보와 TASK·ADR·DDD·문서 governance를 인증하며 runner가 exact quote와 coverage를 검증한다. Opus ClaimSpec Thinker가 certificate 안에서만 atomic claim과 exact mutation을 제안한다. runner가 deterministic compiled preview와 신규 FRD 골격을 만들면 fresh Opus Change Critic이 실제 preview를 반증하고, 별도 risk approval 뒤에만 structured apply한다. 필요한 신규 FRD의 bounded prose만 Sonnet이 artifact JSON으로 렌더링하며 fresh Opus Outcome Critic을 통과한 결과만 commit한다. 모든 자연어 과정·질문·산출물·최종 보고는 한국어를 사용한다. `done`은 runner-owned `final-report.txt`를 verbatim으로 전달한다.
+   - 신규 진입의 bootstrap과 재진입 checkpoint 판정, 네 build/progress view 생성은 runner가 담당한다. pipeline main은 view를 편집하거나 내부 agent stage를 추정하지 않는다.
+   - 재진입 시 runner `next --process <process>` 결과만 따른다. wrapper는 기존 Contract v5/v6/v7 process를 각각 해당 runner로 재개하고 새 process는 v8로 생성한다. 다른 contract state를 거부하면 해당 step을 `blocked`로 닫고 새 process를 요청한다.
+   - pipeline 메인이 `ssot-write` 역할 템플릿, TASK/SSOT, subagent artifact, `changes.patch`를 미리 읽거나 helper·git status/diff를 대신 실행하지 않는다.
+   - bounded evidence packet, retry packet, ClaimSpec revision, deterministic staging/FRD 재현, 제한된 prose render fallback, commit rollback은 runner가 수행한다. 역할은 packet 밖 경로를 탐색하지 않고 main은 certificate·비판 설명을 읽거나 재판단하지 않는다. model-authored 전체 FRD와 `CREATE_EXACT`는 허용하지 않는다.
+   - 역할 artifact가 판정의 단일 원본이고 completion envelope는 runner가 파생한다. pipeline main도 TASK/ADR 판단·helper 결과·downstream note를 추가하지 않는다.
 5. 산출물 경로를 `Output Registry`와 해당 단계 행에 기록한다.
 6. 게이트를 통과하면 단계 행을 `done`으로 갱신하고 `Append-only Log`에 result 이벤트를 추가한다.
 7. 실패, 미확인 사항, 사용자 질문이 생기면 단계 행을 `blocked`로 갱신하고 중단한다.
@@ -203,7 +209,7 @@ Gate 실패 처리:
 pipeline-runner는 하위 스킬 완료 보고를 그대로 믿지 않고 산출물을 직접 확인한다.
 
 - `task-write`: TASK 파일 존재, TASK 경로를 `Output Registry`에 기록, audit 결과 또는 `AUDIT_BLOCKED` 기록.
-- `ssot-write`: SSOT 변경 경로 또는 `none`, `.process/<slug>/ssot-write-build.md`, `.process/<slug>/ssot-write-progress.md` 존재, audit 결과 기록.
+- `ssot-write`: SSOT 변경 경로 또는 `none`, `state.json`, state가 가리키는 mandatory authority certificate와 certificate-bound ClaimSpec, `approved-contract.json`, `changes.patch`, checks/final-report/generated views 존재. runner status가 `run_status: terminal`이고 `terminal_result: DONE|NOOP`, `disposition: ACTIVE|NOOP`, `downstream: WORK_PACKET`일 때만 work-packet-write로 진행한다. `OBSOLETE`는 STOP, `REWRITE_REQUIRED`는 task-write, 그 밖의 terminal 실패는 pipeline blocked다.
 - `work-packet-write`: Work Packet 파일 존재, 상태가 `Ready`인지 확인. `Draft`이면 `blocked`.
 - `forge-scope`: worktree 존재, branch 존재, forge-scope build/progress 존재, 실행한 build/test 명령과 결과 기록.
 - `ddr-loop`: ddr-loop build/progress 존재, conformance 결과 또는 cap 도달 결과 기록.

@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v3.11.0 · 커스텀 스킬 13종 + 슬래시 커맨드 17종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v3.25.0 · 커스텀 스킬 13종 + 슬래시 커맨드 17종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,12 +11,12 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `3.11.0` |
+| 버전 | `3.25.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
 | 네임스페이스 | `/claudecode-for-me:<name>` |
-| 구성요소 | Skill 13 · Command 17 · Python helper 6 (`scripts/`) |
+| 구성요소 | Skill 13 · Command 17 · Python helper 14 (`scripts/`) |
 | 외부 연동 도구 | [`codenavigator`](https://github.com/JaeCheon8587/codenavigator) (PyPI) — codenav-bootstrap / codenav-frontmatter-gen 슬래시가 호출 |
 
 플러그인은 **글로벌 캐시**에 설치되므로 한 번 설치 후 모든 프로젝트의 **새 세션**에서 자동 노출된다. 프로젝트별 재설치 불필요.
@@ -67,9 +67,89 @@ pip install -U codenavigator
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
 
+### v3.25.0 — ssot-write Contract v8 안정화
+
+Contract v8의 현재 Authority Certificate → ClaimSpec → Change Critic → 승인 →
+결정적 적용 → Outcome Critic 구조를 배포 기준으로 확정했다. 실전 검증에서 발견된
+Thinker 입력팩의 FRD template 예산 누락을 수정해 역할별 파일 상한을 넘지 않도록
+했고, runner 구현 SHA 동결과 v5/v6/v7 process 전용 재개 경계를 유지한다.
+TASK 자체의 권위·레이어 충돌은 SSOT 변경 전에 `REWRITE_REQUIRED`로 차단하며,
+정상 TASK만 후속 ClaimSpec과 변경 계약으로 진행한다.
+
+### v3.24.0 — ssot-write runner-owned evidence·후보 coverage·한국어 계약
+
+Contract v8 역할이 `path/line/quote`를 직접 작성하던 책임을 제거했다. runner가
+dispatch별 line evidence catalog를 만들고 역할은 `evidence_id`만 선택하며,
+runner가 실제 원본 byte에서 정확한 경로·줄·인용으로 정규화된 인증서를 생성한다.
+Authority 단계는 TASK의 component/Port/Client/persistence/scheduling/composition
+후보를 유한 inventory로 만들고 모든 후보의 판정 coverage와 규칙 근거를
+강제한다. init 시 runner·contract·SKILL SHA를 동결해 실행 중 구현 변경을
+거부한다. 모든 역할 자연어·process view·질문·최종 네 줄 보고는 한국어를
+강제하고 protocol enum·ID·경로·코드 literal만 원문을 유지한다.
+
+### v3.23.0 — ssot-write Contract v8 evidence-certified ClaimSpec
+
+문서 변경 계획 전에 fresh Opus Authority Critic이 TASK governance, ADR status/supersession, DDD layer, 문서 governance, scope의 다섯 mandatory check를 수행한다. 모든 결론은 runner가 만든 bounded packet의 exact path·line·quote evidence에 결속되고, runner가 citation을 원본 byte와 대조한 Authority Certificate가 PASS해야만 Opus ClaimSpec Thinker가 atomic claims와 exact mutation을 제안할 수 있다. runner는 ClaimSpec에서 deterministic preview와 canonical 신규 FRD를 조립하고 fresh Opus Change Critic이 certificate·claims·실제 patch를 함께 반증한다. 이 승인은 별도 nonce/interactive-event 기반 risk approval을 대체하지 않는다.
+
+TASK가 명시한 ADR과 알려진 supersession chain은 Authority packet과 `AUTH-ADR-STATUS` 인용에서 빠질 수 없다. Change Critic은 모든 action ID·target path·operation receipt를, Outcome Critic은 모든 staged changed path를 개별 증거로 덮어야 하므로 다중 변경 중 한 파일만 표본 검사해 전체 PASS할 수 없다.
+
+신규 FRD는 `RUNNER_CREATE_FROM_CLAIMS`로만 생성한다. model-authored 전체 FRD, raw document body, `CREATE_EXACT`를 금지하고 runner가 hash로 동결한 canonical 20절 template contract·metadata·링크·version/history·acceptance/test·claim bullet을 소유한다. Sonnet은 의미가 이미 승인된 신규 FRD의 bounded 설명 prose JSON만 선택적으로 렌더링하며 실패하면 deterministic claim bullet로 fallback한다. fresh Opus Outcome Critic은 mandatory evidence check로 최종 staging을 반증하고, runner가 검증된 결과만 journaled commit한다. wrapper는 기존 v5/v6/v7 process를 각각 해당 runner로 재개하고 신규 process만 v8로 시작한다.
+
+### v3.22.0 — ssot-write Contract v7 deterministic structured apply
+
+SSOT 변경의 사실 판단과 문서 렌더링을 분리했다. fresh Opus Change Thinker가 사실·관계·governance에 결속된 exact ChangeSpec을 제안하면 runner가 `REPLACE_EXACT` / `INSERT_*_EXACT` / `CREATE_EXACT` precondition을 검사해 실제 compiled preview를 만든다. fresh Opus Plan Critic은 자연어 계획이 아니라 이 preview까지 반증하며, 승인 뒤 runner가 동일 operation을 staging에 결정적으로 재현한다. UPDATE와 구조화 CREATE는 Sonnet을 호출하지 않는다.
+
+Sonnet은 `RUNNER_CREATE_WITH_RENDER`로 승인된 신규 FRD의 자유서술 block이 있을 때만 호출된다. 문서 파일을 편집하거나 결정을 만들지 않고 승인 fact/governance/literal 경계 안의 Markdown을 artifact JSON으로 반환하며 runner가 placeholder에 삽입한다. 역할은 artifact만 소유하고 runner가 completion envelope를 파생하므로 메인 루프도 `accept-result`에서 `accept-artifact`로 단순화됐다. init에서 rules/guidelines/templates를 `governance.json`에 hash로 동결하고 preview·검증·commit까지 drift를 차단한다. 고위험 승인은 계약 SHA, nonce, 일회성 interactive user event provenance에 결속한다. wrapper는 기존 v5/v6 process를 각 구버전 runner로 그대로 재개하고 새 process만 v7로 시작한다.
+
+### v3.21.0 — ssot-write Contract v6 transactional change contract
+
+문서유형별 독립 Judge 결과를 단순 병합하던 구조를 전체 관계 중심의 **Opus Change Thinker → fresh Opus Plan Critic → Sonnet staged editor → runner mechanical gates → fresh Opus Outcome Critic → runner commit**으로 교체했다. proposal은 여섯 SSOT coverage뿐 아니라 FC↔FRD trace, ADR disposition, semantic relation을 구조화하고 Plan Critic 승인·사용자 risk gate를 통과해야 `approved-contract.json`으로 동결된다.
+
+Sonnet은 영구 SSOT를 직접 수정하지 않고 `.process/<TASK>/staging`의 한 경로만 편집한다. runner가 overlay에서 TASK 인용, FC/FRD 링크·§17·§18, ADR 재사용 placeholder, 격리 docs helper baseline, ADR catalog 상태, input/template/content hash를 검사한다. fresh Outcome Critic PASS 뒤에는 App advisory lock과 write-ahead journal·전체 backup/temp를 먼저 준비해 반영하며, 중간 종료도 다음 실행에서 hash 기반 rollback 또는 COMMITTED roll-forward한다. 제3자 내용은 자동 복구가 덮지 않으며 NOOP/OBSOLETE/REWRITE_REQUIRED/PLAN_REJECTED/VERIFY_FAILED/RECOVERY_REQUIRED terminal을 구분한다. wrapper는 기존 v5 process를 v5로만 재개하고 새 실행은 v6로 시작한다.
+
+### v3.20.0 — ssot-write 후보 라우팅·권위 그래프 보강
+
+FRD/ADR 전수 전달 비용을 줄이기 위해 runner가 TASK의 고신호 기술 식별자와 문서 ID를 정확 일치시켜 후보를 보수적으로 라우팅한다. 매칭이 없거나 지나치게 광범위하면 전체 후보로 자동 fallback해 누락보다 안전을 우선한다. dispatch에는 선택 방식·전체/선택 개수·경로별 매칭 용어가 포함되며 Judge는 선택 경로만 읽는다.
+
+ADR 권위 그래프는 `Superseded by`, `Superseded (by ...)`, 구조화 `Superseded By` 행, 단일·복수 `Supersedes` 관계를 정규화하고 근거 경로와 형식을 함께 기록한다. 최종 네 줄 뒤의 호스트 UI recap은 runner artifact가 아니므로 downstream은 터미널 전문 대신 `final-report.txt`만 소비하도록 계약을 명확히 했다.
+
+### v3.19.0 — ssot-write Contract v5 책임 격리
+
+하나의 planner/actor/auditor 호출에 결합됐던 탐색·판정·계획 직렬화·다중 파일 편집·감사를 분해했다. runner가 TASK 사실을 `source.json`으로 추출하고 6종 후보를 `candidates.json`으로 수집한 뒤, Opus judge를 SSOT 유형별로 독립 호출한다. LLM은 후보별 `SKIP/CHANGE/BLOCKED`와 근거만 반환하며 runner가 여섯 판정을 검증해 `ssot-write-plan.json`을 컴파일한다. `prior_change_policy` 같은 runner 내부 병합 스키마는 LLM 출력에서 제거했다.
+
+Sonnet editor는 dispatch당 한 경로만 수정하고, 각 변경은 Opus reviewer가 한 파일만 검토한다. 모든 파일 검토가 끝난 뒤 Opus cross-auditor가 문서 관계만 감사한다. 계약 오류는 같은 dispatch의 `last_rejection`으로 자동 재전달되므로 메인이 코드를 읽어 교정 문구를 만들지 않는다. 최초 baseline 누적 patch, read-only snapshot, helper gate, runner-owned final report는 유지한다.
+
+### v3.18.0 — ssot-write 결정적 outcome·precedence·ADR 상태 gate
+
+LLM이 obsolete/downstream/precedence/audit PASS를 임의 선택하지 못하도록 runner gate를 확장했다. Init preflight가 TASK 상단의 기준 ADR과 ADR `supersedes` 그래프를 분석해 `authority.json`을 만들고, Accepted 종점 충돌이면 planner 전에 고정 choice로 BLOCKED한다. Plan은 `task_disposition`, `ssot_result`, `downstream`, `outcome_decision_id`를 필수로 제출하며 ACTIVE→WORK_PACKET, OBSOLETE→STOP, REWRITE_REQUIRED→TASK_REWRITE 조합만 허용한다. Precedence는 none→NONE, explicit-supersession→CURRENT_SSOT_WINS, ambiguous→BLOCKED로 고정한다. Matrix 관련 ADR 파일 상태와 ADR-CATALOG 섹션 상태를 runner가 비교해 `checks/adr-status.json`을 만들고 불일치 시 auditor PASS를 거부한다. Windows stdout/stderr는 UTF-8로 고정하고 CP949 fallback을 제공한다. Contract-invalid result는 `results/rejected/`와 `result_rejected` 이벤트로 보존하며 동일 dispatch 3회 거부 시 blocked 처리한다.
+
+### v3.17.0 — ssot-write 다중 artifact matrix·재계획 권한 분리
+
+실전 ADR supersession 테스트에서 드러난 단일 `target_path` 한계를 해소했다. 6종 SSOT coverage는 유지하면서 한 type 안에 artifact-level `targets`를 여러 개 둘 수 있고 각 파일이 독립적인 CREATE/UPDATE와 scope를 가진다. 혼합 작업은 `MIXED`로 표현하며 기존 단일 문자열과 실행 중 checkpoint의 `target_path: [...]`도 Contract v4 하위 호환으로 수용한다. 권한은 현재 actor용 `dispatch_authorized_paths`와 이전 성공 round의 `approved_changed_paths`로 분리해, replan이 과거 파일을 누적 patch 통과 목적으로 가짜 UPDATE에 다시 넣지 않아도 된다. prior change는 기본 RETAIN이며 명시적 REVERT/REPLACE만 현재 target 권한을 요구한다. 메인이 role result JSON을 직접 고치는 행위도 금지하고 불일치는 동일 역할 재호출로만 교정한다.
+
+### v3.16.0 — ssot-write 기계 검사·내부 이벤트·verbatim 보고 강화
+
+실전 Contract v4 테스트에서 확인된 세 경계를 runner로 이동했다. 문서 helper 탐색·실행은 auditor가 아니라 runner가 감사 직전에 수행하고 `checks/docs-helper.{json,log}`에 증거를 남기며, 검사 실패/누락 상태의 auditor PASS를 거부한다. all-SKIP Stage 4는 실제 실행자 `runner / no-op`으로 표시하고 `auto_noop`, `mechanical_check`, `finalize` 내부 전이를 append-only event log에 기록한다. 완료 시 runner가 `final-report.txt`를 확정 생성하고 `next`가 `response_mode: verbatim`, `allow_additional_text: false`와 함께 반환한다. `report` 명령은 파일과 state의 정확한 일치를 검증한다. 정상 `init`/`accept-result` 응답에서는 전체 state를 제거해 메인이 부가 설명을 만들 재료도 최소화한다.
+
+### v3.15.0 — ssot-write deterministic runner control plane
+
+에이전트가 markdown progress를 직접 갱신하고 자연어 envelope로 다음 단계를 선택하던 구조를 `scripts/ssot_runner.py` 기반 Contract v4로 전환했다. runner가 init/resume, stage 전이, strict result JSON, retry cap, artifact registry, 최종 네 줄 보고를 단독 소유한다. 각 dispatch 전 `Docs/<App>` snapshot을 남겨 planner/auditor 쓰기와 actor의 matrix 외 변경을 거부하고, 최초 baseline 대비 `changes.patch`를 생성하므로 gitignored/untracked SSOT도 기계적으로 검증된다. Stage 0 bootstrap과 Stage 6 finalize는 runner가 수행하며, all-SKIP이면 actor 자체를 호출하지 않는다. 메인은 `next`가 반환한 planner/actor/auditor 호출과 `accept-result`, 사용자 질문 `resolve`만 중계한다. 기존 build/progress 네 문서는 제거하지 않고 `state.json`에서 렌더링되는 호환 view로 유지한다.
+
+### v3.14.0 — ssot-write SKIP fast path·구조 envelope·입력 precedence
+
+실전 no-op 테스트에서 발견한 역할 누수와 checkpoint 잔존 상태를 보강했다. Sonnet actor는 `CREATE/UPDATE=0`이면 build/progress만 읽고 TASK·impact·permanent SSOT·템플릿·SKIP target을 열지 않는 fast path로 종료하며, SKIP 유효성 판단은 Opus auditor만 담당한다. 메인 envelope에서 자연어 `SUMMARY`를 제거해 상세 근거·helper 결과·downstream note가 main context로 역류하는 통로를 닫았다. Child Artifact Registry는 `ARTIFACT/CHANGED`와 `STATUS`만으로 환원하며 finalizer가 `ssot-write-progress.md = done | PASS`를 보장한다. TASK 목적·범위와 최신 Accepted ADR 설계 결정이 충돌할 때는 명시적 supersession만 `CURRENT_SSOT_WINS`로 허용하고 build의 downstream constraint를 work-packet-write Required 입력/실행 규칙으로 전달한다. 암묵적 충돌은 `BLOCKED`한다. orchestration contract는 v3이며 구 process와 혼합 resume하지 않는다.
+
+### v3.13.0 — ssot-write 오케스트레이션 경계·재계획 루프 강화
+
+실제 실행에서 메인이 bootstrap 전에 TASK·역할 템플릿·repo 내용을 읽고 planner 판단에 개입하던 경로를 차단했다. 메인은 정확한 orchestration 경로 존재 확인과 전용 문서/envelope 처리만 수행하며 역할 템플릿, TASK/SSOT, subagent artifact, helper·git diff는 각 역할 에이전트가 직접 다룬다. bootstrap은 전용 `check-task`가 없으면 app 전체 검사를 대신 실행하지 않고 기계적인 네 파일 초기화 정보만 반환한다. 감사 실패에는 `FAILURE_CLASS`를 추가해 actor 실행 누락은 `EXECUTION → repair`, matrix 자체 누락은 `PLAN → replan`으로 분리하고 각각 최대 2회로 제한했다. ADR 변경 이력 문구만으로 catalog 동기화를 통과시키지 않으며 권위 목록/표의 실제 행을 검사한다. subagent build는 planner-owned matrix로 고정하고 이후 실행 상태는 progress 한 곳에서 관리한다. 새 전이표는 orchestration `Contract version: 2`로 고정하며 구 checkpoint와 혼합 resume하지 않는다.
+
+### v3.12.0 — ssot-write 메인/서브에이전트 체크포인트 분리
+
+`pipeline-runner`가 여러 스킬을 오가는 동안 메인 에이전트가 `ssot-write` 내부 dispatch 위치를 잃지 않도록 메인 전용 `ssot-write-orchestration-build.md`·`ssot-write-orchestration-progress.md`를 추가했다. 기존 `ssot-write-build.md`·`ssot-write-progress.md`는 planner/actor/auditor 공유 문서로 유지해 이름과 쓰기 소유권을 분리했다. bootstrap actor가 네 문서를 한 번에 생성하고 존재를 gate한 뒤, orchestration 두 문서는 메인이, 기존 두 문서는 서브에이전트가 각각 갱신한다. orchestration build는 역할·모델·mode·성공/실패 전이와 repair cap을 고정하고, orchestration progress는 현재/다음 stage·role·mode와 audit/repair 회차를 보존한다. `pipeline-runner` 재진입은 이 메인 progress를 먼저 읽으며, 기존 checkpoint는 `--resume` 유무와 관계없이 덮어쓰지 않는다. envelope에 `NEXT_ROLE/NEXT_MODE/RESUME_STAGE/ITERATION`을 추가해 상세 subagent 문서를 메인이 읽지 않고도 재개할 수 있다.
+
 ### v3.11.0 — ssot-write 컨텍스트 격리 멀티 에이전트 오케스트레이션
 
-`ssot-write`를 메인 에이전트가 TASK/SSOT 원문을 직접 읽고 수정하던 인라인 흐름에서 **Opus main orchestrator → Opus planning thinker → Sonnet SSOT actor → Opus consistency auditor** 역할 분리 구조로 전환했다. 메인 Opus는 경로·상태 envelope·사용자 질문만 보유하고 파일을 수정하지 않으며, 상세 판단과 실행 결과는 `.process/<TASK-stem>/ssot-write-{impact,action,audit}.md`로 직접 인계해 메인 컨텍스트를 보존한다. Opus planner가 `Confirmed SSOT Action Matrix`를 확정하고, Sonnet actor는 matrix의 `CREATE/UPDATE` 대상과 범위만 수정한다. 감사 실패는 Opus가 file-specific repair contract를 만들고 Sonnet repair actor가 최대 2회 보정하며, 마지막 Sonnet finalizer가 progress를 닫는다. 필수 서브에이전트를 사용할 수 없으면 메인 fallback 없이 중단한다. 기존 impact auditor 템플릿은 planning 책임에 맞게 `impact-planner-*`로 이름을 바꾸고 Sonnet actor 입출력 템플릿을 추가했다.
+`ssot-write`를 메인 에이전트가 TASK/SSOT 원문을 직접 읽고 수정하던 인라인 흐름에서 **Opus main orchestrator → Opus planning thinker → Sonnet SSOT actor → Opus consistency auditor** 역할 분리 구조로 전환했다. 메인 Opus는 전용 `.process/<TASK-stem>/ssot-write-orchestration-{build,progress}.md`와 상태 envelope만 사용하며, planner/actor/auditor는 별도 `ssot-write-{build,progress}.md`와 `ssot-write-{impact,action,audit}.md`로 상세 판단과 실행 결과를 직접 인계한다. Opus planner가 `Confirmed SSOT Action Matrix`를 확정하고, Sonnet actor는 matrix의 `CREATE/UPDATE` 대상과 범위만 수정한다. 감사 실패는 Opus가 file-specific repair contract를 만들고 Sonnet repair actor가 최대 2회 보정하며, 마지막 Sonnet finalizer가 subagent progress를 닫고 메인이 orchestration progress를 닫는다. 필수 서브에이전트를 사용할 수 없으면 메인 fallback 없이 중단한다. 기존 impact auditor 템플릿은 planning 책임에 맞게 `impact-planner-*`로 이름을 바꾸고 Sonnet actor 입출력 템플릿을 추가했다.
 
 ### v3.10.0 — requirement-spec → pipeline-runner 핸드오프 게이트
 
@@ -233,7 +313,7 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `meta-prompter` | `/claudecode-for-me:meta-prompter [요청]` | 거친 요청 → 구조화된 메타 프롬프트 |
 | `requirement-spec` | `/claudecode-for-me:requirement-spec [주제]` | grill-me→acceptance-design→meta-prompter→codex 검증을 자동 체인. 요구사항 도출·완료조건 4축 설계·개발 지시서 `.requirements/requirement-{slug}.md` 산출 후 정리본+설계본 대비 codex 검증↔보완 수렴 루프(최대 3회·99% 임계). 확정 후 `AskUserQuestion`으로 pipeline-runner 실행 여부를 물어 인라인 핸드오프 |
 | `safe-pull` | `/claudecode-for-me:safe-pull [원격/브랜치]` | git pull 전 fetch(비파괴)로 변경·충돌·사이드이펙트 브리핑 후 AskUserQuestion 컨펌 게이트 |
-| `ssot-write` | `/claudecode-for-me:ssot-write <TASK-path> [--app <APP>] [--name <slug>] [--resume]` | TASK를 기준으로 PRD/FC/FRD/ADR/ADR-CATALOG/ARCHITECTURE 영구 SSOT를 갱신. read-only 영향 분석과 수정 후 일관성 감사를 거치며 `.process/<slug>/`에 계획과 진행로그 기록 |
+| `ssot-write` | `/claudecode-for-me:ssot-write <TASK-path> [--app <APP>] [--process <path>]` | TASK를 mandatory Opus Authority Certificate로 검증한 뒤 certificate-bound ClaimSpec, runner deterministic preview/FRD, fresh Change/Outcome Critic, 별도 risk approval, 선택적 bounded Sonnet prose를 거쳐 영구 SSOT를 갱신 |
 | `task-write` | `/claudecode-for-me:task-write [--app <APP>] [--from <requirements-path>] [요청]` | 요구사항 문서/자연어 요청에서 TASK 작업 범위 계약만 생성. FRD/FC/ADR/ADR-CATALOG/PRD/ARCHITECTURE 분석·수정 없음 |
 | `work-packet-write` | `/claudecode-for-me:work-packet-write <TASK-path> [--app <APP>] [--process <process-dir>] [--name <title>]` | TASK와 Required SSOT Execution Matrix를 연결하는 forge 입력용 Work Packet 생성. TASK/SSOT/코드 수정 없이 실행 규칙·경계·검증 입력만 정리 |
 
@@ -255,7 +335,7 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `meta-prompter` | meta-prompter skill 진입 |
 | `requirement-spec` | requirement-spec skill 진입. grill-me→acceptance-design→meta-prompter→codex 검증 자동 체인 메타 스킬. 확정 후 pipeline-runner 실행 여부 컨펌 게이트 |
 | `safe-pull` | safe-pull skill 진입. fetch 후 브리핑 → 컨펌 게이트 → pull |
-| `ssot-write` | ssot-write skill 진입. 메인 Opus는 오케스트레이션만 수행하고 Opus planner/auditor가 판단, Sonnet actor가 확정 범위의 영구 SSOT를 수정 |
+| `ssot-write` | Contract v8 ssot-write 진입. Opus Authority Critic/ClaimSpec Thinker/Change Critic/Outcome Critic이 권위·변경·결과를 독립 검증하고 runner가 deterministic preview/FRD·검증·commit을 수행하며 Sonnet은 필요한 bounded 신규 FRD prose JSON만 선택적으로 렌더링 |
 | `task-write` | task-write skill 진입. TASK 파일만 생성하고 SSOT 문서는 수정하지 않음 |
 | `work-packet-write` | work-packet-write skill 진입. TASK와 Required SSOT Execution Matrix를 연결하는 Work Packet만 생성하고 다음 단계를 forge-scope로 넘김 |
 
@@ -345,16 +425,19 @@ codenav --root <repo> ui --port 9876
 /claudecode-for-me:task-write --app Billing --from .requirements/order-refund.md
 /claudecode-for-me:ssot-write docs/Billing/TASK/Billing-TASK-014.md --app Billing
 /claudecode-for-me:work-packet-write docs/Billing/TASK/Billing-TASK-014.md --app Billing
-/claudecode-for-me:ssot-write docs/Billing/TASK/Billing-TASK-014.md --resume
+/claudecode-for-me:ssot-write docs/Billing/TASK/Billing-TASK-014.md --process .process/Billing-TASK-014
 ```
 
 - **책임 분리** — `task-write`는 TASK 파일만 생성한다. PRD/FC/FRD/ADR/ADR-CATALOG/ARCHITECTURE 분석·수정·후보 작성은 금지.
-- **Opus 메인 전제** — 스킬은 메인 모델을 바꾸지 못하므로 Opus 세션에서 시작한다. 메인은 TASK/SSOT 본문·전체 diff·상세 artifact를 읽거나 파일을 수정하지 않고 에이전트 생성, gate, 사용자 질문, 최종 보고만 수행한다.
-- **역할 분리** — Opus planner가 TASK 검증·영향 분석·수정 계획을 확정하고, Sonnet actor가 `bootstrap/apply/repair/finalize` 행동을 수행하며, Opus auditor가 의미·구조·ID 일관성을 독립 검증한다.
-- **SSOT 갱신 권한** — 영구 SSOT를 쓸 수 있는 역할은 Sonnet actor뿐이다. actor는 `Confirmed SSOT Action Matrix`의 `CREATE/UPDATE` 경로와 edit scope 밖으로 범위를 확장하거나 새 설계 판단을 할 수 없다.
-- **컨텍스트 격리** — 메인은 repo/TASK/process/template 경로와 최대 5개 bullet의 `STATUS/ARTIFACT/SUMMARY/QUESTION/CHANGED` envelope만 전달·수신한다. 상세 인계는 공유 파일을 다음 에이전트가 직접 읽는다.
-- **프로세스 기록** — `ssot-write-build.md`는 planner가 확정하고 actor/auditor 및 후속 `work-packet-write`가 소비하는 실행 계약이다. `ssot-write-progress.md`는 resume 상태, `ssot-write-impact.md`·`ssot-write-action.md`·`ssot-write-audit.md`는 역할별 상세 결과를 보존한다.
-- **수정·감사 루프** — audit `FAIL`이면 Opus auditor의 file-specific repair contract만 Sonnet repair actor가 적용하고 Opus가 재감사한다. 최대 2회 보정 후에도 실패하면 중단한다.
+- **결정적 control plane** — `scripts/ssot_runner.py`가 init/resume, bounded evidence packet, stage 전이, snapshot/diff, strict artifact, retry cap, 별도 risk gate, registry, 최종 보고를 소유한다. 메인은 runner action과 artifact path만 중계한다.
+- **Contract v8 권위·역할 분리** — fresh Opus Authority Critic이 TASK·ADR·DDD·문서 governance·scope를 mandatory exact-evidence certificate로 먼저 인증한다. Opus ClaimSpec Thinker가 certificate 안에서 atomic claims와 여섯 SSOT exact mutation을 만들고 runner가 deterministic preview와 claim 기반 신규 FRD를 생성한다. fresh Opus Change Critic은 certificate+ClaimSpec+실제 preview를, fresh Opus Outcome Critic은 전체 staging을 각각 반증한다.
+- **결정적 structured apply/FRD** — UPDATE는 claim/authority에 결속된 `REPLACE_EXACT`·`INSERT_*_EXACT`만 runner가 적용한다. 신규 FRD는 `RUNNER_CREATE_FROM_CLAIMS`로 canonical structure·metadata·링크·version/history·acceptance/test를 runner가 조립하며 model-authored 전체 FRD, raw document body, `CREATE_EXACT`는 금지한다. 0회·복수 anchor나 지원하지 않는 변환은 자유 편집으로 우회하지 않는다.
+- **제한된 Sonnet 역할** — Sonnet은 의미가 claims로 완결된 신규 FRD에 bounded 설명 block이 필요할 때만 Markdown artifact JSON을 만든다. staging/live 문서, 버전, 표, 링크, 변경 이력, acceptance/test, 정책·수치를 직접 편집하거나 결정하지 않으며 실패 시 runner deterministic claim bullet로 fallback한다.
+- **재개 호환성** — wrapper는 기존 Contract v5/v6/v7 process를 각 구버전 runner로 재개하고 새 process만 Contract v8로 생성한다.
+- **SSOT 갱신 권한** — staging 재현과 영구 SSOT commit 권한은 runner에만 있다. 영구 반영 전 App lock, write-ahead journal, backup/hash 검증을 거친다.
+- **컨텍스트 격리** — 메인은 runner-generated `prompt_path`만 역할에 전달한다. Critic은 이전 역할 대화·사적 추론·editor receipt를 읽지 않고 원본 증거와 계약/결과만 반증한다.
+- **프로세스 기록** — `state.json`·`events.jsonl`이 상태 원본이고 build/progress는 generated view다. source/index/authority/governance, proposal, compiled preview/operation receipts, critique, approved contract, staging/patch/checks, outcome review, commit journal/manifest가 재현 증거다.
+- **수정·비판 루프** — deterministic action 결함은 Sonnet repair가 아니라 Thinker plan revision 또는 안전한 terminal로 보낸다. 기계 gate FAIL은 Opus PASS로 덮어쓸 수 없다.
 - **fallback 금지** — 필수 서브에이전트를 생성할 수 없으면 메인이 대신 분석·수정하지 않고 `AUDIT_BLOCKED - required subagent unavailable`로 종료한다.
 - **TASK 인용 금지** — 영구 SSOT 본문과 변경 이력에는 TASK markdown link/TASK ID를 남기지 않는다.
 - **실행 manifest** — `work-packet-write`는 TASK와 Required SSOT Execution Matrix를 연결하는 `docs/<App>/WORK_PACKET/<App>-WP-<NNN>.md`만 생성한다.
@@ -712,6 +795,12 @@ Claudecode-For-Me/
 │   ├── doc_driven_review.py
 │   ├── docs_conformance.py
 │   ├── docs_helpers.py
+│   ├── ssot_runner.py          # v8 기본 / 기존 v5·v6·v7 process resume 라우터
+│   ├── ssot_contract_v8.py     # v8 certificate·ClaimSpec·critic artifact 순수 schema validator
+│   ├── ssot_runner_v8.py       # authority certificate·deterministic preview/FRD·bounded prose·commit runner
+│   ├── ssot_runner_v7.py       # 기존 exact preview/apply·선택적 prose render process 전용
+│   ├── ssot_runner_v6.py       # contract-first staging·검증·commit/rollback runner
+│   ├── ssot_runner_v5.py       # 진행 중인 기존 Contract v5 process 전용
 │   ├── worktree_setup.py        # forge-scope 워크트리 셋업·검증·cancel
 │   ├── ddr_templates/           # ddr-loop build/progress 템플릿
 │   └── forge_templates/         # forge-scope build/progress 템플릿 + docs/.templates 시드

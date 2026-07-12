@@ -15,6 +15,7 @@ Result rule:
 | TASK link | `<expected TASK link>` | `<observed>` | PASS / FAIL | `<section-specific fix or none>` |
 | Execution Gate | `<Ready only when no blocking, Required SSOT target paths exist, and scope is clear; Draft = do not implement>` | `<observed>` | PASS / FAIL | `<section-specific fix or none>` |
 | Required SSOT Execution Matrix | `<Expected Required SSOT Execution Matrix>` | `<observed Work Packet matrix>` | PASS / FAIL | `<section-specific fix or none>` |
+| Input precedence/downstream constraints | `<CURRENT_SSOT_WINS authorities Required; ambiguous conflicts Draft>` | `<observed matrix and execution rule>` | PASS / FAIL | `<section-specific fix or none>` |
 | Blocking / Open Questions | `<none for Ready, issue rows for Draft>` | `<observed>` | PASS / FAIL | `<section-specific fix or none>` |
 | Execution rules and boundaries | `<non-empty rules/bounds matching TASK and SSOT>` | `<observed>` | PASS / FAIL | `<section-specific fix or none>` |
 | Validation inputs and readiness checklist | `<TASK §9/§9.1/§9.2/§9.3 plus actual matrix state>` | `<observed>` | PASS / FAIL | `<section-specific fix or none>` |
@@ -38,7 +39,9 @@ Result rule:
 - PASS | FAIL: Required SSOT Execution Matrix links exist.
 - PASS | FAIL: Required SSOT Execution Matrix read ranges are narrow and implementation-relevant.
 - PASS | FAIL: Missing `CREATE/UPDATE target path` handling is Draft + Blocking, not guessed link or Ready.
-- PASS | FAIL: SKIP rows are not included as Required.
+- PASS | FAIL: Ordinary SKIP rows are not Required; `CURRENT_SSOT_WINS` authority rows are Required.
+- PASS | FAIL: Every downstream Work Packet instruction is present in execution rules.
+- PASS | FAIL: Ambiguous precedence is Draft + Blocking, not an invented Ready decision.
 - PASS | FAIL: Source matrix row values trace to the confirmed matrix or a blocking note.
 - PASS | FAIL: Blocking / Open Questions is present and consistent with Draft/Ready.
 - PASS | FAIL: Work Packet contains links/read ranges, not long TASK or SSOT body copies.

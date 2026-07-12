@@ -52,6 +52,9 @@ def test_skill_uses_task_and_confirmed_matrix_context():
         "Blocking / Open Questions",
         "읽을 범위",
         "CREATE/UPDATE target path",
+        "Input Precedence and Downstream Constraints",
+        "approved authority relation",
+        "Downstream constraint <Relation ID>",
     ):
         assert expected in text
 
@@ -79,6 +82,8 @@ def test_auditor_templates_are_read_only_and_check_router_shape():
         "Required fix",
         "File/Section Audit",
         "Required SSOT Execution Matrix links exist",
+        "CURRENT_SSOT_WINS",
+        "downstream Work Packet instruction",
         "not long TASK or SSOT body copies",
         "Only the Work Packet file was created or modified",
         "PASS | FAIL | AUDIT_BLOCKED",
@@ -113,7 +118,10 @@ def test_work_packet_template_uses_matrix_columns_and_blocking_contract():
         "상태는 `Draft`이며",
         "| Issue | Source | Impact | Required decision |",
         "`Ready`일 때는 `none`으로 명시",
-        "SKIP 대상 SSOT가 Required 로 들어가지 않았다",
+        "일반 SKIP 대상 SSOT는 Required로 들어가지 않았고",
+        "CURRENT_SSOT_WINS",
+        "Downstream constraint PREC-001",
+        "모든 downstream Work Packet instruction",
     ):
         assert expected in text
 
@@ -168,5 +176,7 @@ def test_auditor_output_requires_expected_observed_fix_structure():
         "Gate consistency",
         "Expected Required SSOT Execution Matrix uses the same columns as the Work Packet matrix",
         "Missing `CREATE/UPDATE target path` handling is Draft + Blocking",
+        "Ordinary SKIP rows are not Required",
+        "Ambiguous precedence is Draft + Blocking",
     ):
         assert expected in text
