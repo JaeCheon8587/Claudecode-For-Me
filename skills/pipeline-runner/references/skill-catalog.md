@@ -4,7 +4,7 @@
 
 | Skill | Input | Required Params | Expected Output | Gate | Next Input |
 |---|---|---|---|---|---|
-| task-write | requirement-spec 산출물 또는 자연어 요구 | `--from <requirement-path>`, optional `--app <APP>` | `docs/<App>/TASK/<App>-TASK-<NNN>.md` | TASK audit pass 또는 AUDIT_BLOCKED 기록 | TASK path |
+| task-write | requirement-spec 산출물 또는 자연어 요구, Opus Main | `--from <requirement-path>`, optional `--app <APP>` | `docs/<App>/TASK/<App>-TASK-<NNN>.md`; process `build.md`, `progress.md`, `plan.json`, `changes.json`, `review.json`, `handoff.json` | progress/handoff `SUCCESS` + Critic `SUCCESS`; `FAILED`·`MANUAL_REQUIRED`면 중단 | TASK path |
 | ssot-write | TASK path, Opus Main | optional `--app <APP>`, optional `--process <path>` | `build.md`, `progress.md`, `plan.json`, `review.json`, `handoff.json`; READY는 SSOT CREATE/UPDATE + `changes.json` 추가 | progress/handoff `SUCCESS` + Critic `SUCCESS`; `FAILED`·`MANUAL_REQUIRED`면 중단 | TASK path + ssot process dir |
 | work-packet-write | TASK path + ssot process | optional `--app <APP>`, `--process <process-dir>` | `docs/<App>/WORK_PACKET/<App>-WP-<NNN>.md` | Work Packet `Ready`, Blocking none | Work Packet path |
 | forge-scope | Work Packet path 또는 TASK path | optional `--name <slug>` | forge worktree branch, `.process/<docName>/forge-scope-build.md` | build/test pass | forge slug |
@@ -13,6 +13,7 @@
 
 ## Linking Rules
 
+- `task-write`도 Opus Main이 Opus Planner, Sonnet Writer, Opus Critic을 실제 독립 서브에이전트로 최대 3회 순환 호출한다. Writer만 TASK 파일 1개를 작성하고 Critic은 Plan을 읽지 않은 채 요구사항 원문 ↔ 실제 TASK 파일을 네 의미 축으로 비교하며 `check-task` 구조 검증을 수행한다. `progress.md`와 `handoff.json`이 모두 `SUCCESS`인 경로에서만 `ssot-write`를 실행한다.
 - `task-write -> forge-scope` 경로에서는 TASK가 `forge-scope` legacy 입력이다.
 - `ssot-write`의 `progress.md`와 `handoff.json`이 모두 `SUCCESS`로 끝난 경로에서만 `work-packet-write`를 실행한다.
 - Opus Main은 Opus Planner, Sonnet Writer, Opus Critic을 실제 독립 서브에이전트로 호출한다. Writer만 SSOT를 수정하고 Critic은 Plan을 읽지 않은 채 TASK 핵심 의미와 실제 SSOT 투영을 네 의미 축으로 최대 3회 비교한다.

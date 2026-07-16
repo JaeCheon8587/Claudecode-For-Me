@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v3.26.0 · 커스텀 스킬 13종 + 슬래시 커맨드 17종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v3.28.0 · 커스텀 스킬 13종 + 슬래시 커맨드 17종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,7 +11,7 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `3.26.0` |
+| 버전 | `3.28.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
@@ -66,6 +66,35 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v3.28.0 — task-write 산출물 경로 형식 상대경로 통일
+
+멀티 에이전트 전환(v3.27.0) 후 실제 실행에서 Planner는 `plan.target_path`를 **절대경로**로,
+Writer는 `changes.result_paths`를 **상대경로**로 기록해 Main의 "동일 TASK 파일" 검증이
+문자열 비교 시 오탐할 수 있는 잠재 결함을 확인했다(이번엔 tail 매칭 우연으로 통과).
+`ssot-write`가 이미 쓰던 **`REPO_ROOT` 기준 상대경로**(`docs/<App>/...` / `Docs/<App>/...`)
+관례로 파이프라인을 통일한다. 위임 KEY는 절대경로로 받되, `plan.json`·`changes.json`·
+`review.json`·`handoff.json`의 모든 경로 필드는 상대경로로 기록한다는 규칙을
+`agents/task-planner.md`·`task-writer.md`·`task-critic.md`와 `skills/task-write/SKILL.md`에
+명문화했다(ssot-write가 예시로만 암시하던 관례를 계약 규칙으로 고정). Writer는
+`plan.target_path`를 문자열 그대로 복사하고, Main 검증은 "문자열 동일(상대경로)" 비교로
+명시한다. work-packet-write·ssot-write는 이미 상대경로라 무변경.
+
+### v3.27.0 — task-write 멀티 에이전트 3-agent 전환
+
+`task-write`를 `ssot-write`와 동일한 멀티 에이전트 구조로 전환했다. 단일 모놀리식
+흐름 + Sonnet read-only auditor를 걷어내고, **Opus Main → Opus Planner → Sonnet
+Writer → Opus Critic**이 `build.md`/`progress.md`를 기준으로 최대 3회 순환한다.
+역할 간 전달은 파일 경로(`plan.json`/`changes.json`/`review.json`/`handoff.json`)로만
+제한하고, Main은 모든 호출 직전에 두 진행 문서를 다시 읽는다. Critic은 Plan을 읽지
+않고 요구사항 원문 ↔ 실제 TASK 파일을 `요구사항 모순·핵심 누락·범위 위반·근거 없는 추가`
+네 의미 축으로 비교하며 `check-task` 구조 검증을 통합 수행한다(기존 Phase 5 auditor 대체).
+Critic `FAIL`은 반드시 Planner부터 REPAIR cycle을 시작하고 세 번째 FAIL은
+`MANUAL_REQUIRED`다. task-write는 **TASK 파일 1개만** 생성하며 영구 SSOT를 접촉하지
+않는 정체성은 그대로다. Main은 **완전 비대화형**으로, App·요구사항이 부족하면 질문 없이
+`FAILED`로 종료한다. 역할 계약은 `agents/task-planner.md`, `agents/task-writer.md`,
+`agents/task-critic.md`이며 `general-purpose` bootstrap-only mode로 동작한다.
+pipeline-runner도 task-write를 인라인 역할극이 아닌 실제 멀티 에이전트 스킬로 호출한다.
 
 ### v3.26.0 — ssot-write 3-agent review loop
 

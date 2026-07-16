@@ -183,7 +183,11 @@ Gate 실패 처리:
 2. `references/skill-catalog.md`에서 해당 스킬의 입력, 출력, 게이트를 확인한다.
 3. `Append-only Log`에 start 이벤트를 추가한다.
 4. 해당 `skills/<skill>/SKILL.md`를 읽고 그대로 수행한다.
-   - `ssot-write`는 인라인 역할극으로 수행하면 **절대로 안 된다.** `model: opus`가 적용되는 실제 `ssot-write` 스킬을 호출한다.
+   - `task-write`와 `ssot-write`는 인라인 역할극으로 수행하면 **절대로 안 된다.** `model: opus`가 적용되는 실제 스킬을 멀티 에이전트로 호출한다.
+   - `task-write` Main은 Opus이며 **완전 비대화형**으로 Planner(Opus), Writer(Sonnet), Critic(Opus)을 역할 정의 파일을 먼저 읽는 `general-purpose` bootstrap 독립 agent로 순차 호출한다. named `task-*` type 조회와 availability probe는 **절대로 금지한다.**
+   - task-write Main은 모든 Agent 호출 직전에 task-write process의 `build.md`와 `progress.md`를 다시 읽는다. 에이전트 간 정보는 `plan.json`, `changes.json`, `review.json` 파일 경로로만 전달하며 pipeline main이 artifact 내용을 재작성하거나 역할을 대신하면 **절대로 안 된다.**
+   - task-write는 **TASK 파일 1개만** 생성하고 영구 SSOT를 접촉하지 않는다. Writer가 TASK를 작성하고 Critic이 요구사항 원문 ↔ 실제 TASK 파일을 `요구사항 모순·핵심 누락·범위 위반·근거 없는 추가` 네 의미 check와 `check-task` 구조 검증으로 판정한다(**최대 3회**). Critic에게 `PLAN_PATH`를 전달하면 **절대로 안 된다.**
+   - task-write Critic `FAIL`은 **반드시 Planner부터** REPAIR cycle을 시작한다. Writer로 바로 돌아가면 **절대로 안 된다.** App·요구사항 부족이나 Planner FAIL은 pipeline blocked이며 task-write Main이 질문으로 되묻지 않는다.
    - ssot-write Main은 Opus이며 Planner(Opus), Writer(Sonnet), Critic(Opus)을 역할 정의 파일을 먼저 읽는 `general-purpose` bootstrap 독립 agent로 순차 호출한다. named `ssot-*` type 조회와 availability probe는 **절대로 금지한다.**
    - Main은 모든 Agent 호출 직전에 ssot-write process의 `build.md`와 `progress.md`를 다시 읽는다.
    - 에이전트 간 정보는 `plan.json`, `changes.json`, `review.json` 파일 경로로만 전달한다. pipeline main이 artifact 내용을 재작성하거나 역할을 대신하면 **절대로 안 된다.**
@@ -214,7 +218,7 @@ Gate 실패 처리:
 
 pipeline-runner는 하위 스킬 완료 보고를 그대로 믿지 않고 산출물을 직접 확인한다.
 
-- `task-write`: TASK 파일 존재, TASK 경로를 `Output Registry`에 기록, audit 결과 또는 `AUDIT_BLOCKED` 기록.
+- `task-write`: process의 `build.md`, `progress.md`, `plan.json`, `changes.json`, `review.json`, `handoff.json`을 확인한다. TASK 파일 존재, `progress.md` Status와 `handoff.json.status`가 모두 `SUCCESS`, Critic 최종 result가 `SUCCESS`일 때만 ssot-write로 진행하고 TASK 경로를 `Output Registry`에 기록한다. `FAILED`·`MANUAL_REQUIRED`는 pipeline blocked다.
 - `ssot-write`: process의 `build.md`, `progress.md`, `plan.json`, `review.json`, `handoff.json`을 확인한다. `progress.md` Status와 `handoff.json.status`가 모두 `SUCCESS`이고 Critic 최종 result가 `SUCCESS`일 때만 work-packet-write로 진행한다. plan이 `READY`면 `changes.json`도 필수이며, `NOOP`이면 Writer/changes만 생략한다. `FAILED`·`MANUAL_REQUIRED`는 pipeline blocked다.
 - `work-packet-write`: Work Packet 파일 존재, 상태가 `Ready`인지 확인. `Draft`이면 `blocked`.
 - `forge-scope`: worktree 존재, branch 존재, forge-scope build/progress 존재, 실행한 build/test 명령과 결과 기록.

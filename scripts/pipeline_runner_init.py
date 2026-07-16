@@ -63,8 +63,8 @@ def default_steps(pipeline: str, requirement: str) -> list[dict[str, str]]:
         next_input = "pending"
         if skill == "task-write":
             params = f"--from {requirement}"
-            expected = "TASK path"
-            gate = "TASK audit pass or AUDIT_BLOCKED"
+            expected = "TASK path + task-write process dir"
+            gate = "progress/handoff SUCCESS + Critic SUCCESS"
             next_input = "TASK path"
         elif skill == "ssot-write":
             expected = "SSOT paths + ssot process dir"
