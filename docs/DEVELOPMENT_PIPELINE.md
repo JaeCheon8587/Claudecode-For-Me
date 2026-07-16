@@ -5,7 +5,7 @@
 | 항목 | 값 |
 |---|---|
 | 문서 ID | DEVELOPMENT_PIPELINE (단일 파일) |
-| 버전 | 1.3 (Draft) |
+| 버전 | 1.6 (Draft) |
 | 작성 가정 | 기존 스킬(grill-me/acceptance-design/meta-prompter/task-write/ssot-write/work-packet-write/forge-scope/doc-driven-review) 실존. v0.7 per-App SSOT 체계 전제 |
 | 관련 문서 | [DOCUMENT_GUIDE](.templates/DOCUMENT_GUIDE.md) · [CLAUDE](../CLAUDE.md) |
 
@@ -27,6 +27,8 @@
 | 1.2 | 2026-07-11 | ssot-write Contract v7 — exact ChangeSpec/compiled preview/structured apply와 선택적 신규 FRD prose JSON 렌더링으로 Sonnet 자유 편집 제거 | jaecheon.jeong |
 | 1.3 | 2026-07-11 | ssot-write Contract v8 — mandatory Opus Authority Certificate, certificate-bound ClaimSpec, runner deterministic preview/FRD assembly, fresh Change/Outcome Critic, 별도 risk approval, bounded optional Sonnet prose로 권위·작성 책임 분리 | jaecheon.jeong |
 | 1.4 | 2026-07-12 | ssot-write v8 — runner-owned evidence ID→exact quote 정규화, Authority 후보별 coverage, 실행 구현 SHA 동결, 전 과정·결과 한국어 계약 추가 | jaecheon.jeong |
+| 1.5 | 2026-07-13 | ssot-write slim — Opus Main + Opus Planner + Sonnet Writer + Opus Critic, 6개 파일 계약, Critic 최대 3회로 단순화 | jaecheon.jeong |
+| 1.6 | 2026-07-13 | ssot-write 실전 보강 — 실제 docs_root 대소문자, Writer 이전 baseline diff, 중단 attempt, bounded range, 단계 완료 게이트를 강제하고 내부 승인·commit 제거 | jaecheon.jeong |
 
 ## 0. 목적
 
@@ -43,7 +45,7 @@ flowchart TD
     A["1. grill-me<br/>요구사항 구체화"] --> A2["1.5 acceptance-design<br/>완료조건·검증 4축 설계"]
     A2 --> B["2. meta-prompter<br/>설계 프롬프트 정제"]
     B --> C1["3a. task-write<br/>TASK 작성 (Scope Authority)"]
-    C1 --> C2["3b. ssot-write<br/>Authority Certificate + ClaimSpec + runner deterministic apply/FRD"]
+    C1 --> C2["3b. ssot-write<br/>Opus Main + Planner/Writer/Critic"]
     C2 --> C3["3c. work-packet-write<br/>TASK+SSOT → Work Packet"]
     C3 --> F["4. forge-scope<br/>Work Packet 기반 개발"]
     F --> G["5. doc-driven-review<br/>Codex 문서 기준 검증"]
@@ -59,8 +61,8 @@ flowchart TD
 | 1.5 | `acceptance-design` | grill-me 정리본 (doc) | 완료조건·엣지케이스·오류케이스·검증방법 4축 설계본 (대화형) | doc 기준 "끝의 정의"와 검증을 같이 설계 |
 | 2 | `meta-prompter` | grill-me 결과 + 4축 설계본 | 한국어 개조식 메타프롬프트 (마크다운 코드블록) | 요구사항을 다음 단계가 안정 수행할 구조화 프롬프트로 정제 |
 | 3a | `task-write` | 요구사항 문서 또는 자연어 요청 | `docs/<App>/TASK/<App>-TASK-<NNN>.md` (Scope Authority — 목적·범위·비목표·완료기준·엣지·오류·테스트만). 영구 SSOT 는 생성·수정·분석하지 않음 | TASK 작성 + read-only 서브에이전트 자체 검증 |
-| 3b | `ssot-write` | task-write 산출 TASK | 영향 SSOT upsert + `.process/<TASK-stem>/source.json`, document index, authority/governance graph, evidence catalog, Authority 후보 coverage receipt, mandatory Authority Certificate, ClaimSpec, deterministic compiled preview/FRD, Change/Outcome certificates, approved contract, structured staging/optional bounded prose JSON, checks, commit receipt, generated views | Contract v8 runner가 evidence ID를 실제 path·line·quote로 정규화하고 TASK 아키텍처 후보별 판정 coverage·구현 SHA·한국어 자연어를 검증한다. fresh Opus Authority Critic이 TASK/ADR/DDD/문서 권위를 인증하고, Opus ClaimSpec Thinker가 atomic claims를 제안하며 fresh Change/Outcome Critic이 전후 결과를 반증한다. 별도 risk approval 뒤 필요한 신규 FRD 설명 prose만 Sonnet이 렌더링 |
-| 3c | `work-packet-write` | task-write TASK + ssot-write 반영 SSOT/matrix/downstream constraints | `App-WORK_PACKET/App-WP-<NNN>.md` — Ready gate, 연결 TASK, Required SSOT Execution Matrix, Implementation Output Contract | TASK/SSOT와 explicit supersession constraint를 연결해 forge 실행용 Work Packet만 생성 (TASK/SSOT/코드 수정 안 함) |
+| 3b | `ssot-write` | task-write 산출 TASK | 영향 SSOT upsert + `build.md`, `progress.md`, `plan.json`, `changes.json`, `review.json`, `handoff.json` | Opus Main이 두 진행 문서를 기준으로 Opus Planner, Sonnet Writer, Opus Critic을 순환 호출한다. Critic FAIL은 Planner 재계획으로 돌아가며 최대 3회. 승인·commit은 범위 밖 |
+| 3c | `work-packet-write` | task-write TASK + ssot-write `handoff.json` | `App-WORK_PACKET/App-WP-<NNN>.md` — Ready gate, 연결 TASK, Required SSOT Execution Matrix, Implementation Output Contract | TASK와 handoff Action/authority를 연결해 forge 실행용 Work Packet만 생성 (TASK/SSOT/코드 수정 안 함) |
 | 4 | `forge-scope` | work-packet-write 산출 Work Packet | `phases/scoped/<phase-dir>/index.json` + `step{N}.md` + 코드 | Work Packet 기반 경량 scoped 개발 실행 |
 | 5 | `doc-driven-review` | doc-path (1개 이상) | Missing / Improve / Overengineered / Conformance(%) | Codex 위임 — 문서가 코드 변경점에 반영됐는지 검증 |
 | 6 | (수동) | 리뷰 결과 | 반영된 코드/문서 | Missing 보강, Overengineered 제거, Improve 판단 반영 |
@@ -75,30 +77,29 @@ step3 는 **task-write → ssot-write → work-packet-write** 3단 체인. 옛 `
   - **기존 수정/개선/refactor** → FC 에 이미 기능 행 **존재** (또는 운영성 work_type). 영향 FRD 다수 자동 식별 후 영향 FRD 갱신, FC 행 상태 갱신.
   - **혼합 허용** — 한 TASK 에서 신규 FRD 신설 + 기존 FRD 갱신 동시 가능.
   - **ADR 은 필요 시** — 새 결정이면 신설, 기존 결정 변경이면 기존 ADR 수정(supersede/in-place), 결정 없으면 생략. op 따라 ADR-CATALOG 동기화.
-  - **결정적 control plane** — `ssot_runner.py`가 init/resume, bounded packet, strict artifact/path/hash, retry cap, 별도 risk gate, terminal outcome, final report를 소유한다. 메인은 runner가 생성한 `prompt_path`와 사용자 질문만 중계한다. wrapper는 v5/v6/v7 process를 각 구버전으로 재개하고 신규 process만 v8로 생성한다.
-  - **권위 선행 인증** — fresh Opus Authority Critic이 TASK·ADR status/supersession·DDD layer·문서 governance·scope 다섯 mandatory check를 exact path/line/quote evidence로 인증한다. certificate FAIL/BLOCKED는 ClaimSpec 계획 전에 중단한다.
-  - **전수 증거 coverage** — TASK 명시 ADR과 supersession chain 본문을 Authority packet에 강제하고, Change Critic의 모든 action/path/receipt와 Outcome Critic의 모든 staged changed path 인용을 runner가 전수 대조한다.
-  - **사용자 답변 재인증** — risk approval 외의 권위·검증 질문 답변은 기존 Authority Certificate와 모든 파생 proposal/preview를 무효화하고, 답변이 기록된 decision을 새 Authority Critic이 다시 인증한 뒤에만 계획을 재개한다.
-  - **인지 단계 역할 분리** — Opus ClaimSpec Thinker가 certificate 안에서만 atomic claim과 여섯 SSOT exact mutation을 만들고 runner가 실제 compiled preview와 claim 기반 FRD 골격을 생성한다. fresh Opus Change Critic이 certificate+ClaimSpec+preview를 반증하고, 별도 interactive risk approval 후 fresh Opus Outcome Critic이 전체 staging 결과를 다시 반증한다.
-  - **결정적 structured apply** — UPDATE는 runner가 exact precondition과 operation receipt를 검증해 staging에 재현한다. 신규 FRD는 hash로 동결한 canonical 20절 template contract·claim·관계로 runner가 조립하며 model-authored 전체 FRD, raw document body, `CREATE_EXACT`를 허용하지 않는다. 0회·복수 anchor나 미지원 변환은 Sonnet 자유 편집으로 우회하지 않는다.
-  - **제한된 renderer** — Sonnet은 의미가 claims로 완결된 신규 FRD의 선택적 bounded 설명 block만 Markdown artifact JSON으로 만든다. 문서 파일·버전·표·링크·acceptance/test·정책·수치를 직접 편집하거나 결정하지 않으며 실패 시 runner deterministic claim bullet로 fallback한다.
-  - **transactional write boundary** — runner가 격리 staging overlay에서 관계/governance/helper/ADR/hash 검사를 통과한 결과만 App advisory lock·write-ahead journal·전체 backup/temp와 함께 반영한다. 중간 종료는 다음 실행에서 hash 기반 rollback 또는 COMMITTED roll-forward하며, 제3자 내용은 덮지 않는다.
-  - **관계 계약** — `approved-contract.json`이 exact action/mutation/skip뿐 아니라 FC↔FRD trace, ADR disposition, semantic 관계를 소유한다. CREATE FRD의 FC 링크·§17·§18와 ADR 재사용 후 stale placeholder를 runner가 검사한다.
-  - **보정 루프** — PLAN/결정적 변경 결함은 staging을 폐기하고 Thinker revision으로 분기한다. prose renderer 실패는 결정 범위를 확대하지 않고 runner fallback 또는 안전한 terminal로 끝낸다.
-  - **terminal 분리** — DONE/NOOP만 WORK_PACKET으로 진행한다. OBSOLETE는 STOP, REWRITE_REQUIRED는 task-write, MANUAL_REQUIRED와 USER_REJECTED/PLAN_REJECTED/VERIFY_FAILED/commit recovery 결과는 pipeline blocked다.
-  - **입력 precedence** — TASK는 목적·범위, Accepted ADR은 설계 결정 권위다. approved authority relation은 generated build constraint로 work-packet-write에 전달하고 암묵적 충돌은 BLOCKED한다.
-- **work-packet-write (3c)** — TASK + 반영된 SSOT를 연결해 forge 실행용 Work Packet만 생성한다. ssot build의 `CURRENT_SSOT_WINS` authority는 SKIP이어도 Required 입력과 실행 규칙에 포함한다. TASK/SSOT/코드는 수정하지 않는다.
+  - **실제 역할 분리** — Main Orchestrator는 Opus다. Opus Planner가 `plan.json`, Sonnet Writer가 실제 SSOT와 `changes.json`, Opus Critic이 `review.json`을 각각 소유한다.
+  - **Agent dispatch** — registry를 조회하지 않고 세 역할 모두 `general-purpose` 독립 agent가 같은 `agents/ssot-*.md` 정의를 먼저 읽는 bootstrap-only mode를 사용한다. `ssot-*` availability probe와 named 호출은 금지한다.
+  - **파일 전달** — 역할끼리 직접 대화하지 않고 Main이 파일 경로만 전달한다. Main은 역할의 의미 판단이나 SSOT 작성을 대신하지 않는다.
+  - **진행 기준** — Main은 모든 Agent 호출 직전에 `build.md`와 `progress.md`를 다시 읽고 cycle·현재 역할·다음 역할을 결정한다.
+  - **Writer 변경 보고** — Writer는 계획된 `target_path`만 수정하고 파일·섹션·anchor·summary·criterion을 `changes.json`에 cycle 간 누적 기록한다.
+  - **좁은 Critic** — Critic은 Plan을 읽지 않는다. TASK 핵심 의미와 Writer 결과 경로의 실제 SSOT 투영을 모순·핵심 누락·금지 범위 포함·근거 없는 추가 결정 네 축으로만 비교하며, 하나라도 실패하면 무조건 FAIL이다. 코드·테스트·빌드 세부의 문구 복제 여부와 문체·취향은 범위 밖이다.
+  - **보정 루프** — Critic `FAIL`은 `PLAN_PATH + REVIEW_PATH`를 Planner에게 전달해 FAIL finding 관련 target만 포함한 REPAIR 계획을 만들고 Writer·Critic을 다시 호출한다. Critic은 최대 3회이며 세 번째 FAIL은 `MANUAL_REQUIRED`다.
+  - **NOOP 검토** — NOOP도 Critic을 호출하며 Writer만 생략한다. Planner 단독 NOOP 완료는 금지한다.
+  - **상태와 진행** — `build.md`가 고정 실행 설계, `progress.md`가 현재 cycle과 결과다. 중단 후 재개는 지원하지 않는다.
+  - **handoff** — Critic SUCCESS 직후 승인 질문이나 commit 없이 `handoff.json`을 작성한다. Action, source/target/authority, instruction, acceptance, section modifications를 담는 후속 단계 단일 입력이다.
+  - **legacy** — 신규 실행은 Runner를 사용하지 않는다. `ssot_runner.py`와 v5-v8 구현은 기존 process 재개 전용이다.
+- **work-packet-write (3c)** — TASK + 반영된 SSOT를 연결해 forge 실행용 Work Packet만 생성한다. `handoff.json.actions`와 `authority_paths`를 Required 입력과 실행 규칙으로 변환한다. TASK/SSOT/코드는 수정하지 않는다.
 
 TASK 는 휘발성 + 외부 SSOT 인용 금지 ([DOCUMENT_GUIDE §1.2](.templates/DOCUMENT_GUIDE.md) 룰).
 
-요구사항 정합 검증은 단계별로 분산됐다(monolith 의 "요구↔전체생성문서" 단일 99%/3회 루프는 폐지): task-write 는 TASK 파일 1개만 `docs_conformance.py` 로 채점하고, ssot-write 는 mandatory Authority Certificate, certificate-bound ClaimSpec, fresh Change/Outcome Critic, runner deterministic preview/FRD·관계 gate, 선택적 bounded prose renderer로 요구↔영구 SSOT를 검증한다. 모든 의미 역할은 runner의 hash-bound file/byte budget packet만 읽으며 exact evidence 없이 PASS할 수 없다. **step5 `doc-driven-review`(문서↔코드)와는 검증 축이 다르다**: step3 검증 = 요구↔문서, step5 = 문서↔코드.
+요구사항 정합 검증은 단계별로 분산됐다. task-write는 TASK 파일 1개를 `docs_conformance.py`로 채점하고, ssot-write Critic은 Plan을 무시하고 TASK 핵심 의미가 실제 SSOT에 올바르게 투영됐는지를 네 의미 축으로 최대 3회 직접 비교한다. **step5 `doc-driven-review`(문서↔코드)와는 검증 축이 다르다**: step3 검증 = TASK 의미↔SSOT 투영, step5 = 문서↔코드.
 
 ## 4. 데이터 흐름 / SSOT
 
 - 설계 문서(FRD/TASK)가 **단일 진실원천**. step4 forge-scope 와 step5 doc-driven-review 가 **같은 문서**를 참조 → 개발 의도와 검증 기준 일치.
 - forge-scope 산출물(`phases/scoped/<dir>/`)은 개발 추적용. 영구 추적은 docs/ SSOT + 코드.
 - doc-driven-review 는 working-tree + untracked 변경점을 문서 기준으로 대조 → Conformance% 산출.
-- ssot-write의 상태 원본은 `state.json`과 `events.jsonl`이다. build/progress 네 문서는 호환성과 사람이 읽는 진행 상황을 위한 runner-generated view이며 어떤 에이전트도 직접 수정하지 않는다. `governance.json`, mandatory Authority Certificate, certificate-bound ClaimSpec, compiled preview/operation receipt, Change/Outcome certificates, `approved-contract.json`, baseline/staging/patch/checks/commit manifest가 실제 변경과 검증 증거다.
+- ssot-write Main은 `build.md`의 고정 실행 설계와 `progress.md`의 현재 cycle을 함께 읽는다. `plan.json`, `changes.json`, `review.json`은 역할 전달 계약이고 `handoff.json`은 성공한 후속 단계 계약이다.
 
 ## 5. 향후 보완 (Backlog)
 

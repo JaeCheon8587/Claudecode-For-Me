@@ -1,4 +1,4 @@
 interface:
   display_name: "SSOTWrite"
-  short_description: "TASK 권위를 인증하고 SSOT 변경을 결정적으로 반영"
-  default_prompt: "$ssot-write를 사용해 TASK 권위를 인증하고, 한국어 ClaimSpec과 독립 비판을 거쳐 검증된 SSOT 변경만 안전하게 반영해 주세요."
+  short_description: "Planner·Writer·Critic 순환, TASK 의미↔SSOT 검토"
+  default_prompt: "$ssot-write를 사용해 Planner와 Writer로 SSOT를 갱신하고, Critic은 Plan을 무시한 채 TASK 핵심 의미와 실제 SSOT 투영을 네 의미 축으로 비교해 주세요."

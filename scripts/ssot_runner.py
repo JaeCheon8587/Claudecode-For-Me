@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Stable CLI entry point for ssot-write runners.
+"""Legacy-only entry point for Contract v5-v8 ssot-write processes.
 
-New runs use Contract v8. Existing Contract v5, v6, and v7 processes remain
-resumable and are never migrated in place because their state and artifact
-contracts differ from v8.
+New ssot-write runs are orchestrated by the skill and its three named agents.
+This module exists only to resume a process whose state.json already declares
+an old contract_version. It must never initialize a new process.
 """
 
 import json
@@ -60,7 +60,10 @@ def _implementation(argv: list[str]):
             return v7
         if version == 8:
             return _v8
-    return _v8
+    raise RuntimeError(
+        "LEGACY_RUNNER_REQUIRES_EXISTING_PROCESS: "
+        "new ssot-write runs must use the ssot-write skill"
+    )
 
 
 _configure_stdio = _v8._configure_stdio
@@ -68,6 +71,10 @@ _emit_json = _v8._emit_json
 
 
 if __name__ == "__main__":
-    implementation = _implementation(sys.argv[1:])
+    try:
+        implementation = _implementation(sys.argv[1:])
+    except RuntimeError as error:
+        print(str(error), file=sys.stderr)
+        raise SystemExit(2) from error
     implementation._configure_stdio()
     raise SystemExit(implementation.main())

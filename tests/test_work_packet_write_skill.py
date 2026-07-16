@@ -45,18 +45,31 @@ def test_skill_uses_task_and_confirmed_matrix_context():
     for expected in (
         "Confirmed SSOT Action Matrix",
         "Expected Required SSOT Execution Matrix",
-        ".process/<TASK-stem>/ssot-write-build.md",
+        ".process/<TASK-stem>/handoff.json",
+        "handoff.json.actions",
         "CREATE` 또는 `UPDATE` 대상인 SSOT 파일",
         "Required SSOT Execution Matrix",
         "Source matrix row",
         "Blocking / Open Questions",
         "읽을 범위",
         "CREATE/UPDATE target path",
-        "Input Precedence and Downstream Constraints",
-        "approved authority relation",
-        "Downstream constraint <Relation ID>",
+        "Authority Inputs and Instructions",
+        "authority_paths",
+        "Action `instruction`",
+        "`result`가 `APPLIED|NOOP`",
+        "`modifications`를 보존",
+        "<process-dir>/build.md",
+        "<process-dir>/progress.md",
     ):
         assert expected in text
+
+
+def test_skill_preserves_actual_docs_root_case_from_task_path():
+    text = read("skills/work-packet-write/SKILL.md")
+    assert "`docs_root`는 `docs` 또는 `Docs`" in text
+    assert "<docs_root>/.templates/App/WORK_PACKET" in text
+    assert "CREATE <docs_root>/<App>/WORK_PACKET" in text
+    assert "Task: <docs_root>/<App>/TASK" in text
 
 
 def test_skill_limits_creation_status_to_draft_or_ready():
@@ -82,8 +95,8 @@ def test_auditor_templates_are_read_only_and_check_router_shape():
         "Required fix",
         "File/Section Audit",
         "Required SSOT Execution Matrix links exist",
-        "CURRENT_SSOT_WINS",
-        "downstream Work Packet instruction",
+        "handoff.json",
+        "Authority inputs/instructions",
         "not long TASK or SSOT body copies",
         "Only the Work Packet file was created or modified",
         "PASS | FAIL | AUDIT_BLOCKED",
@@ -118,10 +131,10 @@ def test_work_packet_template_uses_matrix_columns_and_blocking_contract():
         "상태는 `Draft`이며",
         "| Issue | Source | Impact | Required decision |",
         "`Ready`일 때는 `none`으로 명시",
-        "일반 SKIP 대상 SSOT는 Required로 들어가지 않았고",
-        "CURRENT_SSOT_WINS",
-        "Downstream constraint PREC-001",
-        "모든 downstream Work Packet instruction",
+        "모든 handoff `authority_paths`가 Required로 들어갔고",
+        "handoff Action",
+        "authority_paths",
+        "Action의 `instruction`",
     ):
         assert expected in text
 
@@ -176,7 +189,7 @@ def test_auditor_output_requires_expected_observed_fix_structure():
         "Gate consistency",
         "Expected Required SSOT Execution Matrix uses the same columns as the Work Packet matrix",
         "Missing `CREATE/UPDATE target path` handling is Draft + Blocking",
-        "Ordinary SKIP rows are not Required",
+        "Every handoff authority path is Required",
         "Ambiguous precedence is Draft + Blocking",
     ):
         assert expected in text

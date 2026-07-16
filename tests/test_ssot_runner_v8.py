@@ -1172,11 +1172,11 @@ def test_wrapper_resumes_each_existing_contract_without_migration(tmp_path: Path
     assert implementation.CONTRACT_VERSION == version
 
 
-def test_wrapper_defaults_new_runs_to_contract_v8(tmp_path: Path) -> None:
-    implementation = wrapper._implementation([
-        "init", "--repo", str(tmp_path), "--task", TASK, "--app", APP,
-    ])
-    assert implementation.CONTRACT_VERSION == 8
+def test_wrapper_rejects_new_runs_without_legacy_state(tmp_path: Path) -> None:
+    with pytest.raises(RuntimeError, match="LEGACY_RUNNER_REQUIRES_EXISTING_PROCESS"):
+        wrapper._implementation([
+            "init", "--repo", str(tmp_path), "--task", TASK, "--app", APP,
+        ])
 
 
 def test_runner_implementation_change_requires_new_process(

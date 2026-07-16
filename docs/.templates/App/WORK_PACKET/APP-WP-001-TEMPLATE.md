@@ -55,26 +55,26 @@
 
 ## 4. Required SSOT Execution Matrix
 
-> `ssot-write`의 `Confirmed SSOT Action Matrix`를 기준 입력으로 삼는다.
+> `ssot-write`의 `handoff.json.actions`에서 변환한 `Confirmed SSOT Action Matrix`를 기준 입력으로 삼는다.
 > `CREATE` / `UPDATE` 대상은 기본 `Required`다.
 > 실행에 직접 필요 없는 `SKIP` 대상은 넣지 않는다.
-> 단, ssot build의 `CURRENT_SSOT_WINS` downstream constraint가 지목한 current authority는 matrix action이 `SKIP`이어도 구현의 Truth Authority이므로 `Required`다.
+> 각 Action의 `authority_paths`는 구현의 Truth Authority이므로 `Required`다. authority가 없거나 충돌하면 상태는 `Draft`다.
 > `Optional`은 CREATE/UPDATE를 느슨하게 낮추는 용도가 아니라, TASK 실행 판단에 실제로 도움이 되는 예외 입력에만 허용한다.
 > `CREATE/UPDATE target path`가 비어 있거나 파일이 없으면 임의 링크를 만들지 않는다.
 > 이 경우 상태는 `Draft`이며, 해당 source row를 `Blocking / Open Questions`에 기록한다.
 
 | SSOT type | Action | Document | Read range | Why required | Source matrix row | Priority |
 |---|---|---|---|---|---|---|
-| FRD | CREATE / UPDATE | [{App}-FRD-{NNN}](../FRD/{App}-FRD-{NNN}.md) | {예: §1, §2, §17, §18} | 기능 의도·수용 기준 확인 | {예: Confirmed SSOT Action Matrix row 1} | Required |
-| FC | UPDATE | [{App}-FC](../{App}-FC.md) | {예: 해당 기능 행} | 기능 레지스트리·상태 확인 | {예: Confirmed SSOT Action Matrix row 2} | Required |
-| ADR | CREATE / UPDATE | [{App}-ADR-{NNN}](../ADR/{App}-ADR-{NNN}.md) | {예: §3 결정, §4 결과} | 구조 결정·금지사항 확인 | {예: Confirmed SSOT Action Matrix row 3} | Required / Optional |
-| ADR | CURRENT_SSOT_WINS | [{App}-ADR-{NNN}](../ADR/{App}-ADR-{NNN}.md) | {superseding 결정 범위} | TASK 구현 지시를 명시적으로 supersede한 현재 설계 권위 | {예: Downstream constraint PREC-001} | Required |
-| ARCHITECTURE | UPDATE | [{App}-ARCHITECTURE](../{App}-ARCHITECTURE.md) | {예: 관련 호스트 책임} | App 런타임/호스트 제약 확인 | {예: Confirmed SSOT Action Matrix row 4} | Required / Optional |
+| FRD | CREATE / UPDATE | [{App}-FRD-{NNN}](../FRD/{App}-FRD-{NNN}.md) | {예: §1, §2, §17, §18} | 기능 의도·수용 기준 확인 | {예: handoff action ACT-001} | Required |
+| FC | UPDATE | [{App}-FC](../{App}-FC.md) | {예: 해당 기능 행} | 기능 레지스트리·상태 확인 | {예: handoff action ACT-002} | Required |
+| ADR | CREATE / UPDATE | [{App}-ADR-{NNN}](../ADR/{App}-ADR-{NNN}.md) | {예: §3 결정, §4 결과} | 구조 결정·금지사항 확인 | {예: handoff action ACT-003} | Required / Optional |
+| ADR | AUTHORITY | [{App}-ADR-{NNN}](../ADR/{App}-ADR-{NNN}.md) | {controlling 결정 범위} | handoff Action의 현재 설계 권위 | {예: handoff action ACT-001 authority} | Required |
+| ARCHITECTURE | UPDATE | [{App}-ARCHITECTURE](../{App}-ARCHITECTURE.md) | {예: 관련 호스트 책임} | App 런타임/호스트 제약 확인 | {예: handoff action ACT-004} | Required / Optional |
 
 ## 5. 실행 규칙
 - TASK 에 없는 작업은 구현하지 않는다.
 - SSOT 와 충돌하는 TASK 는 실행하지 않고 충돌 내용을 보고한다.
-- `CURRENT_SSOT_WINS` constraint가 있으면 TASK 목적·범위는 유지하되 충돌한 설계 결정은 지정된 current authority와 Work Packet instruction을 따른다.
+- 각 handoff Action의 `instruction`과 `authority_paths`를 함께 따른다. 둘이 충돌하면 구현하지 않고 `Draft`로 되돌린다.
 - 명시적 supersession 없이 TASK와 SSOT가 충돌하면 실행하지 않고 `Draft`로 되돌린다.
 - TASK 가 애매하면 Required SSOT 로 해석한다.
 - Required SSOT 에도 근거가 없으면 질문하거나 미확인으로 보고한다.
@@ -112,7 +112,7 @@
 - [ ] CREATE/UPDATE 대상 SSOT가 기본 Required 로 반영됐다.
 - [ ] Optional 은 구현 판단상 필요한 예외 입력이며 사유가 있다.
 - [ ] CREATE/UPDATE target path 누락 또는 파일 미존재가 있으면 상태가 `Draft`다.
-- [ ] 일반 SKIP 대상 SSOT는 Required로 들어가지 않았고, `CURRENT_SSOT_WINS` authority만 예외적으로 Required다.
+- [ ] 모든 handoff `authority_paths`가 Required로 들어갔고 unrelated authority는 추가되지 않았다.
 - [ ] 모든 downstream Work Packet instruction이 §5 실행 규칙에 반영됐다.
 - [ ] TASK 와 Required SSOT Execution Matrix 사이 명백한 충돌이 없다.
 - [ ] Execution Gate 가 `Ready`면 Blocking / Open Questions 가 `none`이다.

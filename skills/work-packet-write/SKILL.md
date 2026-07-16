@@ -5,7 +5,7 @@ description: TASK 문서와 반영된 영구 SSOT를 연결해 AI 코드 실행�
 
 # work-packet-write
 
-`docs/<App>/TASK/<App>-TASK-<NNN>.md`를 Scope Authority 로 삼고, 반영된 SSOT를 Truth Authority 로 연결하는 얇은 실행 manifest 를 만든다.
+`docs/<App>/TASK/<App>-TASK-<NNN>.md` 또는 `Docs/<App>/TASK/<App>-TASK-<NNN>.md`를 Scope Authority 로 삼고, 반영된 SSOT를 Truth Authority 로 연결하는 얇은 실행 manifest 를 만든다.
 
 **책임 경계**:
 - 이 스킬은 `task-write`와 `ssot-write` 이후 단계다.
@@ -32,7 +32,7 @@ description: TASK 문서와 반영된 영구 SSOT를 연결해 AI 코드 실행�
    - 선택: `--app <APP>`
    - 선택: `--process <process-dir>`
    - 선택: `--name <title>`
-2. TASK 경로는 `docs/<App>/TASK/<App>-TASK-<NNN>.md` 형식이어야 한다.
+2. TASK 경로는 실제 저장소 entry와 동일한 `<docs_root>/<App>/TASK/<App>-TASK-<NNN>.md` 형식이어야 한다. `docs_root`는 `docs` 또는 `Docs`다.
    - `--app`이 있으면 경로의 `<App>`과 일치해야 한다.
    - `--app`이 없으면 경로에서 App 을 추출한다.
 3. helper 경로를 결정한다.
@@ -51,25 +51,22 @@ description: TASK 문서와 반영된 영구 SSOT를 연결해 AI 코드 실행�
 다음만 읽는다.
 
 - TASK 파일
-- `--process`가 있으면 `<process-dir>/ssot-write-build.md`
-- `--process`가 있으면 `<process-dir>/state.json`도 먼저 읽는다. Contract v8은 `run_status: terminal`, `terminal_result: DONE|NOOP`, `disposition: ACTIVE|NOOP`, `downstream: WORK_PACKET`을 모두 요구한다. 기존 Contract v5/v6/v7 process는 해당 runner의 성공 상태 계약을 따른다. 하나라도 다르면 Work Packet을 만들지 않고 BLOCKED한다.
-- `--process`가 없으면 `.process/<TASK-stem>/ssot-write-build.md`가 존재할 때만 읽는다.
-- build 파일의 `Confirmed SSOT Action Matrix`
-- build 파일의 `Input Precedence and Downstream Constraints`(v7에서는 approved relation/authority/governance constraint generated view)
+- `--process`가 있으면 `<process-dir>/build.md`와 `<process-dir>/progress.md`를 먼저 읽는다. build의 TASK/repository가 요청과 일치하고 progress의 `Status`가 `SUCCESS`인지 확인한다. 하나라도 다르면 Work Packet을 만들지 않고 BLOCKED한다.
+- `--process`가 있으면 `<process-dir>/handoff.json`을 단일 ssot-write 입력으로 읽는다. `status: SUCCESS`가 아니거나 `result`가 `APPLIED|NOOP`이 아니면 BLOCKED한다.
+- `--process`가 없으면 `.process/<TASK-stem>/handoff.json`이 존재할 때만 읽는다.
+- `handoff.json.actions`를 `Confirmed SSOT Action Matrix`로 변환한다. `action_id`, `operation`, `target_path`, `source_paths`, `authority_paths`, `instruction`, `acceptance_criteria`, `modifications`를 보존한다.
 - `Confirmed SSOT Action Matrix`에서 `CREATE` 또는 `UPDATE` 대상인 SSOT 파일
 - TASK가 직접 실행 경계 판단에 필요한 최소 기존 SSOT 파일
-- Work Packet 템플릿: `docs/.templates/App/WORK_PACKET/APP-WP-001-TEMPLATE.md`
+- Work Packet 템플릿: `<docs_root>/.templates/App/WORK_PACKET/APP-WP-001-TEMPLATE.md`
 
-`Confirmed SSOT Action Matrix`를 읽으면 이를 Work Packet의 기준 입력으로 삼는다.
+`handoff.json.actions`에서 변환한 `Confirmed SSOT Action Matrix`를 Work Packet의 기준 입력으로 삼는다. `modifications`의 section·anchor·summary를 구현 입력 범위 설명에 사용하되 SSOT 본문을 길게 복제하면 **절대로 안 된다.**
 
 - `CREATE` / `UPDATE` 대상은 기본 `Required`로 본다.
 - `CREATE/UPDATE target path`가 비어 있거나 파일이 없으면 임의 링크를 만들지 않는다.
 - `CREATE/UPDATE target path` 누락 또는 파일 미존재 행은 Work Packet 상태를 `Draft`로 만들고, 해당 `Source matrix row`를 `Blocking / Open Questions`에 기록한다.
 - 실행에 직접 필요 없는 `SKIP` 행은 Required SSOT Execution Matrix에 넣지 않는다.
-- `Input Precedence and Downstream Constraints`의 ADR/authority relation 문서는 예외적으로 `Required`에 넣는다. matrix action이 `SKIP`이어도 approved contract가 구현 판단의 Truth Authority로 지정하면 제외하지 않는다.
-- 기존 Contract v5 build의 `CURRENT_SSOT_WINS` 행은 같은 authority relation으로 해석한다.
-- constraint의 `Source matrix row`는 `Downstream constraint <Relation ID>`로 기록하고 `Work Packet instruction`을 실행 규칙에 그대로 반영한다.
-- `BLOCKED` precedence 행이나 명시적 supersession 근거 없는 충돌이 있으면 Work Packet을 `Draft`로 만들고 구현을 금지한다.
+- 각 Action의 `authority_paths`는 `Required`에 넣고 `instruction`을 실행 규칙에 반영한다.
+- authority가 비어 있거나 source/authority가 서로 충돌하면 Work Packet을 `Draft`로 만들고 구현을 금지한다.
 - `Optional`은 CREATE/UPDATE를 느슨하게 낮추는 용도가 아니라, TASK 실행 판단에 실제로 도움이 되는 예외 입력에만 허용한다.
 - Work Packet에는 각 행의 `Source matrix row`를 남겨 ssot-write 판단과 연결한다.
 
@@ -83,8 +80,8 @@ description: TASK 문서와 반영된 영구 SSOT를 연결해 AI 코드 실행�
    ```bash
    python <HELP> next-id --repo . --app <APP> --kind wp
    ```
-2. helper 사용이 불가하면 `docs/<App>/WORK_PACKET/`의 기존 `<App>-WP-*.md`를 보고 다음 번호를 판단한다.
-3. 출력 경로는 `docs/<App>/WORK_PACKET/<App>-WP-<NNN>.md`다.
+2. helper 사용이 불가하면 `<docs_root>/<App>/WORK_PACKET/`의 기존 `<App>-WP-*.md`를 보고 다음 번호를 판단한다.
+3. 출력 경로는 `<docs_root>/<App>/WORK_PACKET/<App>-WP-<NNN>.md`다.
 4. 기존 파일이 있으면 덮어쓰지 말고 중단한다.
 
 ---
@@ -103,12 +100,12 @@ description: TASK 문서와 반영된 영구 SSOT를 연결해 AI 코드 실행�
 - `Required SSOT Execution Matrix`에는 `SSOT type / Action / Document / Read range / Why required / Source matrix row / Priority` 컬럼을 둔다.
 - `Required SSOT Execution Matrix`에는 이번 구현자가 반드시 읽어야 하는 문서만 넣는다.
 - `CREATE` / `UPDATE` 행은 기본 `Required`로 반영한다. target path가 없거나 파일이 없으면 matrix에 임의 링크를 만들지 말고 `Blocking / Open Questions`에 해당 source row를 기록한다.
-- approved ADR/authority relation의 current authority는 `Required`로 반영하고 read range는 controlling decision 범위로 좁힌다.
+- Action의 authority 문서는 `Required`로 반영하고 read range는 controlling decision 범위로 좁힌다.
 - `Source matrix row`에는 `Confirmed SSOT Action Matrix`의 행 번호, action ID 또는 relation ID를 적는다.
 - `읽을 범위`는 파일 전체보다 절·표·행 단위로 좁게 쓴다.
 - `Blocking / Open Questions`를 반드시 작성한다. `Ready`이면 `none`으로 명시하고, 미확정 사항이 있으면 `Draft`로 둔다.
 - `실행 규칙`에는 TASK 우선/SSOT 충돌/모호성 중단 규칙을 남긴다.
-- `실행 규칙`에는 모든 approved authority relation의 Work Packet instruction을 반영한다. TASK 목적·범위는 유지하되 충돌한 설계 결정은 명시된 current authority를 따른다.
+- `실행 규칙`에는 모든 Action의 `instruction`을 반영한다. TASK 목적·범위와 `authority_paths`를 함께 따른다.
 - `실행 경계`에는 반드시 수행, 금지, 허용, 중단 조건을 채운다.
 - `검증 입력`에는 TASK §9, §9.1, §9.2, §9.3과 실행할 빌드/테스트 후보를 적는다. 모르면 `"코드베이스 기준으로 탐색"`이라고 쓴다.
 - `Readiness Checklist`는 실제 상태에 맞게 체크한다. 확인하지 못한 항목은 체크하지 않는다.
@@ -128,7 +125,7 @@ description: TASK 문서와 반영된 영구 SSOT를 연결해 AI 코드 실행�
 - [ ] `Ready`이면 blocking issue가 없고 Required SSOT target path가 모두 존재한다.
 - [ ] `Draft`이면 후속 구현 금지 의미가 Execution Gate에 명확하다.
 - [ ] CREATE/UPDATE 대상 누락, SKIP 대상 오포함, 과도한 read range가 없다.
-- [ ] approved authority relation이 Required에 포함되고 해당 Work Packet instruction이 실행 규칙에 반영됐다.
+- [ ] 모든 handoff `authority_paths`가 Required에 포함되고 Action `instruction`이 실행 규칙에 반영됐다.
 - [ ] Blocking / Open Questions가 존재하고 상태와 일치한다.
 - [ ] Implementation Output Contract가 존재하고 필수 완료 보고 항목 5개를 포함한다.
 - [ ] SSOT 본문을 길게 복제하지 않았다.
@@ -146,7 +143,7 @@ Phase 5 검증은 서브 에이전트에 위임해야 한다. 서브 에이전�
 - 생성된 Work Packet 읽기
 - 연결 TASK 읽기
 - Required SSOT Execution Matrix 링크 대상 파일 존재 확인
-- `.process/<TASK-stem>/ssot-write-build.md` 또는 `--process` build 파일 읽기
+- `.process/<TASK-stem>/handoff.json` 또는 `--process` handoff 파일 읽기
 - git status / git diff --name-only 확인
 
 서브 에이전트에 금지되는 작업:
@@ -163,10 +160,10 @@ Phase 5 검증은 서브 에이전트에 위임해야 한다. 서브 에이전�
 
 서브 에이전트 입력에는 반드시 다음을 채워 전달한다.
 
-- `Confirmed SSOT Action Matrix`
+- `handoff.json actions`에서 변환한 `Confirmed SSOT Action Matrix`
 - `Expected Required SSOT Execution Matrix` (Work Packet matrix와 동일 컬럼: `SSOT type / Action / Document / Read range / Why required / Source matrix row / Priority`)
 - `Impact / source summary`
-- `Input Precedence and Downstream Constraints`
+- `Authority Inputs and Instructions`
 
 감사는 Work Packet에 적힌 링크만 신뢰하지 않고, expected matrix 대비 실제 Work Packet의 누락/불필요/범위 과대 여부를 확인한다.
 감사는 expected matrix와 observed Work Packet matrix를 같은 컬럼의 표 대 표로 비교한다.
@@ -181,8 +178,8 @@ Phase 5 검증은 서브 에이전트에 위임해야 한다. 서브 에이전�
 다음 형식으로 간결히 보고한다.
 
 ```text
-CREATE docs/<App>/WORK_PACKET/<App>-WP-<NNN>.md
-Task: docs/<App>/TASK/<App>-TASK-<NNN>.md
+CREATE <docs_root>/<App>/WORK_PACKET/<App>-WP-<NNN>.md
+Task: <docs_root>/<App>/TASK/<App>-TASK-<NNN>.md
 Audit: PASS | FAIL | AUDIT_BLOCKED - read-only subagent unavailable
 Next: forge-scope
 ```

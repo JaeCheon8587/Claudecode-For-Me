@@ -14,11 +14,11 @@ You are a read-only auditor for a generated Work Packet.
 
 ### Confirmed SSOT Action Matrix
 
-`<paste the Confirmed SSOT Action Matrix from ssot-write-build.md, or "none">`
+`<render handoff.json actions as a matrix, or "none">`
 
-### Input Precedence and Downstream Constraints
+### Authority Inputs and Instructions
 
-`<paste the constraint table from ssot-write-build.md, or "none">`
+`<paste each handoff action_id, authority_paths, instruction, acceptance_criteria, or "none">`
 
 ### Expected Required SSOT Execution Matrix
 
@@ -28,7 +28,7 @@ Use the same columns as the Work Packet matrix. Derive Required rows from CREATE
 |---|---|---|---|---|---|---|
 | `<type>` | `<CREATE / UPDATE>` | `<expected existing target path or MISSING target path>` | `<expected narrow range>` | `<why implementation must read it>` | `<Confirmed SSOT Action Matrix row>` | `Required` |
 | `<type>` | `<optional action>` | `<expected existing target path>` | `<expected narrow range>` | `<why this exception helps implementation judgment>` | `<Confirmed SSOT Action Matrix row or explicit basis>` | `Optional` |
-| `ADR` | `AUTHORITY` | `<controlling ADR path>` | `<controlling decision range>` | `<why current truth controls implementation>` | `Downstream constraint <Relation ID>` | `Required` |
+| `ADR` | `AUTHORITY` | `<controlling ADR path>` | `<controlling decision range>` | `<why current truth controls implementation>` | `handoff action <Action ID> authority` | `Required` |
 
 ### Impact / source summary
 
@@ -54,14 +54,14 @@ Use the same columns as the Work Packet matrix. Derive Required rows from CREATE
 - Verify the Work Packet path and document ID use `<APP>-WP-<NNN>`.
 - Verify the linked TASK path exists and matches the input TASK.
 - Verify the Work Packet's Required SSOT Execution Matrix matches the Expected Required SSOT Execution Matrix by same-column table comparison.
-- Verify `CREATE` / `UPDATE` rows from the Confirmed SSOT Action Matrix are present unless a section-specific blocking note explains why not.
+- Verify every `CREATE` / `UPDATE` action from `handoff.json` is present unless a section-specific blocking note explains why not.
 - Verify `CREATE/UPDATE target path` missing or nonexistent means `Draft` + `Blocking / Open Questions`; do not accept guessed links.
 - Verify ordinary `SKIP` rows are not Required. A `SKIP` authority referenced by an approved downstream relation is the only exception and must be Required.
-- Verify every approved authority relation appears as Required and its Work Packet instruction appears in execution rules.
+- Verify every handoff `authority_paths` entry appears as Required and each Action `instruction` appears in execution rules.
 - Verify ambiguous or non-explicit precedence conflicts produce `Draft` + blocking, never an invented Ready precedence.
 - Verify Optional rows are justified by TASK execution needs.
 - Verify Required SSOT Execution Matrix links exist and read ranges are narrow enough to avoid whole-document overreach.
-- Verify `Source matrix row` values trace back to the Confirmed SSOT Action Matrix or to an explicit blocking note.
+- Verify `Source matrix row` values trace back to a `handoff.json` action ID or to an explicit blocking note.
 - Verify `Execution Gate` exists and is consistent: `Draft` means do not implement, `Ready` means no blocking, Required SSOT exists, and scope is clear.
 - FAIL if the Work Packet is `Draft` but written as implementable.
 - FAIL if the Work Packet is `Ready` but has blocking issues.
