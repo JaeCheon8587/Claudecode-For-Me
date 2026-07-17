@@ -59,6 +59,7 @@
 > `CREATE` / `UPDATE` 대상은 기본 `Required`다.
 > 실행에 직접 필요 없는 `SKIP` 대상은 넣지 않는다.
 > 각 Action의 `authority_paths`는 구현의 Truth Authority이므로 `Required`다. authority가 없거나 충돌하면 상태는 `Draft`다.
+> authority가 이미 CREATE/UPDATE target 행이거나 연결 TASK이면 중복 `AUTHORITY` 행을 만들지 않는다(그 행이 authority 링크를 겸함). target·TASK가 아닌 authority만 전용 `AUTHORITY` 행으로 둔다.
 > `Optional`은 CREATE/UPDATE를 느슨하게 낮추는 용도가 아니라, TASK 실행 판단에 실제로 도움이 되는 예외 입력에만 허용한다.
 > `CREATE/UPDATE target path`가 비어 있거나 파일이 없으면 임의 링크를 만들지 않는다.
 > 이 경우 상태는 `Draft`이며, 해당 source row를 `Blocking / Open Questions`에 기록한다.

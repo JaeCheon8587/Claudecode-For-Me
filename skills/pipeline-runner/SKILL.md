@@ -196,8 +196,7 @@ Gate 실패 처리:
    - Critic은 모순·핵심 누락·금지 범위 포함·근거 없는 추가 결정 네 의미 check만 수행하며 하나라도 FAIL이면 전체 결과는 **무조건 FAIL**이다.
    - Critic `FAIL`은 **반드시 Planner부터** REPAIR cycle을 시작한다. Planner는 FAIL finding 관련 target만 계획하며 Writer로 바로 돌아가면 **절대로 안 된다.**
    - NOOP도 Writer만 생략하고 Critic 검토를 거친다. ssot-write 내부에는 승인·commit 단계가 없다.
-   - 신규 ssot-write 실행에서 `scripts/ssot_runner.py`를 호출하면 **절대로 안 된다.** 이 스크립트는 기존 Contract v5-v8 process 재개 전용이다.
-   - Gate Controller, `state.json`, baseline, diff replay, audit, 중단 후 재개를 요구하면 **절대로 안 된다.**
+   - Gate Controller, `state.json`, baseline, diff replay, audit, 중단 후 재개, 별도 runner 스크립트를 요구하면 **절대로 안 된다.**
    - 모든 자연어 과정·질문·산출물·최종 보고는 한국어를 사용한다.
 5. 산출물 경로를 `Output Registry`와 해당 단계 행에 기록한다.
 6. 게이트를 통과하면 단계 행을 `done`으로 갱신하고 `Append-only Log`에 result 이벤트를 추가한다.

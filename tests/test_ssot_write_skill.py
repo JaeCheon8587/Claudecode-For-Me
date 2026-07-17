@@ -165,7 +165,7 @@ def test_handoff_and_downstream_contract_are_success_based() -> None:
     work_packet = text(ROOT / "skills/work-packet-write/SKILL.md")
     assert '"status": "SUCCESS"' in skill
     assert "progress.md" in pipeline and "handoff.json.status" in pipeline
-    assert "progress.md" in work_packet and "status: SUCCESS" in work_packet
+    assert "progress.md" in work_packet and '"status": "SUCCESS"' in work_packet
     assert "state.status=DONE" not in pipeline
     assert "<process-dir>/state.json" not in work_packet
 

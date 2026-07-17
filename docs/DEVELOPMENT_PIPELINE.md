@@ -88,7 +88,6 @@ step3 는 **task-write → ssot-write → work-packet-write** 3단 체인. 옛 `
   - **NOOP 검토** — NOOP도 Critic을 호출하며 Writer만 생략한다. Planner 단독 NOOP 완료는 금지한다.
   - **상태와 진행** — `build.md`가 고정 실행 설계, `progress.md`가 현재 cycle과 결과다. 중단 후 재개는 지원하지 않는다.
   - **handoff** — Critic SUCCESS 직후 승인 질문이나 commit 없이 `handoff.json`을 작성한다. Action, source/target/authority, instruction, acceptance, section modifications를 담는 후속 단계 단일 입력이다.
-  - **legacy** — 신규 실행은 Runner를 사용하지 않는다. `ssot_runner.py`와 v5-v8 구현은 기존 process 재개 전용이다.
 - **work-packet-write (3c)** — TASK + 반영된 SSOT를 연결해 forge 실행용 Work Packet만 생성한다. `handoff.json.actions`와 `authority_paths`를 Required 입력과 실행 규칙으로 변환한다. TASK/SSOT/코드는 수정하지 않는다.
 
 TASK 는 휘발성 + 외부 SSOT 인용 금지 ([DOCUMENT_GUIDE §1.2](.templates/DOCUMENT_GUIDE.md) 룰).

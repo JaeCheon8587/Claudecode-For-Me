@@ -18,7 +18,7 @@
 - `ssot-write`의 `progress.md`와 `handoff.json`이 모두 `SUCCESS`로 끝난 경로에서만 `work-packet-write`를 실행한다.
 - Opus Main은 Opus Planner, Sonnet Writer, Opus Critic을 실제 독립 서브에이전트로 호출한다. Writer만 SSOT를 수정하고 Critic은 Plan을 읽지 않은 채 TASK 핵심 의미와 실제 SSOT 투영을 네 의미 축으로 최대 3회 비교한다.
 - `plan.json`은 Writer 실행 입력이며 Critic 기준이 아니다. `changes.json`은 실제 파일·섹션 변경을 cycle 간 누적한다. Critic FAIL은 Planner가 review를 읽어 실패 target만 포함한 REPAIR 계획을 작성한다. `handoff.json`은 후속 단계의 단일 machine input이다.
-- pipeline-runner 메인은 ssot-write 역할을 대신하거나 agent artifact를 재작성하지 않는다. 신규 실행에서 legacy `scripts/ssot_runner.py`를 호출하지 않는다.
+- pipeline-runner 메인은 ssot-write 역할을 대신하거나 agent artifact를 재작성하지 않는다. ssot-write는 멀티 에이전트 스킬로만 실행하며 별도 runner 스크립트를 호출하지 않는다.
 - `work-packet-write` 결과가 `Draft`이면 `forge-scope`를 실행하지 않는다.
 - Work Packet 기반 `forge-scope` 이후 `ddr-loop`은 `--docs`를 생략할 수 있다. ddr-loop가 Work Packet + 연결 TASK + Required SSOT를 자동 구성한다.
 - `branch-review`는 마지막 검증 단계이며 소스 파일을 수정하지 않는다.

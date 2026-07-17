@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v3.28.0 · 커스텀 스킬 13종 + 슬래시 커맨드 17종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v3.29.0 · 커스텀 스킬 13종 + 슬래시 커맨드 17종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,12 +11,12 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `3.28.0` |
+| 버전 | `3.29.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
 | 네임스페이스 | `/claudecode-for-me:<name>` |
-| 구성요소 | Skill 13 · Command 17 · Python helper 14 (`scripts/`) |
+| 구성요소 | Skill 13 · Command 17 · Python helper 8 (`scripts/`) |
 | 외부 연동 도구 | [`codenavigator`](https://github.com/JaeCheon8587/codenavigator) (PyPI) — codenav-bootstrap / codenav-frontmatter-gen 슬래시가 호출 |
 
 플러그인은 **글로벌 캐시**에 설치되므로 한 번 설치 후 모든 프로젝트의 **새 세션**에서 자동 노출된다. 프로젝트별 재설치 불필요.
@@ -66,6 +66,34 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v3.29.0 — work-packet-write 경량 멀티 에이전트 전환 (Main context 보호)
+
+`work-packet-write`를 단일 에이전트 7-phase inline 흐름에서 **Opus Main → Opus Builder →
+Opus Critic** 2-agent 구조로 전환했다. 유일 동기는 **Main 에이전트의 context window
+보호**다. 무거운 evidence 읽기(handoff/TASK/SSOT)와 Work Packet authoring, 링킹 감사를
+전부 격리된 서브에이전트로 내리고, Main은 경로와 짧은 반환 토큰만 다룬다. Main은
+`build.md`·`progress.md`만 보고 오케스트레이션하며 **TASK/SSOT/WP/manifest/review 본문을
+읽지 않는다**(handoff는 SETUP에서 top-level 필드만 stdout 추출). 라우팅은 에이전트 반환
+토큰의 SUCCESS/FAIL로만 한다.
+
+`Planner/Writer/Critic` 3역할 리뷰루프는 thin manifest인 Work Packet에 맞지 않아 채택하지
+않았다. Critic의 관심사는 **내용의 참·거짓이 아니라 링킹 정확성**이다 —
+`ROUTER-DISCIPLINE`(라우터 규율·구조·본문 미복제), `LINK-COVERAGE`(handoff CREATE/UPDATE·
+authority 누락 없음), `LINK-VALIDITY`(링크 resolve·근거 없는 임의 링크 없음),
+`LINK-TRACEABILITY`(Source matrix row 역추적·instruction 라우팅), `GATE-LINKAGE`(Ready/Draft가
+링크 상태의 함수) 다섯 check를 수행하며 **하나라도 FAIL이면 무조건 FAIL**이다. Critic은
+`MANIFEST_PATH`를 받지 않고 handoff에서 expected를 독립 재도출해 rubber-stamp를 막는다.
+Critic `FAIL`은 Builder부터 REPAIR cycle(링킹 결함만)을 최대 3회 돌고, 세 번째 FAIL은
+`MANUAL_REQUIRED`다. 정당한 Draft(미해결 링크·blocking 실재)는 FAIL이 아니라 정상 SUCCESS다.
+경로는 dispatch key=절대경로 / JSON 기록 필드=REPO_ROOT 기준 상대로 2원화했다. 역할 계약은
+`agents/wp-builder.md`, `agents/wp-critic.md`이며 구 Phase 5 auditor 템플릿은 제거했다.
+
+아울러 현 3-agent ssot-write가 더는 쓰지 않는 **legacy Contract v5–v8 runner 서브시스템을
+전면 제거**했다: `scripts/ssot_runner.py`·`ssot_runner_v5~v8.py`·`ssot_contract_v8.py`(6),
+`skills/ssot-write/templates/*-input.md`(17), `tests/test_ssot_runner*.py`(3). 현 arch는
+중단 후 재개를 지원하지 않으므로 resume 전용 subsystem을 두지 않는다. 이로써 ssot-write의
+`templates/`도 task-write·work-packet-write와 동일하게 `build.md`·`progress.md`만 남는다.
 
 ### v3.28.0 — task-write 산출물 경로 형식 상대경로 통일
 
@@ -842,12 +870,6 @@ Claudecode-For-Me/
 │   ├── doc_driven_review.py
 │   ├── docs_conformance.py
 │   ├── docs_helpers.py
-│   ├── ssot_runner.py          # 기존 v5-v8 process resume 전용 라우터
-│   ├── ssot_contract_v8.py     # v8 certificate·ClaimSpec·critic artifact 순수 schema validator
-│   ├── ssot_runner_v8.py       # authority certificate·deterministic preview/FRD·bounded prose·commit runner
-│   ├── ssot_runner_v7.py       # 기존 exact preview/apply·선택적 prose render process 전용
-│   ├── ssot_runner_v6.py       # contract-first staging·검증·commit/rollback runner
-│   ├── ssot_runner_v5.py       # 진행 중인 기존 Contract v5 process 전용
 │   ├── worktree_setup.py        # forge-scope 워크트리 셋업·검증·cancel
 │   ├── ddr_templates/           # ddr-loop build/progress 템플릿
 │   └── forge_templates/         # forge-scope build/progress 템플릿 + docs/.templates 시드

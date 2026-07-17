@@ -40,7 +40,7 @@ TASK를 원천 의도로 삼아 `Planner → Writer → Critic` 한 사이클을
 | Writer Sonnet | SSOT, `changes.json` | 최신 plan 실행과 cycle 간 변경 기록 누적 |
 | Critic Opus | `review.json` | TASK 핵심 의미와 실제 SSOT 투영을 네 의미 축으로 비교해 SUCCESS/FAIL 반환 |
 
-Gate Controller나 Runner 에이전트를 만들면 **절대로 안 된다.** 신규 실행에서 `scripts/ssot_gate.py` 또는 legacy `scripts/ssot_runner.py`를 호출하면 **절대로 안 된다.**
+Gate Controller나 Runner 에이전트를 만들면 **절대로 안 된다.** 별도 runner 스크립트를 호출하면 **절대로 안 된다.** ssot-write는 이 스킬과 세 서브에이전트로만 실행한다.
 
 ## 실행 준비
 

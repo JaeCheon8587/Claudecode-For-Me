@@ -1,185 +1,227 @@
 ---
 name: work-packet-write
-description: TASK 문서와 반영된 영구 SSOT를 연결해 AI 코드 실행용 Work Packet 문서만 생성한다. App WORK_PACKET 폴더에 App-WP-NNN 형식 문서를 작성하며 TASK/SSOT/코드는 수정하지 않는다. "Work Packet 작성", "패킷 문서 만들어줘", "TASK 다음 forge 입력 문서 생성", "work-packet-write" 요청 시 사용한다.
+description: TASK와 반영된 영구 SSOT를 연결하는 실행용 Work Packet 문서 1개를 생성한다. Opus Main이 build.md와 progress.md만 기준으로 Opus Builder와 Opus Critic을 실제 독립 에이전트로 최대 3회 순환 호출한다. Main은 TASK/SSOT/WP 본문을 읽지 않아 context를 보호한다. Critic은 내용의 참·거짓이 아니라 링킹 정확성만 검사한다. "Work Packet 작성", "패킷 문서 만들어줘", "TASK 다음 forge 입력 문서 생성", "work-packet-write" 요청 시 사용한다.
 ---
 
 # work-packet-write
 
-`docs/<App>/TASK/<App>-TASK-<NNN>.md` 또는 `Docs/<App>/TASK/<App>-TASK-<NNN>.md`를 Scope Authority 로 삼고, 반영된 SSOT를 Truth Authority 로 연결하는 얇은 실행 manifest 를 만든다.
+`task-write → ssot-write` 이후 단계다. `docs/<App>/TASK/<App>-TASK-<NNN>.md`(Scope Authority)와 ssot-write가 남긴 `handoff.json.actions`(Truth Authority)를 근거로, 실행자가 읽을 문서·범위·충돌 규칙만 지정하는 **얇은 실행 manifest = Work Packet**을 `Builder → Critic` 한 사이클로 작성한다.
 
-**책임 경계**:
-- 이 스킬은 `task-write`와 `ssot-write` 이후 단계다.
-- Work Packet 파일만 생성한다.
-- TASK, PRD, FC, FRD, ADR, ADR-CATALOG, ARCHITECTURE, 코드 파일은 수정하지 않는다.
-- Work Packet 은 요구사항이나 SSOT 본문을 복제하지 않고, 실행자가 읽을 문서·범위·충돌 규칙·검증 입력만 지정한다.
+이 스킬의 **유일한 설계 동기는 Main 에이전트의 context window 보호**다. 무거운 evidence 읽기와 WP authoring, 링킹 감사를 전부 격리된 서브에이전트로 내리고, Main은 경로와 짧은 반환 토큰만 다룬다.
+
+## 책임 경계
+
+- 이 스킬은 **Work Packet 파일 1개만** 생성한다.
+- TASK, PRD, FC, FRD, ADR, ADR-CATALOG, ARCHITECTURE, 코드 파일을 수정하지 않는다.
+- Work Packet은 요구사항·SSOT 본문을 복제하지 않고, 실행자가 읽을 문서·범위·충돌 규칙·검증 입력만 지정한다.
 - 후속 구현은 `forge-scope` 단계로 넘긴다.
 
-**절대 금지**:
-- TASK 또는 영구 SSOT를 생성·수정·삭제하지 않는다.
-- 코드 파일을 수정하지 않는다.
-- SSOT 본문을 Work Packet 에 길게 복제하지 않는다.
-- TASK 와 Required SSOT 충돌이 명백한데 임의로 Ready 로 쓰지 않는다.
-- Required SSOT 존재 여부가 불명확한데 임의 링크를 만들지 않는다.
-- `CREATE/UPDATE target path`가 비어 있거나 파일이 없는데 Ready 로 쓰지 않는다.
-- Work Packet 생성 시 상태는 `Draft` 또는 `Ready`만 사용한다. `In Progress` / `Done` / `Dropped`는 후속 운영 상태다.
+## 절대 금지
 
----
+- TASK 또는 영구 SSOT를 생성·수정·삭제하면 **절대로 안 된다.**
+- 코드 파일을 수정하면 **절대로 안 된다.**
+- SSOT 본문을 Work Packet에 **장문 복제하면 절대로 안 된다.**
+- `CREATE/UPDATE target path`가 비어 있거나 파일이 없는데 임의 링크를 만들거나 `Ready`로 쓰면 **절대로 안 된다.**
+- 사용자 승인 질문, git stage, git commit을 수행하면 **절대로 안 된다.**
+- 중단 후 재개, baseline, diff replay, SHA proof를 추가하면 **절대로 안 된다.** 중단된 실행은 지원하지 않는다.
 
-## Phase 0: 입력
+## 절대 규칙
 
-1. `$ARGUMENTS`에서 인자를 해석한다.
-   - 필수: `<TASK-path>`
-   - 선택: `--app <APP>`
-   - 선택: `--process <process-dir>`
-   - 선택: `--name <title>`
-2. TASK 경로는 실제 저장소 entry와 동일한 `<docs_root>/<App>/TASK/<App>-TASK-<NNN>.md` 형식이어야 한다. `docs_root`는 `docs` 또는 `Docs`다.
-   - `--app`이 있으면 경로의 `<App>`과 일치해야 한다.
-   - `--app`이 없으면 경로에서 App 을 추출한다.
-3. helper 경로를 결정한다.
-   - 우선: `./scripts/docs_helpers.py`
-   - 없으면: `${CLAUDE_PLUGIN_ROOT}/scripts/docs_helpers.py`
-4. 가능하면 TASK 구조를 검증한다.
-   ```bash
-   python <HELP> check-task --repo . --app <APP> --task <TASK-path>
-   ```
-   실패하면 중단하고 보정 필요 사항을 보고한다.
+- Main Orchestrator는 **무조건 Opus**다. Builder와 Critic도 **무조건 Opus**다.
+- 두 역할은 **반드시** `general-purpose` 실제 독립 에이전트로 호출한다. Main이 역할을 대신하거나 한 에이전트가 두 역할을 수행하면 **절대로 안 된다.**
+- Main은 **완전 비대화형**이다. 사용자에게 질문하거나 승인을 구하면 **절대로 안 된다.** 상위 handoff가 불량/부재면 질문 없이 `BLOCKED`로, 그 외 입력이 부족하면 `FAILED`로 종료한다.
+- **Main은 TASK/SSOT/Work Packet/manifest/review의 본문을 절대로 읽지 않는다.** 이것이 context 보호의 핵심이다. Main이 이 파일들을 열면 **절대로 안 된다.**
+- 모든 역할 입력은 **무조건 `KEY=절대경로`만** 전달한다. 파일 내용, Critic finding 요약, 수정 힌트를 prompt에 붙이면 **절대로 안 된다.**
+- **경로 2원화**: dispatch key(Main→에이전트)는 **무조건 절대경로**다(`AGENT_DEFINITION_PATH`·`TEMPLATE_PATH`는 플러그인 소재라 절대경로 필수). manifest/review/handoff **JSON 내부 path 값**은 **무조건 REPO_ROOT 기준 상대경로**다. 이 둘을 섞으면 **절대로 안 된다.**
+- Main은 **오케스트레이션을 오직 `build.md`와 `progress.md`만 보고** 수행한다. 기억이나 직전 대화만으로 다음 역할을 선택하면 **절대로 안 된다.**
+- Main은 **모든 Agent 호출 직전에 `build.md`와 `progress.md`를 반드시 다시 읽는다.**
+- `build.md` 고정 실행 설계와 `progress.md` 현재 상태 작성이 끝나기 전에 Builder를 호출하면 **절대로 안 된다.**
+- Agent 결과를 받은 직후 Main은 다음 호출보다 먼저 `progress.md`를 **반드시 갱신한다.**
+- **라우팅은 오직 에이전트 반환 문자열의 SUCCESS/FAIL 토큰으로만** 한다. `review.json`을 열면 Main context가 오염되므로 **절대로 열지 않는다.**
+- Builder 반환은 `SUCCESS WP_PATH=<path>` 또는 `FAIL WP_PATH=<path>`만 허용한다.
+- Critic 반환은 `SUCCESS REVIEW_PATH=<path> WP_STATE=Ready|Draft` 또는 `FAIL REVIEW_PATH=<path>`만 허용한다. 그 외 형식이면 **무조건 FAILED**로 종료한다.
+- Critic에게 `MANIFEST_PATH`를 전달하면 **절대로 안 된다.** Critic은 독립성을 위해 handoff에서 expected를 스스로 재도출한다.
+- Critic의 관심사는 **오직 링킹 정확성**이다. 내용의 참·거짓을 검사하면 **절대로 안 된다.** Critic은 `ROUTER-DISCIPLINE·LINK-COVERAGE·LINK-VALIDITY·LINK-TRACEABILITY·GATE-LINKAGE` 다섯 check를 수행하고 **하나라도 FAIL이면 무조건 FAIL**이다.
+- Critic이 `FAIL`이면 **Builder부터** REPAIR cycle을 시작한다. `REVIEW_PATH`를 Builder에 전달한다.
+- Critic은 **무조건 최대 3회**다. 세 번째 `FAIL`은 `MANUAL_REQUIRED`로 종료한다.
+- 모든 자연어 산출물은 **반드시 한국어**로 작성한다.
 
----
+## 고정 구성
 
-## Phase 1: 근거 문서 수집
+| 구성요소 | 소유 파일 | 책임 |
+|---|---|---|
+| Main Opus | `build.md`, `progress.md`, `handoff.json` | 인자 파싱·gate·번호 할당·경로 전달·사이클 전이 (비대화형, 본문 미열람) |
+| Builder Opus | Work Packet 파일, `manifest.json` | handoff·TASK·template 근거로 WP를 링킹 작성, cycle 간 변경 누적 |
+| Critic Opus | `review.json` | WP 링킹을 handoff와 독립 대조해 5 check로 SUCCESS/FAIL 반환 |
 
-다음만 읽는다.
+Gate Controller나 Runner 에이전트를 만들면 **절대로 안 된다.** 별도 read-only auditor 위임도 두지 않는다. 링킹 검증은 Critic이 수행한다.
 
-- TASK 파일
-- `--process`가 있으면 `<process-dir>/build.md`와 `<process-dir>/progress.md`를 먼저 읽는다. build의 TASK/repository가 요청과 일치하고 progress의 `Status`가 `SUCCESS`인지 확인한다. 하나라도 다르면 Work Packet을 만들지 않고 BLOCKED한다.
-- `--process`가 있으면 `<process-dir>/handoff.json`을 단일 ssot-write 입력으로 읽는다. `status: SUCCESS`가 아니거나 `result`가 `APPLIED|NOOP`이 아니면 BLOCKED한다.
-- `--process`가 없으면 `.process/<TASK-stem>/handoff.json`이 존재할 때만 읽는다.
-- `handoff.json.actions`를 `Confirmed SSOT Action Matrix`로 변환한다. `action_id`, `operation`, `target_path`, `source_paths`, `authority_paths`, `instruction`, `acceptance_criteria`, `modifications`를 보존한다.
-- `Confirmed SSOT Action Matrix`에서 `CREATE` 또는 `UPDATE` 대상인 SSOT 파일
-- TASK가 직접 실행 경계 판단에 필요한 최소 기존 SSOT 파일
-- Work Packet 템플릿: `<docs_root>/.templates/App/WORK_PACKET/APP-WP-001-TEMPLATE.md`
+## Main context 보호 계약 (2단계 분리)
 
-`handoff.json.actions`에서 변환한 `Confirmed SSOT Action Matrix`를 Work Packet의 기준 입력으로 삼는다. `modifications`의 section·anchor·summary를 구현 입력 범위 설명에 사용하되 SSOT 본문을 길게 복제하면 **절대로 안 된다.**
+Main의 파일 접촉을 **SETUP 1회**와 **ORCHESTRATION 루프**로 엄격히 분리한다. 이 분리가 없으면 "build/progress만 보고 오케스트레이션"과 "handoff 확인"이 충돌한다.
 
-- `CREATE` / `UPDATE` 대상은 기본 `Required`로 본다.
-- `CREATE/UPDATE target path`가 비어 있거나 파일이 없으면 임의 링크를 만들지 않는다.
-- `CREATE/UPDATE target path` 누락 또는 파일 미존재 행은 Work Packet 상태를 `Draft`로 만들고, 해당 `Source matrix row`를 `Blocking / Open Questions`에 기록한다.
-- 실행에 직접 필요 없는 `SKIP` 행은 Required SSOT Execution Matrix에 넣지 않는다.
-- 각 Action의 `authority_paths`는 `Required`에 넣고 `instruction`을 실행 규칙에 반영한다.
-- authority가 비어 있거나 source/authority가 서로 충돌하면 Work Packet을 `Draft`로 만들고 구현을 금지한다.
-- `Optional`은 CREATE/UPDATE를 느슨하게 낮추는 용도가 아니라, TASK 실행 판단에 실제로 도움이 되는 예외 입력에만 허용한다.
-- Work Packet에는 각 행의 `Source matrix row`를 남겨 ssot-write 판단과 연결한다.
+- **SETUP**: `build.md`를 만들기 위한 1회 준비. handoff는 **top-level 필드만** 뽑는다. 전체 파일을 context에 로드하면 **절대로 안 된다.**
+- **ORCHESTRATION 루프**: `build.md`와 `progress.md`만 근거로 전이한다. 에이전트 출력 파일 본문은 **절대로 읽지 않는다.**
 
-`Confirmed SSOT Action Matrix`가 없으면 TASK와 기존 SSOT로 Required SSOT를 좁게 추론하되, Work Packet 상태는 기본 `Draft`로 두고 `Blocking / Open Questions`에 matrix 부재와 필요한 결정을 적는다. TASK/SSOT만으로 Required SSOT 판단이 모호하면 `Draft` + blocking question으로 생성한다. 문서 경로·SSOT 존재 여부를 신뢰할 수 없어 Work Packet 자체가 오해를 만들 위험이 크면 중단한다.
+## 실행 준비 (SETUP)
 
----
+Main이 다음을 **비대화형**으로 수행한다.
 
-## Phase 2: 번호와 경로
+1. 대상 repository의 실제 `docs` 또는 `Docs` 대소문자를 확인한다.
+2. helper 경로를 정한다. 우선 `./scripts/docs_helpers.py`, 없으면 `${CLAUDE_PLUGIN_ROOT}/scripts/docs_helpers.py`.
+3. WP 템플릿 경로를 정한다. 우선 `docs/.templates/App/WORK_PACKET/APP-WP-001-TEMPLATE.md`, 없으면 `${CLAUDE_PLUGIN_ROOT}/docs/.templates/App/WORK_PACKET/APP-WP-001-TEMPLATE.md`. 못 찾으면 중단하고 경로 누락을 보고한다.
+4. `$ARGUMENTS`를 분리한다. 필수 `<TASK-path>`, 선택 `--app <APP>`·`--process <process-dir>`·`--name <title>`.
+   - TASK 경로는 `<docs_root>/<App>/TASK/<App>-TASK-<NNN>.md` 형식이어야 한다(경로 문자열만 검증, **본문은 읽지 않는다**). `--app`이 있으면 경로의 App과 일치해야 한다.
+5. ssot-write handoff를 찾는다. `--process`가 있으면 `<process-dir>/handoff.json`, 없으면 `<REPO_ROOT>/.process/<TASK-stem>/handoff.json`.
+6. handoff의 **top-level 필드만** stdout으로 뽑는다(예: `python -c "import json,sys;d=json.load(open(sys.argv[1],encoding='utf-8'));print(d.get('status'),d.get('result'),d.get('task_path'))" <handoff>`). 파일 전체를 Main context에 로드하면 **절대로 안 된다.**
+   - `status==SUCCESS` 且 `result∈{APPLIED,NOOP}`가 아니면 질문 없이 `BLOCKED`로 종료한다.
+   - handoff 파일 자체가 없으면 `BLOCKED`로 종료한다.
+7. `python <HELP> check-task --repo . --app <APP> --task <TASK-path>`를 **stdout 요약만** 받아 실행한다. FAIL이면 `BLOCKED`/`FAILED`로 종료한다. TASK 본문을 Main context에 로드하면 **절대로 안 된다.**
+8. `python <HELP> next-id --repo . --app <APP> --kind wp`로 번호를 얻어 `<docs_root>/<App>/WORK_PACKET/<App>-WP-<NNN>.md` target 경로를 정한다. **기존 파일이 있으면 덮어쓰지 말고 중단**한다.
+9. process는 **무조건 대상 repository root**의 `<REPO_ROOT>/.process/<App>-WP-<NNN>/`을 사용한다. ssot-write의 `.process/<TASK-stem>/`을 **덮어쓰면 절대로 안 된다.** 같은 경로에 기존 실행물이 있으면 새 suffix를 사용한다.
+10. `templates/build.md`와 `templates/progress.md`로 `<process>/build.md`와 `<process>/progress.md`를 생성한다. repository, App, wp_id, WP·TASK·handoff·template·helper·process·manifest·review·handoff(out) 절대경로, 역할 모델, 최대 cycle 3, 고정 전이를 기록한다.
 
-1. 다음 Work Packet 번호를 얻는다.
-   ```bash
-   python <HELP> next-id --repo . --app <APP> --kind wp
-   ```
-2. helper 사용이 불가하면 `<docs_root>/<App>/WORK_PACKET/`의 기존 `<App>-WP-*.md`를 보고 다음 번호를 판단한다.
-3. 출력 경로는 `<docs_root>/<App>/WORK_PACKET/<App>-WP-<NNN>.md`다.
-4. 기존 파일이 있으면 덮어쓰지 말고 중단한다.
+## Agent bootstrap
 
----
+역할 정의는 `CLAUDE_PLUGIN_ROOT/agents`가 있으면 사용하고, 아니면 repository root 아래 `agents/`를 사용한다.
 
-## Phase 3: Work Packet 작성
+```text
+agents/wp-builder.md
+agents/wp-critic.md
+```
 
-템플릿 구조를 따른다. 모든 `{...}` placeholder 와 `TEMPLATE` 경고를 제거한다.
+named `wp-builder|wp-critic` type을 조회하거나 availability probe를 호출하면 **절대로 안 된다.** 첫 Agent 호출은 실제 Builder bootstrap이어야 한다.
 
-작성 원칙:
-- 상태는 `Draft` 또는 `Ready`만 사용한다. `In Progress` / `Done` / `Dropped`는 생성하지 않는다.
-- `Execution Gate`를 반드시 작성한다.
-- 실행 준비가 충분하고 blocking issue가 없고 Required SSOT target path가 모두 존재하면 `Ready`, 충돌이나 미확인 사항 또는 target path 누락/미존재가 남으면 `Draft`로 둔다.
-- `Draft`에는 후속 구현 금지(`Draft = do not implement`) 의미와 `Blocking / Open Questions` 해결 우선순위를 명확히 쓴다.
-- `연결 TASK`는 반드시 TASK markdown link 로 둔다.
-- `Required SSOT Execution Matrix`를 반드시 작성한다.
-- `Required SSOT Execution Matrix`에는 `SSOT type / Action / Document / Read range / Why required / Source matrix row / Priority` 컬럼을 둔다.
-- `Required SSOT Execution Matrix`에는 이번 구현자가 반드시 읽어야 하는 문서만 넣는다.
-- `CREATE` / `UPDATE` 행은 기본 `Required`로 반영한다. target path가 없거나 파일이 없으면 matrix에 임의 링크를 만들지 말고 `Blocking / Open Questions`에 해당 source row를 기록한다.
-- Action의 authority 문서는 `Required`로 반영하고 read range는 controlling decision 범위로 좁힌다.
-- `Source matrix row`에는 `Confirmed SSOT Action Matrix`의 행 번호, action ID 또는 relation ID를 적는다.
-- `읽을 범위`는 파일 전체보다 절·표·행 단위로 좁게 쓴다.
-- `Blocking / Open Questions`를 반드시 작성한다. `Ready`이면 `none`으로 명시하고, 미확정 사항이 있으면 `Draft`로 둔다.
-- `실행 규칙`에는 TASK 우선/SSOT 충돌/모호성 중단 규칙을 남긴다.
-- `실행 규칙`에는 모든 Action의 `instruction`을 반영한다. TASK 목적·범위와 `authority_paths`를 함께 따른다.
-- `실행 경계`에는 반드시 수행, 금지, 허용, 중단 조건을 채운다.
-- `검증 입력`에는 TASK §9, §9.1, §9.2, §9.3과 실행할 빌드/테스트 후보를 적는다. 모르면 `"코드베이스 기준으로 탐색"`이라고 쓴다.
-- `Readiness Checklist`는 실제 상태에 맞게 체크한다. 확인하지 못한 항목은 체크하지 않는다.
-- `Implementation Output Contract`를 반드시 작성하고 `Changed files`, `Scope match`, `Tests run`, `Not run`, `Deviations` 항목을 포함한다.
+모든 Agent prompt 첫 줄은 다음 고정 문장이다.
 
----
+```text
+Read AGENT_DEFINITION_PATH first and obey it as the complete role contract; then process only the path keys below.
+```
 
-## Phase 4: 자체 검증
+그 아래에는 필요한 `KEY=절대경로`만 둔다.
 
-쓰기 후 다음을 확인한다.
+## Cycle 1
 
-- [ ] Work Packet 파일 외 문서를 수정하지 않았다.
-- [ ] TASK 링크가 존재하고 경로가 맞다.
-- [ ] Expected Required SSOT Execution Matrix를 `Confirmed SSOT Action Matrix`에서 도출했다.
-- [ ] Required SSOT Execution Matrix 링크가 실제 존재한다.
-- [ ] `CREATE/UPDATE target path` 누락 또는 파일 미존재가 있으면 Work Packet 상태가 `Draft`이고 Blocking / Open Questions에 source row가 있다.
-- [ ] `Ready`이면 blocking issue가 없고 Required SSOT target path가 모두 존재한다.
-- [ ] `Draft`이면 후속 구현 금지 의미가 Execution Gate에 명확하다.
-- [ ] CREATE/UPDATE 대상 누락, SKIP 대상 오포함, 과도한 read range가 없다.
-- [ ] 모든 handoff `authority_paths`가 Required에 포함되고 Action `instruction`이 실행 규칙에 반영됐다.
-- [ ] Blocking / Open Questions가 존재하고 상태와 일치한다.
-- [ ] Implementation Output Contract가 존재하고 필수 완료 보고 항목 5개를 포함한다.
-- [ ] SSOT 본문을 길게 복제하지 않았다.
-- [ ] 실행 규칙, 실행 경계, 검증 입력이 비어 있지 않다.
-- [ ] 미치환 `{...}` placeholder 와 `TEMPLATE` 경고가 없다.
-- [ ] `Next`가 `forge-scope`다.
+### Builder
 
----
+Main은 `build.md + progress.md`를 읽고 progress를 `BUILDER/IN_PROGRESS`로 갱신한 뒤 호출한다.
 
-## Phase 5: read-only 감사
+```text
+AGENT_DEFINITION_PATH
+REPO_ROOT
+TASK_PATH
+HANDOFF_PATH
+TEMPLATE_PATH
+WP_PATH
+MANIFEST_PATH
+```
 
-Phase 5 검증은 서브 에이전트에 위임해야 한다. 서브 에이전트는 read-only auditor 로만 동작한다.
+Builder는 Work Packet 파일 1개와 `manifest.json`을 쓰고 다음 중 하나만 반환한다.
 
-서브 에이전트에 허용되는 작업:
-- 생성된 Work Packet 읽기
-- 연결 TASK 읽기
-- Required SSOT Execution Matrix 링크 대상 파일 존재 확인
-- `.process/<TASK-stem>/handoff.json` 또는 `--process` handoff 파일 읽기
-- git status / git diff --name-only 확인
+```text
+SUCCESS WP_PATH=<path>
+FAIL WP_PATH=<path>
+```
 
-서브 에이전트에 금지되는 작업:
-- 파일 생성·수정·삭제
-- TASK/SSOT/코드 수정
-- Work Packet 직접 수정
+Main은 반환 `WP_PATH`가 예상 경로와 같고 **파일이 실제 존재하는지만** `os.path.exists`로 확인한다(본문은 읽지 않는다). 존재하지 않으면 **무조건 FAILED**로 종료한다. Builder `FAIL`은 `progress.md=FAILED`로 종료한다. Main이 변경 의미를 판단하면 **절대로 안 된다.**
 
-서브 에이전트 위임에는 별도 템플릿 파일을 사용한다.
+### Critic
 
-- 입력 템플릿: `templates/phase5-auditor-input.md`
-- 출력 템플릿: `templates/phase5-auditor-output.md`
+Main은 두 진행 문서를 다시 읽고 progress를 `CRITIC/IN_PROGRESS`로 갱신한 뒤 호출한다.
 
-서브 에이전트 호출 시 `model: "sonnet"` 을 지정한다 (구조 표 비교·체크리스트 감사 — Sonnet 충분, 비용 절감). effort는 세션 값을 상속한다. 서브 에이전트 실행 기능이 없으면 종전대로 `AUDIT_BLOCKED` 처리.
+```text
+AGENT_DEFINITION_PATH
+REPO_ROOT
+TASK_PATH
+HANDOFF_PATH
+TEMPLATE_PATH
+WP_PATH
+REVIEW_PATH
+```
 
-서브 에이전트 입력에는 반드시 다음을 채워 전달한다.
+`MANIFEST_PATH`는 **절대로 전달하지 않는다.** Critic은 handoff에서 expected를 스스로 재도출해 실제 WP 링크와 대조한다.
 
-- `handoff.json actions`에서 변환한 `Confirmed SSOT Action Matrix`
-- `Expected Required SSOT Execution Matrix` (Work Packet matrix와 동일 컬럼: `SSOT type / Action / Document / Read range / Why required / Source matrix row / Priority`)
-- `Impact / source summary`
-- `Authority Inputs and Instructions`
+Critic은 `review.json`에 5 링킹 check를 쓰고 다음 중 하나만 반환한다.
 
-감사는 Work Packet에 적힌 링크만 신뢰하지 않고, expected matrix 대비 실제 Work Packet의 누락/불필요/범위 과대 여부를 확인한다.
-감사는 expected matrix와 observed Work Packet matrix를 같은 컬럼의 표 대 표로 비교한다.
-감사는 `Draft`인데 구현 가능한 것처럼 적힌 경우, `Ready`인데 blocking이 있는 경우, 또는 `CREATE/UPDATE target path` 누락/미존재가 있는데 Ready인 경우 FAIL로 판정한다.
+```text
+SUCCESS REVIEW_PATH=<path> WP_STATE=Ready|Draft
+FAIL REVIEW_PATH=<path>
+```
 
-감사 실패 시 보강은 메인 에이전트가 Work Packet 파일에만 수행한다. 서브 에이전트 실행 기능이 없으면 결과에 `AUDIT_BLOCKED - read-only subagent unavailable`을 명시한다.
+Main은 **반환 토큰만** 읽고 progress에 기록한다. `review.json`을 열거나 finding을 해석해 Builder에 전달하면 **절대로 안 된다.** 정당한 Draft도 `SUCCESS`다.
 
----
+## Critic FAIL 재빌드 (REPAIR)
 
-## Phase 6: 결과 보고
+Critic cycle 1 또는 2가 `FAIL`이면 Main은 cycle을 1 증가시키고 **Builder부터** 호출한다.
+
+```text
+AGENT_DEFINITION_PATH
+REPO_ROOT
+TASK_PATH
+HANDOFF_PATH
+TEMPLATE_PATH
+WP_PATH
+MANIFEST_PATH
+REVIEW_PATH
+```
+
+Builder는 `review.json` finding, 기존 `manifest.json`, handoff를 직접 읽고 **링킹 결함만** 수정한다. 기존 manifest 기록을 삭제하면 **절대로 안 된다.** 이후 Critic을 동일하게 호출한다. Main이 review를 축약하거나 새 지시를 만들면 **절대로 안 된다.**
+
+Critic cycle 3이 `FAIL`이면 다음으로 종료한다.
+
+```text
+progress.status=MANUAL_REQUIRED
+progress.current_stage=DONE
+progress.next_action=사용자 수동 확인
+```
+
+`handoff.json`을 작성하면 **절대로 안 된다.**
+
+## SUCCESS와 handoff
+
+Critic `SUCCESS` 뒤 Main은 `build.md + progress.md`를 다시 읽고 `handoff.json`을 작성한다. `wp_state`는 **Critic 반환 토큰의 `WP_STATE`**에서 가져온다(WP 파일을 읽지 않는다).
+
+```json
+{
+  "status": "SUCCESS",
+  "result": "APPLIED",
+  "app": "<APP>",
+  "wp_path": "docs/<App>/WORK_PACKET/<App>-WP-<NNN>.md",
+  "wp_state": "Ready | Draft",
+  "task_path": "docs/<App>/TASK/<App>-TASK-<NNN>.md",
+  "handoff_source_path": ".process/<TASK-stem>/handoff.json",
+  "manifest_path": ".process/<App>-WP-<NNN>/manifest.json",
+  "review_path": ".process/<App>-WP-<NNN>/review.json",
+  "cycles": 1,
+  "next": "forge-scope"
+}
+```
+
+모든 path 필드는 **REPO_ROOT 기준 상대경로**로 쓴다. 절대경로로 재구성하면 **절대로 안 된다.** 마지막으로 `progress.status=SUCCESS`, `current_stage=DONE`, `next_action=forge-scope`로 갱신한다.
+
+## 산출물 계약
+
+`.process/<App>-WP-<NNN>/` 아래 top-level 파일만 사용한다.
+
+```text
+build.md
+progress.md
+manifest.json
+review.json
+handoff.json
+```
+
+각 cycle은 최신 `review.json`을 덮어쓴다. `manifest.json`은 이전 cycle 기록을 누적 보존한다. Work Packet은 `<docs_root>/<App>/WORK_PACKET/<App>-WP-<NNN>.md`에 생성된다. 과거 artifact를 별도 파일로 보존하거나 report·event log·state 파일을 만들면 **절대로 안 된다.**
+
+## 결과 보고
 
 다음 형식으로 간결히 보고한다.
 
 ```text
-CREATE <docs_root>/<App>/WORK_PACKET/<App>-WP-<NNN>.md
+CREATE <docs_root>/<App>/WORK_PACKET/<App>-WP-<NNN>.md (WP_STATE: Ready | Draft)
 Task: <docs_root>/<App>/TASK/<App>-TASK-<NNN>.md
-Audit: PASS | FAIL | AUDIT_BLOCKED - read-only subagent unavailable
+Review: SUCCESS | MANUAL_REQUIRED (cycles: N)
 Next: forge-scope
 ```
+
+`BLOCKED`(상위 handoff 불량/부재)·`FAILED`(App 미결정·TASK 불량·Builder FAIL) 종료면 `CREATE` 대신 사유와 `progress.status`를 보고한다.
