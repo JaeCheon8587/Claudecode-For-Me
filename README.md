@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v3.26.0 · 커스텀 스킬 13종 + 슬래시 커맨드 17종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v3.27.0 · 커스텀 스킬 13종 + 슬래시 커맨드 17종 + 서브에이전트 8종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,12 +11,12 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `3.26.0` |
+| 버전 | `3.27.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
 | 네임스페이스 | `/claudecode-for-me:<name>` |
-| 구성요소 | Skill 13 · Command 17 · Python helper 14 (`scripts/`) |
+| 구성요소 | Skill 13 · Command 17 · Agent 8 (`agents/`) · Python helper 14 (`scripts/`) |
 | 외부 연동 도구 | [`codenavigator`](https://github.com/JaeCheon8587/codenavigator) (PyPI) — codenav-bootstrap / codenav-frontmatter-gen 슬래시가 호출 |
 
 플러그인은 **글로벌 캐시**에 설치되므로 한 번 설치 후 모든 프로젝트의 **새 세션**에서 자동 노출된다. 프로젝트별 재설치 불필요.
@@ -66,6 +66,32 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v3.27.0 — Fable Orchestration 하네스 에이전트 5종 추가
+
+토큰 소모를 최소화하며 Fable을 메인에 상주시키는 **오케스트레이션 하네스**를
+플러그인 서브에이전트로 번들했다. 절감 원리는 모델 라우팅이 아니라 **Fable 컨텍스트
+다이어트** — 툴 결과 유입 차단 + 대량 출력 위임 + 메인 모델 고정으로 캐시 보존.
+5개 에이전트를 `agents/`에 추가한다:
+
+- `fable-orchestrator` (fable/high) — 생각·결정·분해·종합하는 책임자. 컨텍스트를
+  오염시킬 작업은 전부 위성에 위임하고, `.orchestration/ledgers/`에만 쓰기 가능.
+- `scout` (haiku/low) — read-only 위치 탐색. `file:line` + confidence만 반환.
+- `explorer` (sonnet/medium) — read-only 코드 흐름 정독. 상세는 `.orchestration/reports/`에.
+- `worker` (sonnet, acceptEdits) — 유일한 소스 수정자. 스펙 계약대로 구현·테스트.
+- `reviewer` (opus/high) — read-only 커밋 전 판정. APPROVE/REVISE/REJECT.
+
+플러그인 네임스페이스에 맞춰 `fable-orchestrator`의 위성 spawn id를
+`claudecode-for-me:scout` 등 네임스페이스 형태로 지정했고, 리뷰 필수 게이트는
+특정 폴더(`payment_system/`) 하드코딩 대신 **리스크 도메인**(payment/auth/
+credentials/개인정보/data-migration/crypto) 기준으로 일반화해 어느 프로젝트에서든
+작동한다. 실행:
+
+```text
+claude --agent claudecode-for-me:fable-orchestrator
+```
+
+`.orchestration/{ledgers,reports}/`는 실행 프로젝트별 상대경로로 자동 생성된다.
 
 ### v3.26.0 — ssot-write 3-agent review loop
 
