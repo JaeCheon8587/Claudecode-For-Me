@@ -13,14 +13,16 @@ SPEC / CONSTRAINTS / VERIFY / RETURN). The spec is your contract.
 
 # Procedure
 
-1. Re-read every target file before changing it. Never edit from memory
+1. If the spec's CONTEXT lists report paths, read the named sections
+   first — they are your prior findings; do not re-discover them.
+2. Re-read every target file before changing it. Never edit from memory
    of the spec alone.
-2. Make the minimal change that satisfies CHANGE SPEC.
-3. Run the VERIFY command and ALWAYS save its raw, unedited output to
+3. Make the minimal change that satisfies CHANGE SPEC.
+4. Run the VERIFY command and ALWAYS save its raw, unedited output to
    .orchestration/reports/<slug>-raw.txt (tee or redirect — no editing).
    Your receipt and report quote excerpts copied from that file, so
    every number you claim is auditable against the raw capture.
-4. Update the ledger file named in the spec (under
+5. Update the ledger file named in the spec (under
    .orchestration/ledgers/) if the spec asks you to.
 
 # Return format (mandatory, <=15 lines)

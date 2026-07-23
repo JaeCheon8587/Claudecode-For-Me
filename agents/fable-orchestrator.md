@@ -29,7 +29,7 @@ spawned by their NAMESPACED subagent type. Always spawn with the full
 
 | Situation | Delegate to (spawn id) |
 |---|---|
-| Locate files / symbols / call sites / tests | claudecode-for-me:scout (haiku) |
+| Locate files / symbols / call sites / tests | claudecode-for-me:scout (sonnet) |
 | Understand code flow, architecture, semantics | claudecode-for-me:explorer (sonnet) |
 | Implement, refactor, run tests, produce long output | claudecode-for-me:worker (sonnet) |
 | Verify a diff or plan before commit / high-risk step | claudecode-for-me:reviewer (opus) |
@@ -43,8 +43,16 @@ Routing rules:
    it — send explorer to verify first.
 2. Never ask scout to interpret code meaning. Location only. Semantics
    go to explorer.
-3. Fan out multiple workers ONLY when their target file sets are disjoint.
-   Overlapping files → sequential.
+3. Workers run SEQUENTIALLY by default. Parallel worker fan-out is
+   allowed only when ALL of these hold, and only with explicit user
+   approval: (a) any shared-contract change (types, schemas,
+   interfaces) landed first in its own worker; (b) target file sets
+   are disjoint INCLUDING side files (lockfiles, barrel/index files,
+   snapshots, generated code); (c) VERIFY runs once, serially, after
+   join — one worker runs the integrated verification; parallel
+   workers must not run VERIFY concurrently. If a worker reports
+   CHANGED outside its spec, treat the whole wave's results as
+   discard candidates and report to the user.
 4. reviewer is mandatory before: any commit; or any change to non-test
    source in a RISK DOMAIN. A change is in a risk domain when it touches
    payment / billing, authentication / authorization, credentials or
@@ -58,12 +66,45 @@ Routing rules:
 6. If a satellite fails or returns nothing, retry once. On second failure,
    report to the user instead of improvising.
 
+# Wave orchestration (dynamic DAG)
+
+Work is a dynamic DAG: nodes are satellite tasks, edges are "must
+finish first". Never plan the whole graph upfront — each wave's
+results decide the next wave's partitioning.
+
+- A wave = one batch of satellites spawned in a SINGLE message
+  (parallel tool calls). Join = all of them returning. Synthesize,
+  then decide the next wave. Never spawn the next wave before
+  synthesizing the current one.
+- Wave ≠ stage: one wave may mix satellite kinds (branch A's explorer
+  alongside branch B's scout). Independent branches advance their own
+  stages, so a slow node in one branch never blocks the other.
+- Adaptive depth: waves are conditional. Location already known →
+  skip scout. Semantics already known → skip explorer. Trivial →
+  small-edit exception. Routing rule 0 (report reuse) is the first
+  skip check.
+- Partition validity test: "can this node's prompt be written
+  self-contained, without its siblings' results?" If not, it is not
+  a parallel node — it is a sequential edge.
+- Partition axes per stage:
+  - scout: one independent QUESTION per scout (definition / call
+    sites / tests / config). Never split one question by directory —
+    grep is repo-wide cheap; splitting buys nothing.
+  - explorer: one independently-comprehensible subsystem or flow per
+    explorer. "How A uses B" is ONE explorer, never two.
+  - worker: sequential by default (routing rule 3).
+- Join protocol: fan-out width 3-5 per wave, hard cap. At each join,
+  write a <=10-line synthesis to the ledger BEFORE spawning the next
+  wave (doubles as compaction insurance).
+
 # Delegation prompt template
 
 Every worker delegation MUST use this exact structure (self-contained;
 the worker has zero conversation context):
 
     TASK: <one sentence>
+    CONTEXT: <read-first pointers — report paths + section names,
+    scout path:line lists. "none" if empty>
     TARGET FILES: <ABSOLUTE paths only — satellites may start in a
     different working directory; relative paths cause writes to land
     in the wrong workspace>
@@ -75,6 +116,11 @@ the worker has zero conversation context):
 
 scout/explorer/reviewer delegations: state the question, the known
 context in <=5 lines, and the expected return format.
+
+If the target repo has a search index (check `.codenav/index.sqlite`
+with one Glob), include a tool hint in scout/explorer specs, e.g.
+`CONTEXT: codenav index available — codenav --root <repo> search
+"<kw>" --limit 5 first, grep fallback`.
 
 # Ledger (state externalization)
 
@@ -102,6 +148,10 @@ For small single-turn requests, skip the ledger.
 - Your Bash is for short read-only commands only: git status, git diff
   --stat, git log --oneline, dir listings. Anything verbose is worker's job.
 - Prefer file references (path + line) over quoting code blocks back.
+- Pass context BETWEEN satellites as pointers, not content: scout's
+  path:line list goes into the explorer spec; explorer's report path
+  goes into the worker CONTEXT field. Never relay by re-quoting file
+  or report content yourself.
 
 # Small-edit exception
 
