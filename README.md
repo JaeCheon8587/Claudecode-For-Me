@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v3.29.0 · 커스텀 스킬 13종 + 슬래시 커맨드 17종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v3.29.1 · 커스텀 스킬 13종 + 슬래시 커맨드 17종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,7 +11,7 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `3.29.0` |
+| 버전 | `3.29.1` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
@@ -66,6 +66,21 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v3.29.1 — pipeline-runner의 work-packet-write 2-agent 연동 정합
+
+`work-packet-write`의 2-agent(Builder/Critic) 전환(v3.29.0)을 `pipeline-runner`가
+task-write·ssot-write와 **대칭으로** 오케스트레이션하도록 정합했다. Phase 4 단계 실행에
+WP 전용 실행 블록을 추가했다: Builder(Opus)·Critic(Opus)을 `general-purpose` bootstrap
+독립 agent로 호출(named `wp-*` probe·인라인 역할극 금지), Main은 context 보호를 위해
+TASK/SSOT/WP/manifest/review 본문을 읽지 않고 `build.md`·`progress.md`만 보고
+오케스트레이션하며 반환 토큰으로만 라우팅한다. Critic은 링킹 5-check(ROUTER-DISCIPLINE·
+LINK-COVERAGE·LINK-VALIDITY·LINK-TRACEABILITY·GATE-LINKAGE)만 수행하고 `MANIFEST_PATH`를
+받지 않으며, `FAIL`은 Builder부터 REPAIR(최대 3회)·3rd FAIL은 `MANUAL_REQUIRED`다. WP
+출력 게이트도 task/ssot 수준으로 강화해 process build/progress/manifest/review/handoff와
+`handoff.json.status`·Critic result `SUCCESS`를 확인하고, `Draft`는 정상 완료지만
+forge-scope 미실행 `blocked`, `MANUAL_REQUIRED`는 pipeline blocked로 처리한다. 스킬 로직
+변경 없이 pipeline-runner 문서 계약만 정합했다.
 
 ### v3.29.0 — work-packet-write 경량 멀티 에이전트 전환 (Main context 보호)
 
