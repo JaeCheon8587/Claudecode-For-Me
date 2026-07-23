@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v3.29.1 · 커스텀 스킬 13종 + 슬래시 커맨드 17종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v3.33.0 · 커스텀 스킬 13종 + 슬래시 커맨드 17종 + 에이전트 13종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,12 +11,12 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `3.29.1` |
+| 버전 | `3.33.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
 | 네임스페이스 | `/claudecode-for-me:<name>` |
-| 구성요소 | Skill 13 · Command 17 · Python helper 8 (`scripts/`) |
+| 구성요소 | Skill 13 · Command 17 · Agent 13 (`agents/`) · Python helper 8 (`scripts/`) |
 | 외부 연동 도구 | [`codenavigator`](https://github.com/JaeCheon8587/codenavigator) (PyPI) — codenav-bootstrap / codenav-frontmatter-gen 슬래시가 호출 |
 
 플러그인은 **글로벌 캐시**에 설치되므로 한 번 설치 후 모든 프로젝트의 **새 세션**에서 자동 노출된다. 프로젝트별 재설치 불필요.
@@ -66,6 +66,51 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v3.33.0 — fable-orchestrator 위성 리시트 정합성 동기화
+
+worker/reviewer의 신규 리시트 필드에 오케스트레이터 규칙을 맞물렸다. 웨이브 폐기
+트리거를 worker의 `SPEC: exceeded` 자가감사 필드 참조로 갱신하고, `CHECKED`에 검증
+산출물(diff·테스트 출력)이 없는 reviewer APPROVE는 리뷰로 인정하지 않고 검사 대상을
+명시해 재파견한다. routing rule 7을 신설해 `STATUS: BLOCKED`를 실패가 아닌 스펙 결함
+신호로 규정 — 동일 스펙 verbatim 재시도를 금지하고 누락 결정을 보충해 재위임하거나
+사용자에게 에스컬레이션한다. worker 위임 템플릿의 RETURN도 고정 리시트
+(STATUS/CHANGED/SPEC/VERIFY/RISKS/REPORT) 참조로 교체했다.
+
+### v3.32.0 — worker/reviewer 리시트 개편 (자가감사·도장 방어)
+
+worker 리시트에 `STATUS:`(DONE/BLOCKED 리턴 형태 통일)와 `SPEC:` 자가감사(리턴 전
+실변경 vs TARGET FILES 대조 — lockfile·포맷터·생성물 부수 write도 exceeded로 신고)를
+추가했다. reviewer에는 `GOAL:`(판정 기준 goal 1줄 재진술 — 표류 방지)과 `CHECKED:`
+(실제 검사한 범위 신고 — 안 읽고 찍는 rubber-stamp APPROVE 차단)를 추가하고, REASONS의
+path:line에 원문 인용을 강제했다(인용 못 하는 사유 = 추측으로 표기하거나 폐기).
+
+### v3.31.0 — explorer 리턴 포맷 개편 (ANSWER/COVERAGE)
+
+explorer 리턴 첫 줄에 `ANSWER:`(위임받은 질문에 대한 직접 답)를 강제해 지도만 돌아오고
+질문은 답하지 않는 구조 결함을 막았다. `COVERAGE:`(실제 읽은 범위 vs 건너뛴/추정 부분)로
+부분 커버리지 지도에 대한 오케스트레이터 과신을 차단하고, KEY FACTS의 path:line에
+짧은 원문 인용을 강제해 날조를 방어한다(인용 못 하는 사실 = 추측). 리턴 상한 15→18줄.
+
+### v3.30.0 — fable-orchestrator 웨이브 기반 동적 DAG + scout 고도화
+
+Fable 오케스트레이션 하네스(fable-orchestrator + scout/explorer/worker/reviewer 위성)에
+**웨이브 기반 동적 DAG 오케스트레이션**을 도입했다. 웨이브 = 한 메시지에 병렬 스폰하는
+위성 배치이며, join(전원 귀환) 후 ≤10줄 종합을 ledger에 기록해야 다음 웨이브를 확정한다
+(fan-out 폭 3~5 상한). 웨이브≠스테이지 — 독립 브랜치는 이종 위성을 같은 배치에 섞어
+배리어 지연을 흡수한다. 분할 축은 scout=질문 단위, explorer=자기완결 서브시스템 단위이고,
+분할 유효성은 "형제 결과 없이 자기완결 프롬프트 작성 가능한가"로 판정한다. worker는
+기본 직렬로 전환 — 병렬 fan-out은 interface-first 선행 + 부수 파일 포함 disjoint +
+verify join 후 직렬 1회 + 사용자 승인 전부 충족 시만 허용한다(의미 충돌·verify 간섭·
+lockfile 충돌 리스크). 위임 템플릿에 `CONTEXT:` 필드를 추가하고 위성 간 컨텍스트는
+리포트 경로 포인터로만 전달한다(오케스트레이터 재인용 금지).
+
+scout은 haiku→**sonnet(low)** 승격(확신에 찬 오답이 explorer 재파견·worker 오작업보다
+비싸다는 판단), 리턴 포맷 개편 — `[definition|usage|test|config|doc]` 태그, `SEARCHED`
+상시 기록, `UNCERTAIN` 통합 필드, CONFIDENCE 이유 병기. 히트 >8개는 파일별 집계로 압축
+(무단 절단 금지), dist/node_modules 등 생성물 제외, 빈 결과 `FOUND: none` 명시,
+high confidence 도달 시 조기 종료. `.codenav/index.sqlite` 감지 시 grep보다 `codenav
+search`를 우선하는 인덱스 연동도 scout/explorer/오케스트레이터에 추가했다.
 
 ### v3.29.1 — pipeline-runner의 work-packet-write 2-agent 연동 정합
 
