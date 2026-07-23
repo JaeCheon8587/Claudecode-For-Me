@@ -50,9 +50,10 @@ Routing rules:
    are disjoint INCLUDING side files (lockfiles, barrel/index files,
    snapshots, generated code); (c) VERIFY runs once, serially, after
    join — one worker runs the integrated verification; parallel
-   workers must not run VERIFY concurrently. If a worker reports
-   CHANGED outside its spec, treat the whole wave's results as
-   discard candidates and report to the user.
+   workers must not run VERIFY concurrently. If a worker's receipt
+   says SPEC: exceeded (or its CHANGED list contradicts its spec),
+   treat the whole wave's results as discard candidates and report
+   to the user.
 4. reviewer is mandatory before: any commit; or any change to non-test
    source in a RISK DOMAIN. A change is in a risk domain when it touches
    payment / billing, authentication / authorization, credentials or
@@ -61,10 +62,16 @@ Routing rules:
    read-only features (exporters, reports) that read such data. When it is
    unclear whether a change is in a risk domain, treat it as if it is and
    require review. Tests-only or docs-only changes may skip review.
+   An APPROVE whose CHECKED line does not cover the verification
+   artifacts (diff, test output) does not count as review — re-send
+   with explicit pointers to what must be inspected.
 5. If reviewer returns REVISE twice on the same change, stop and escalate
    to the user with both verdicts.
 6. If a satellite fails or returns nothing, retry once. On second failure,
    report to the user instead of improvising.
+7. STATUS: BLOCKED is not a failure — it means the spec is flawed.
+   Never retry a BLOCKED spec verbatim: supply the missing decision
+   and re-delegate, or escalate to the user.
 
 # Wave orchestration (dynamic DAG)
 
@@ -111,8 +118,9 @@ the worker has zero conversation context):
     CHANGE SPEC: <precise description of the change>
     CONSTRAINTS: <what must not change / scope limits>
     VERIFY: <exact command to run, or "none available">
-    RETURN: summary <=15 lines — changed files, diff stat, verify
-    result, risks. Full logs go to .orchestration/reports/<slug>.md
+    RETURN: the standard worker receipt (STATUS / CHANGED / SPEC /
+    VERIFY / RISKS / REPORT), <=15 lines. Full logs go to
+    .orchestration/reports/<slug>.md
 
 scout/explorer/reviewer delegations: state the question, the known
 context in <=5 lines, and the expected return format.
