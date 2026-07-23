@@ -5,7 +5,7 @@
 | 항목 | 값 |
 |---|---|
 | 문서 ID | DEVELOPMENT_PIPELINE (단일 파일) |
-| 버전 | 1.6 (Draft) |
+| 버전 | 1.7 (Draft) |
 | 작성 가정 | 기존 스킬(grill-me/acceptance-design/meta-prompter/task-write/ssot-write/work-packet-write/forge-scope/doc-driven-review) 실존. v0.7 per-App SSOT 체계 전제 |
 | 관련 문서 | [DOCUMENT_GUIDE](.templates/DOCUMENT_GUIDE.md) · [CLAUDE](../CLAUDE.md) |
 
@@ -29,6 +29,7 @@
 | 1.4 | 2026-07-12 | ssot-write v8 — runner-owned evidence ID→exact quote 정규화, Authority 후보별 coverage, 실행 구현 SHA 동결, 전 과정·결과 한국어 계약 추가 | jaecheon.jeong |
 | 1.5 | 2026-07-13 | ssot-write slim — Opus Main + Opus Planner + Sonnet Writer + Opus Critic, 6개 파일 계약, Critic 최대 3회로 단순화 | jaecheon.jeong |
 | 1.6 | 2026-07-13 | ssot-write 실전 보강 — 실제 docs_root 대소문자, Writer 이전 baseline diff, 중단 attempt, bounded range, 단계 완료 게이트를 강제하고 내부 승인·commit 제거 | jaecheon.jeong |
+| 1.7 | 2026-07-16 | task-write를 ssot-write와 동일한 Opus Main + Opus Planner + Sonnet Writer + Opus Critic 멀티 에이전트 3-agent 순환으로 전환. read-only auditor를 Critic 통합 구조 검증으로 대체, 완전 비대화형 Main, TASK 파일 1개 계약 유지 | jaecheon.jeong |
 
 ## 0. 목적
 
@@ -60,7 +61,7 @@ flowchart TD
 | 1 | `grill-me` | 거친 아이디어/계획 | 합의된 요구사항 (대화형) | 모호함을 집요한 질문으로 구체화. 논리 공백 지적 |
 | 1.5 | `acceptance-design` | grill-me 정리본 (doc) | 완료조건·엣지케이스·오류케이스·검증방법 4축 설계본 (대화형) | doc 기준 "끝의 정의"와 검증을 같이 설계 |
 | 2 | `meta-prompter` | grill-me 결과 + 4축 설계본 | 한국어 개조식 메타프롬프트 (마크다운 코드블록) | 요구사항을 다음 단계가 안정 수행할 구조화 프롬프트로 정제 |
-| 3a | `task-write` | 요구사항 문서 또는 자연어 요청 | `docs/<App>/TASK/<App>-TASK-<NNN>.md` (Scope Authority — 목적·범위·비목표·완료기준·엣지·오류·테스트만). 영구 SSOT 는 생성·수정·분석하지 않음 | TASK 작성 + read-only 서브에이전트 자체 검증 |
+| 3a | `task-write` | 요구사항 문서 또는 자연어 요청 | `docs/<App>/TASK/<App>-TASK-<NNN>.md` (Scope Authority — 목적·범위·비목표·완료기준·엣지·오류·테스트만) + process `build.md`, `progress.md`, `plan.json`, `changes.json`, `review.json`, `handoff.json`. 영구 SSOT 는 생성·수정·분석하지 않음 | Opus Main이 두 진행 문서를 기준으로 Opus Planner, Sonnet Writer, Opus Critic을 순환 호출. Critic이 요구사항 원문↔실제 TASK를 네 의미 축으로 비교하고 check-task 구조 검증까지 수행. Critic FAIL은 Planner 재계획으로 최대 3회. 완전 비대화형 |
 | 3b | `ssot-write` | task-write 산출 TASK | 영향 SSOT upsert + `build.md`, `progress.md`, `plan.json`, `changes.json`, `review.json`, `handoff.json` | Opus Main이 두 진행 문서를 기준으로 Opus Planner, Sonnet Writer, Opus Critic을 순환 호출한다. Critic FAIL은 Planner 재계획으로 돌아가며 최대 3회. 승인·commit은 범위 밖 |
 | 3c | `work-packet-write` | task-write TASK + ssot-write `handoff.json` | `App-WORK_PACKET/App-WP-<NNN>.md` — Ready gate, 연결 TASK, Required SSOT Execution Matrix, Implementation Output Contract | TASK와 handoff Action/authority를 연결해 forge 실행용 Work Packet만 생성 (TASK/SSOT/코드 수정 안 함) |
 | 4 | `forge-scope` | work-packet-write 산출 Work Packet | `phases/scoped/<phase-dir>/index.json` + `step{N}.md` + 코드 | Work Packet 기반 경량 scoped 개발 실행 |
@@ -87,7 +88,6 @@ step3 는 **task-write → ssot-write → work-packet-write** 3단 체인. 옛 `
   - **NOOP 검토** — NOOP도 Critic을 호출하며 Writer만 생략한다. Planner 단독 NOOP 완료는 금지한다.
   - **상태와 진행** — `build.md`가 고정 실행 설계, `progress.md`가 현재 cycle과 결과다. 중단 후 재개는 지원하지 않는다.
   - **handoff** — Critic SUCCESS 직후 승인 질문이나 commit 없이 `handoff.json`을 작성한다. Action, source/target/authority, instruction, acceptance, section modifications를 담는 후속 단계 단일 입력이다.
-  - **legacy** — 신규 실행은 Runner를 사용하지 않는다. `ssot_runner.py`와 v5-v8 구현은 기존 process 재개 전용이다.
 - **work-packet-write (3c)** — TASK + 반영된 SSOT를 연결해 forge 실행용 Work Packet만 생성한다. `handoff.json.actions`와 `authority_paths`를 Required 입력과 실행 규칙으로 변환한다. TASK/SSOT/코드는 수정하지 않는다.
 
 TASK 는 휘발성 + 외부 SSOT 인용 금지 ([DOCUMENT_GUIDE §1.2](.templates/DOCUMENT_GUIDE.md) 룰).
