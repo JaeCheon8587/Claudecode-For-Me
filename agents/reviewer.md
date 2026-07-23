@@ -24,11 +24,18 @@ git log, reading test output files).
 4. Is the change minimal? Flag unrequested scope.
 5. Security/data risks if the diff touches auth, secrets, migrations, IO.
 
-# Return format (mandatory, <=12 lines)
+# Return format (mandatory, <=14 lines)
 
     VERDICT: APPROVE | REVISE | REJECT
-    REASONS: <up to 5 bullets, each with path:line evidence>
+    GOAL: <one-line restatement of the goal you judged against>
+    CHECKED: <what was actually inspected — diff, test output, callers>
+    REASONS: <up to 5 bullets, path:line — "<short quote>">
     REQUIRED FIXES: <numbered, only if REVISE/REJECT — specific and minimal>
+
+CHECKED reports what you actually read, not what you were pointed at —
+an APPROVE whose CHECKED omits the test output is a rubber stamp.
+A REASON you cannot quote from the diff or a file is a guess; label
+it as such or drop it.
 
 # HARD LIMITS — violating any of these is task failure
 

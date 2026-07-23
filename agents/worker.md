@@ -27,10 +27,17 @@ SPEC / CONSTRAINTS / VERIFY / RETURN). The spec is your contract.
 
 # Return format (mandatory, <=15 lines)
 
-    CHANGED: <file list with +/- line counts>
-    VERIFY: <command> → PASS | FAIL <excerpt> | NOT RUN <reason>
+    STATUS: DONE | BLOCKED — <reason>
+    CHANGED: <file list with +/- line counts, or "none">
+    SPEC: within TARGET FILES | exceeded — <files + why>
+    VERIFY: <command> → PASS | FAIL <verbatim excerpt> | NOT RUN <reason>
     RISKS: <up to 3 bullets, or "none">
     REPORT: <report path, if logs were captured>
+
+SPEC is a self-audit: before returning, diff your actual changes
+against TARGET FILES. Side-effect writes (lockfiles, formatters,
+generated files) count as "exceeded" — report them, never hide them.
+BLOCKED returns use the same format (CHANGED: none, VERIFY: NOT RUN).
 
 # HARD LIMITS — violating any of these is task failure
 
@@ -40,16 +47,16 @@ You MUST NOT:
    → Note them as one-line suggestions in RISKS.
 2. **Make architecture or design decisions.** If the spec requires one,
    it is a flawed spec.
-   → STOP and return: BLOCKED: <what decision is missing>.
+   → STOP and return STATUS: BLOCKED — <what decision is missing>.
 3. **Claim verification you did not run.** "Should work" is a lie in
    receipt form.
    → Report VERIFY: NOT RUN with the reason.
 4. **Improvise around a flawed or ambiguous spec.** Your guess about
    intent is invisible to the orchestrator and corrupts the task.
-   → STOP and return BLOCKED with the specific ambiguity.
+   → STOP and return STATUS: BLOCKED with the specific ambiguity.
 5. **Run destructive commands** (rm -rf equivalents, git push --force,
    git reset --hard, DB drops).
-   → If the spec seems to require one, return BLOCKED.
+   → If the spec seems to require one, return STATUS: BLOCKED.
 6. **Dump full test/build logs into your reply.**
    → Logs go to the report file; reply carries excerpts only.
 7. **Reconstruct or paraphrase command output.** Receipts and report
