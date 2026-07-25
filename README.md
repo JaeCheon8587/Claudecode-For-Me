@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v3.33.0 · 커스텀 스킬 13종 + 슬래시 커맨드 17종 + 에이전트 13종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v3.34.0 · 커스텀 스킬 13종 + 슬래시 커맨드 17종 + 에이전트 14종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,12 +11,12 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `3.33.0` |
+| 버전 | `3.34.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
 | 네임스페이스 | `/claudecode-for-me:<name>` |
-| 구성요소 | Skill 13 · Command 17 · Agent 13 (`agents/`) · Python helper 8 (`scripts/`) |
+| 구성요소 | Skill 13 · Command 17 · Agent 14 (`agents/`) · Python helper 8 (`scripts/`) |
 | 외부 연동 도구 | [`codenavigator`](https://github.com/JaeCheon8587/codenavigator) (PyPI) — codenav-bootstrap / codenav-frontmatter-gen 슬래시가 호출 |
 
 플러그인은 **글로벌 캐시**에 설치되므로 한 번 설치 후 모든 프로젝트의 **새 세션**에서 자동 노출된다. 프로젝트별 재설치 불필요.
@@ -66,6 +66,34 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v3.34.0 — analyst(opus) 온디맨드 판단 위성 + 완전성 게이트 추가
+
+sonnet discovery와 Fable 결정 사이에 갈 곳이 없던 "대량 코드를 읽으며 판단까지 해야
+하는 분석"을 전담하는 `analyst`(opus) 위성을 신설했다. 상시 중간층이 아닌 조건부
+파견이며 트리거는 3종 — (a) 설계 대안 2개 이상 병존 시 트레이드오프 분석, (b) 리스크
+도메인 spec 작성 전 보고서 적대 감사(주장 검증·누락 탐지 — confidence 무관 필수), (c) 깊은 root-cause
+추적. 계약은 옵션-리턴/결정-금지: RECOMMENDATION은 non-binding 조언이고, 오케스트레이터는
+채택 전 EVIDENCE path:line을 최소 1개 직접 spot-check해야 하며(고무도장 방지), 결정
+문구로 돌아온 리턴은 옵션으로 강등 해석한다(routing rule 8). 경량 합성(보고서 2~3개
+join)에 analyst 파견은 위반 — hop·quota 순손실이기 때문. 파티션 축은 결정-질문 1개당
+analyst 1기다. audit 트리거는 confidence 무관 — 리스크 도메인이면 자가 신고 confidence가
+높아도 감사한다("확신에 찬 오답"이 가장 위험한 실패라서, v3.30 scout 승격과 같은 근거).
+운영 지표도 신설: ledger에 analyst 파견마다 `analyst: <mode> / adopted|deviated / 사유`
+1줄, worker BLOCKED마다 `blocked:` 1줄을 기록하고, 태스크 완료 시 3줄 회고(rework/cause/
+next)를 강제해 rule 8 조정 근거를 grep 집계 가능하게 만들었다(하네스 유일 학습 루프).
+mode 출처는 analyst 리시트 첫 줄 `MODE:` 필드이고, rule 0 리포트 재사용 게이트도
+scout/explorer에 더해 analyst 리포트를 포함하도록 확장했다. 완전성 검증도 신설 —
+정확성("한 일이 맞나")만 보던 기존 장치에 "할 일을 다 했나"를 추가한다. done 전 태스크
+시작 시 동결된 acceptance criteria를 증거 포인터(receipt/verdict/report 경로)와 대조하는
+완료 게이트(스폰 0)를 의무화하고, 커밋 전 필수 reviewer 스펙에 ledger 경로와 "criteria
+중 diff에 대응물 없는 항목" 질문을 편승시킨다(별도 완전성 pass 스폰 금지 — 토큰
+트레이드오프상 기존 pass 편승이 정답이라서). 이를 소화하도록 reviewer 계약도 동반 개정 —
+리시트에 `UNCOVERED:` 필드를 신설하고(부재는 인용 불가하므로 인용 규칙은 REASONS에만
+적용), 미커버 criterion 단독으로 REVISE가 성립하며, HARD LIMIT 3(diff 밖 검토 금지)에
+criteria 부재 보고 예외를 명시했다. criteria가 제공된 스펙에서 UNCOVERED는 필수 출력
+(전부 커버 시 `none`, 상한 3+요약 1줄)이고, 이를 생략한 APPROVE는 CHECKED 누락과
+동급으로 리뷰 불인정·재전송 대상이다. 회고 `cause:` enum에도 `criteria-miss`를 추가했다.
 
 ### v3.33.0 — fable-orchestrator 위성 리시트 정합성 동기화
 
