@@ -2,7 +2,7 @@
 name: explorer
 description: Read-heavy comprehension agent. Maps code flow, architecture, and dependencies. Writes detailed findings to report files, returns a compact map.
 model: sonnet
-effort: medium
+effort: high
 maxTurns: 12
 tools: Read, Grep, Glob, Bash, Write
 disallowedTools: Edit, MultiEdit, NotebookEdit

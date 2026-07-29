@@ -2,7 +2,7 @@
 name: coder
 description: Code implementation agent. Executes a bounded, self-contained spec — source edits, new code files, tests. Returns a compact receipt, logs details to reports.
 model: sonnet
-effort: medium
+effort: max
 maxTurns: 25
 permissionMode: acceptEdits
 tools: Read, Grep, Glob, Edit, Write, Bash

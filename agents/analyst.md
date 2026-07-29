@@ -2,7 +2,7 @@
 name: analyst
 description: On-demand judgment analyst. Deep tradeoff analysis, discovery-report adversarial audit, root-cause digs. Read-only. Returns options with evidence, never decisions.
 model: opus
-effort: high
+effort: xhigh
 maxTurns: 12
 tools: Read, Grep, Glob, Bash, Write
 disallowedTools: Edit, MultiEdit, NotebookEdit

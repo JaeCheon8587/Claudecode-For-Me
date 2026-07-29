@@ -67,6 +67,25 @@ pip install -U codenavigator
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
 
+### v3.38.0 — 위성 3종 effort 상향 (explorer/analyst/coder)
+
+구현·이해·판단 위성의 effort를 상향했다. `explorer` medium→**high**, `analyst` high→**xhigh**,
+`coder` medium→**max**. `scout`(low)·`scribe`(high)·`reviewer`(high)·오케스트레이터 2종은 불변.
+
+유효성 근거 — `effort`는 모델 capability 게이트가 걸린다. `analyst`는 `model: opus`이고
+`claude-opus-5`가 `low`~`max` 전 단계를 지원하므로 `xhigh`가 성립한다. `coder`의 `sonnet + max`는
+`claude-sonnet-5`가 Sonnet 티어 최초로 `xhigh`·`max`를 포함한 전 단계를 지원하기 때문에 성립한다
+(차단 대상은 `sonnet-4-0/4-5`·`haiku-4-5`·`claude-3-*`·`opus-4-0/4-1/4-5`이며, v3.35.0
+체인지로그의 차단 목록은 그대로 유효하다).
+
+**대가 2가지를 명시해 둔다.** (1) **위임 경제 전제의 약화** — 위성 본문의 "theirs is cheap and
+disposable"·HARD LIMIT 1("your output tokens are the most expensive in this system")은 위성이
+메인보다 싸다는 전제에서 나왔다. `coder@max`는 토큰당 단가는 여전히 sonnet이지만 effort 최고
+단계라 호출당 출력량이 커지므로, `fable-orchestrator`(high)보다 한 웨이브 비용이 클 수 있다.
+분량이 작고 자명한 스펙까지 coder로 밀지 말고 오케스트레이터가 직접 처리하는 판단이 더 중요해졌다.
+(2) **효과 검증 미완** — 상향은 품질 가설이며 회귀 측정 전이다. `coder` 오작업률·`analyst` 옵션
+품질을 ledger 회고로 관측한 뒤 유지·환원을 결정한다.
+
 ### v3.37.0 — scribe 근거 계약 보강 + 위성 계약 모순 일괄 해소
 
 v3.36.0의 근거 추적 계약을 **신규 컨텍스트 적대 검토**에 반복 라운드로 넣어 동시 충족 불가
@@ -677,9 +696,9 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `fable-orchestrator` | fable / high | 메인 오케스트레이터. 판단·결정만 하고 컨텍스트를 먹는 작업은 전부 위성에 위임 |
 | `opus-orchestrator` | opus / max | 위와 **본문 동일**(sha256 일치), frontmatter 4줄만 상이한 병렬 변종 |
 | `scout` | sonnet / low | 파일·심볼·호출부·테스트 위치 탐색. read-only. 위치만 반환하고 의견 금지 |
-| `explorer` | sonnet / medium | 코드 흐름·아키텍처·의미 파악. 상세는 리포트 파일로, 리턴은 압축 맵 |
-| `analyst` | opus / high | 온디맨드 판단. 트레이드오프 분석·리포트 적대 감사·root-cause 추적. 옵션만 반환하고 결정 금지 |
-| `coder` | sonnet / medium | **코드** 구현. 소스 편집·신규 코드·테스트. `VERIFY` 리시트 반환 |
+| `explorer` | sonnet / high | 코드 흐름·아키텍처·의미 파악. 상세는 리포트 파일로, 리턴은 압축 맵 |
+| `analyst` | opus / xhigh | 온디맨드 판단. 트레이드오프 분석·리포트 적대 감사·root-cause 추적. 옵션만 반환하고 결정 금지 |
+| `coder` | sonnet / max | **코드** 구현. 소스 편집·신규 코드·테스트. `VERIFY` 리시트 반환 |
 | `scribe` | opus / high | **문서** 작성. 규범적 주장마다 근거 필수(`SOURCES`/`UNSOURCED`/`CONFLICTS`) |
 | `reviewer` | opus / high | fresh-context 검증자. 커밋·고위험 단계 전 diff/계획 판정 + 규범 문서의 인용 소스 대조. read-only, 조언 아닌 판정 |
 
