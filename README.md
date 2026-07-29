@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v3.34.0 · 커스텀 스킬 13종 + 슬래시 커맨드 17종 + 에이전트 14종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v3.35.0 · 커스텀 스킬 13종 + 슬래시 커맨드 17종 + 에이전트 15종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,12 +11,12 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `3.34.0` |
+| 버전 | `3.35.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
 | 네임스페이스 | `/claudecode-for-me:<name>` |
-| 구성요소 | Skill 13 · Command 17 · Agent 14 (`agents/`) · Python helper 8 (`scripts/`) |
+| 구성요소 | Skill 13 · Command 17 · Agent 15 (`agents/`) · Python helper 8 (`scripts/`) |
 | 외부 연동 도구 | [`codenavigator`](https://github.com/JaeCheon8587/codenavigator) (PyPI) — codenav-bootstrap / codenav-frontmatter-gen 슬래시가 호출 |
 
 플러그인은 **글로벌 캐시**에 설치되므로 한 번 설치 후 모든 프로젝트의 **새 세션**에서 자동 노출된다. 프로젝트별 재설치 불필요.
@@ -66,6 +66,38 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v3.35.0 — opus-orchestrator 추가 (opus + max effort 변종)
+
+`fable-orchestrator`와 **본문 231줄이 완전히 동일**하고 frontmatter `model: opus` / `effort: max`
+두 줄만 다른 병렬 변종 `opus-orchestrator`를 신설했다. `tools`(위성 Agent 허용목록)·
+`disallowedTools`·`initialPrompt`도 동일하므로 라우팅 규칙 0~8, 웨이브 DAG, 위임 템플릿,
+ledger 계약, HARD LIMITS 8종이 전부 그대로 적용된다. 유효성 근거 — agent frontmatter의 `effort`는
+`low|medium|high|xhigh|max` 또는 정수를 받고, `max`는 모델 capability 게이트가 걸려 있는데
+`claude-opus-5`의 capabilities에 `max_effort`·`xhigh_effort`가 포함되어 있어(default는 `high`)
+`opus` + `max` 조합이 성립한다. 차단 대상은 `claude-3-*`·`opus-4-0/4-1/4-5`·`sonnet-4-0/4-5`·
+`haiku-4-5`다.
+
+**동일 동작이 아닌 지점 3가지를 명시해 둔다.** (1) **검증 독립성 약화** — 위성 중 `analyst`·
+`reviewer`가 `model: opus`이므로, Fable main이 주던 *fresh context + 다른 모델* 2중 독립성이
+opus main에서는 **fresh context 하나로 축소**된다. 같은 모델의 상관된 맹점을 공유하므로 rule 4
+(커밋 전 필수 리뷰)·rule 5(REVISE 2회 에스컬레이션)·rule 8(EVIDENCE `path:line` 최소 1개 직접
+spot-check = 고무도장 방지)의 실효가 얇아진다. 위성 계약서에 cross-model 문구가 없어 위반은
+아니지만 설계 의도상의 손실이므로 opus main으로 리스크 도메인을 다룰 때는 spot-check를 형식이
+아니라 실제로 수행해야 한다. (2) **위임 경제 전제의 부분 무효** — 본문의 "theirs is cheap and
+disposable"·HARD LIMIT 1("your output tokens are the most expensive in this system")은 가격
+티어 `claude-fable-5`=`tier_10_50` > 모든 위성이라는 전제에서 나왔다. `claude-opus-5`는
+`tier_5_25`로 `analyst`·`reviewer`와 **토큰당 동단가**이므로 그 두 위성에 대해서는 "싸니까
+위임한다"는 근거가 성립하지 않는다(sonnet 위성 scout/explorer/worker에는 여전히 유효).
+동단가 위성에 대한 과위임은 hop 순손실이다. (3) **성능 대조군이 아님** — `fable@high` ↔
+`opus@max`는 모델과 effort를 동시에 바꾼 조건이라 두 오케스트레이터의 판단력 비교 실험에는
+쓸 수 없다. 비교가 목적이면 effort를 `high`로 맞춘 세 번째 변종이 필요하다.
+
+배포는 파일 추가만으로 끝나지 않는다 — 플러그인은 작업 트리가 아니라 버전 고정 캐시
+(`~/.claude/plugins/cache/.../<version>/`)에서 로드되므로, `plugin.json`·`marketplace.json`
+version bump → push → `/plugin marketplace update` + `/plugin update` → **세션 재시작**까지
+완료해야 새 에이전트가 노출된다(3절 참조). repo의 `agents/`는 플러그인 상대 경로라 프로젝트
+로컬 에이전트(`.claude/agents/`)로도 잡히지 않는다.
 
 ### v3.34.0 — analyst(opus) 온디맨드 판단 위성 + 완전성 게이트 추가
 
