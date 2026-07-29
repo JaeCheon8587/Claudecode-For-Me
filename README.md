@@ -570,6 +570,45 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `task-write` | task-write skill 진입. TASK 파일만 생성하고 SSOT 문서는 수정하지 않음 |
 | `work-packet-write` | work-packet-write skill 진입. TASK와 Required SSOT Execution Matrix를 연결하는 Work Packet만 생성하고 다음 단계를 forge-scope로 넘김 |
 
+### Agent 16종
+
+에이전트는 두 계열로 나뉜다. **오케스트레이션 하네스**는 메인 오케스트레이터가 직접 스폰하는
+범용 위성이고, **스킬 전용 위성**은 해당 슬래시 커맨드 내부에서만 호출된다.
+
+#### 오케스트레이션 하네스 (8)
+
+| Agent | 모델 / effort | 역할 |
+|---|---|---|
+| `fable-orchestrator` | fable / high | 메인 오케스트레이터. 판단·결정만 하고 컨텍스트를 먹는 작업은 전부 위성에 위임 |
+| `opus-orchestrator` | opus / max | 위와 **본문 동일**(sha256 일치), frontmatter 4줄만 상이한 병렬 변종 |
+| `scout` | sonnet / low | 파일·심볼·호출부·테스트 위치 탐색. read-only. 위치만 반환하고 의견 금지 |
+| `explorer` | sonnet / medium | 코드 흐름·아키텍처·의미 파악. 상세는 리포트 파일로, 리턴은 압축 맵 |
+| `analyst` | opus / high | 온디맨드 판단. 트레이드오프 분석·리포트 적대 감사·root-cause 추적. 옵션만 반환하고 결정 금지 |
+| `coder` | sonnet / medium | **코드** 구현. 소스 편집·신규 코드·테스트. `VERIFY` 리시트 반환 |
+| `scribe` | opus / high | **문서** 작성. 규범적 주장마다 근거 필수(`SOURCES`/`UNSOURCED`/`CONFLICTS`) |
+| `reviewer` | opus / high | fresh-context 검증자. 커밋·고위험 단계 전 diff/계획 판정. read-only, 조언 아닌 판정 |
+
+`coder`/`scribe` 분리 근거는 **코드에는 기계적 오라클(VERIFY)이 있고 산문에는 없다**는 비대칭이다.
+소유권은 파일 종류로 가르며(소스와 그 주석·docstring은 coder, 문서는 scribe), 코드+문서 동시
+변경은 coder→scribe 순차로 처리한다. 자세한 내용은 v3.36.0 체인지로그 참조.
+
+#### 스킬 전용 위성 (8)
+
+| Agent | 모델 | 소속 스킬 | 역할 |
+|---|---|---|---|
+| `task-planner` | opus | `task-write` | 요구사항 → TASK 계획 + 고정 완료기준 |
+| `task-writer` | sonnet | `task-write` | plan.json 범위의 TASK 파일 1개 작성 |
+| `task-critic` | opus | `task-write` | 요구사항 원문 ↔ 실제 TASK 독립 대조 판정 |
+| `ssot-planner` | opus | `ssot-write` | TASK → SSOT 변경 계획 |
+| `ssot-writer` | sonnet | `ssot-write` | plan.json 범위의 SSOT 실제 작성 |
+| `ssot-critic` | opus | `ssot-write` | TASK 핵심 의미 ↔ 실제 SSOT 투영 독립 대조 |
+| `wp-builder` | opus | `work-packet-write` | handoff·TASK 근거로 Work Packet 링킹 작성 |
+| `wp-critic` | opus | `work-packet-write` | Work Packet 링킹 정확성만 판정(내용 진위는 판정 안 함) |
+
+계열별로 `writer`는 sonnet, `planner`/`critic`은 opus다. writer가 sonnet인 이유는 위에 opus
+planner가 `plan.json`으로 판단을 끝내주기 때문이며, 이 전제가 없는 오케스트레이션 하네스에서는
+문서 작성 위성(`scribe`)이 opus인 것과 대비된다.
+
 ---
 
 ## 6. Skill 상세
@@ -981,10 +1020,18 @@ Claudecode-For-Me/
 ├── .claude-plugin/
 │   ├── plugin.json              # 매니페스트 (name·version·author)
 │   └── marketplace.json         # 마켓플레이스 등록 정보
-├── agents/                      # ssot-write 실제 독립 서브에이전트
-│   ├── ssot-planner.md          # Opus 계획
-│   ├── ssot-writer.md           # Sonnet 실제 SSOT 수정
-│   └── ssot-critic.md           # Opus 좁은 완료조건/authority 검토
+├── agents/                      # 서브에이전트 정의 16종 (5절 참조)
+│   ├── fable-orchestrator.md    # Fable 메인 오케스트레이터
+│   ├── opus-orchestrator.md     # Opus 변종 (본문 동일, frontmatter 4줄만 상이)
+│   ├── scout.md                 # Sonnet 위치 탐색 (read-only)
+│   ├── explorer.md              # Sonnet 코드 흐름·구조 파악 (read-only)
+│   ├── analyst.md               # Opus 온디맨드 판단 (read-only)
+│   ├── coder.md                 # Sonnet 코드 구현 + VERIFY
+│   ├── scribe.md                # Opus 문서 작성 + 근거 추적
+│   ├── reviewer.md              # Opus fresh-context 검증 (read-only)
+│   ├── task-{planner,writer,critic}.md   # task-write 전용
+│   ├── ssot-{planner,writer,critic}.md   # ssot-write 전용
+│   └── wp-{builder,critic}.md            # work-packet-write 전용
 ├── skills/                      # Claude Code 스킬 (자연어 트리거)
 │   ├── acceptance-design/
 │   ├── branch-review/
