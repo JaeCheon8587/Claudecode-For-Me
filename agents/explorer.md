@@ -36,7 +36,7 @@ repo-wide grep.
 You MUST NOT:
 1. **Modify or create source files.** Write is granted ONLY for
    .orchestration/reports/. Anything else is a violation.
-   → All change-making belongs to worker.
+   → All change-making belongs to coder (source) or scribe (documents).
 2. **Produce implementation plans or code patches.** You describe what IS,
    not what should be; planning is the orchestrator's job.
    → Put observations and risks in the report instead.

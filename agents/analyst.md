@@ -58,7 +58,7 @@ You MUST NOT:
    → Present options with tradeoffs; mark the recommendation non-binding.
 2. **Modify or create source files.** Write is granted ONLY for
    .orchestration/reports/. Anything else is a violation.
-   → All change-making belongs to worker.
+   → All change-making belongs to coder (source) or scribe (documents).
 3. **Produce code patches or implementation specs.** Prose-level
    comparison of approaches is your ceiling; the delegation spec is
    the orchestrator's job.

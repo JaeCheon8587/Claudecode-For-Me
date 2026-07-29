@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v3.35.0 · 커스텀 스킬 13종 + 슬래시 커맨드 17종 + 에이전트 15종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v3.36.0 · 커스텀 스킬 13종 + 슬래시 커맨드 17종 + 에이전트 16종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,12 +11,12 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `3.35.0` |
+| 버전 | `3.36.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
 | 네임스페이스 | `/claudecode-for-me:<name>` |
-| 구성요소 | Skill 13 · Command 17 · Agent 15 (`agents/`) · Python helper 8 (`scripts/`) |
+| 구성요소 | Skill 13 · Command 17 · Agent 16 (`agents/`) · Python helper 8 (`scripts/`) |
 | 외부 연동 도구 | [`codenavigator`](https://github.com/JaeCheon8587/codenavigator) (PyPI) — codenav-bootstrap / codenav-frontmatter-gen 슬래시가 호출 |
 
 플러그인은 **글로벌 캐시**에 설치되므로 한 번 설치 후 모든 프로젝트의 **새 세션**에서 자동 노출된다. 프로젝트별 재설치 불필요.
@@ -66,6 +66,44 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v3.36.0 — worker 분할: coder(sonnet) + scribe(opus)
+
+오케스트레이터의 단일 구현 위성 `worker`를 **`coder`(sonnet, 코드·테스트)와 `scribe`(opus, 문서)**
+두 위성으로 분할했다. 분할 축은 "코딩과 문서는 다른 영역"이라는 판단이고, 그 차이를 기계적으로
+설명하는 근거는 **코드에는 오라클이 있고 산문에는 없다**는 것이다. `worker`가 sonnet으로 충분했던
+이유는 모델이 좋아서가 아니라 `VERIFY`(테스트·빌드)가 틀린 것을 기계적으로 잡아주기 때문이다 —
+약한 작성자 + 강한 외부 검사기 조합. 문서에는 그 검사기가 존재하지 않으므로 품질이 작성자
+본인에게서만 나온다. 스킬 하네스의 `ssot-writer`·`task-writer`가 sonnet인 것은 반례가 아니다:
+그 둘은 위에 opus planner가 `plan.json`을 만들어 판단을 끝낸 뒤 옮겨 적는 구조이고,
+오케스트레이터는 `plan.json`이 아니라 `CHANGE SPEC` 몇 줄만 준다. 문서 위성이 판단을 스스로
+져야 하므로 opus를 배정한다.
+
+`scribe`는 모델만 바꾼 `worker` 복제가 아니다. 강한 모델의 실패 양식은 "멈추지 않고 그럴듯하게
+지어내기"라서, 복제하면 오히려 위험해진다. 그래서 오라클 대체물로 **근거 추적 계약**을 신설했다 —
+리시트에서 `VERIFY`를 빼고 `SOURCES`(규범적 주장 1개당 `path:line` 또는 report anchor)·
+`UNSOURCED`(근거를 못 붙인 주장)·`CONFLICTS`(AUTHORITY 문서와의 모순)를 필수 필드로 넣었다.
+필수 주장에 근거가 없으면 텍스트에서 빼고 `BLOCKED`, AUTHORITY 문서와 모순되면 조용히 덮어쓰지
+않고 `CONFLICTS` + `BLOCKED`으로 supersession 판단을 오케스트레이터에 돌린다. 규범적 주장은
+"독자가 실행하거나 틀릴 수 있는 것"(동작·숫자·경로·버전·보장·순서·상한)으로 정의하고 문체·전환은
+제외해 근거 요구가 형식주의로 변질되지 않게 했다. 위임 템플릿도 분기한다 — `VERIFY`는 coder
+전용, `AUTHORITY`는 scribe 전용이며, `AUTHORITY: none`은 "이 문서를 제약하는 것이 없다"는 주장이니
+보내기 전에 검증하도록 못박았다(무제약 scribe 스펙이 SSOT에 지어낸 내용이 들어오는 경로라서).
+
+소유권은 주제가 아니라 **파일 종류**로 가른다 — 소스 파일과 그 안의 주석·docstring은 coder,
+문서 파일은 scribe이고 서로의 종류를 편집하지 않는다(coder HARD LIMIT 8, scribe HARD LIMIT 2).
+코드+문서 동시 변경은 **coder 먼저, 그다음 scribe**로 순차 처리하며 scribe는 coder의 리시트·report
+경로를 `CONTEXT` 포인터로 받는다(재인용 금지). 문서는 확정된 코드를 서술해야 하므로 이 순서는
+임의 규칙이 아니고, 병렬 쌍은 금지다. rule 4의 리뷰 면제도 축소했다 — 기존 "docs-only는 생략 가능"을
+**비규범 문서(오타·서식·문구)만 면제**로 좁히고, SSOT·ADR·TASK·계약·README 동작 서술은 코드 변경이
+없어도 reviewer 필수로 만들었다. `scribe`의 `SOURCES`는 자가감사이지 독립 검증이 아니기 때문이다.
+운영 지표도 신설 — ledger에 `unsourced: <doc> / <n> claims / kept|dropped` 1줄을 남기고 회고
+`cause:` enum에 `source-gap`을 추가해 새 게이트가 잡은 실패를 grep 집계 가능하게 했다.
+
+`agents/worker.md`는 `agents/coder.md`로 rename(git 이력 보존)했고 리턴 포맷은 그대로 유지했다 —
+오라클이 있는 쪽은 손댈 이유가 없다. 두 오케스트레이터(`fable`/`opus`)는 본문이 바이트 단위로
+동일해야 하므로 26곳을 동일 문구로 재배선했다. v3.30~v3.35 체인지로그의 `worker` 언급은 각 버전
+시점의 사료이므로 수정하지 않았다.
 
 ### v3.35.0 — opus-orchestrator 추가 (opus + max effort 변종)
 
