@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v3.36.0 · 커스텀 스킬 13종 + 슬래시 커맨드 17종 + 에이전트 16종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v3.37.0 · 커스텀 스킬 13종 + 슬래시 커맨드 17종 + 에이전트 16종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,7 +11,7 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `3.36.0` |
+| 버전 | `3.37.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
@@ -66,6 +66,101 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v3.37.0 — scribe 근거 계약 보강 + 위성 계약 모순 일괄 해소
+
+v3.36.0의 근거 추적 계약을 **신규 컨텍스트 적대 검토**에 반복 라운드로 넣어 동시 충족 불가
+규칙쌍을 색출했다("스타일 개선 금지, 실제로 물리는 시나리오를 제시하라" 조건). 1라운드 11건 →
+수정 → 2라운드 10 닫힘·1 부분·신규 4 → 3라운드 5 닫힘·신규 6 → 4라운드 5 닫힘·신규 4 →
+5라운드 5 닫힘·신규 4 → 재수정. 매 라운드가 이전 라운드 수정을 전부 닫힌 것으로 확인했고, 그
+과정에서 `reviewer.md`도 동반 개정 대상이 됐다(아래 두 번째 단락). 계약을 규칙 목록이 아니라
+**모든 도달 가능한 상황에서 동시에 만족 가능한가**로 검증한 첫 라운드다. 라운드가 진행되며
+결함의 성격이 구조적 모순에서 한 절 수정으로 좁아졌고, 5라운드 발견은 전부 후자였다 — 수정
+내용보다 이 검증 방식이 이번 버전의 성과다.
+
+핵심 결함 2건은 계약 자체를 무력화하던 것이다. 첫째, 근거 부착이 편집 **후**(구 5단계)에
+있는데 `BLOCKED` 리턴은 `CHANGED: none`을 강제하므로, 편집을 마친 뒤
+근거 없음을 발견하면 두 규칙을 동시에 만족할 방법이 없어 파일은 바뀌었는데 `CHANGED: none`을
+적는 **거짓 리시트**가 강요됐다. 근거 테이블 작성을 편집 **전**(신규 4단계)으로 옮기고 근거 없는
+필수 주장은 파일에 손대기 전에 멈추게 했다 — 필수 주장은 `CHANGE SPEC`에서 나오므로 이 시점에
+전부 알 수 있고, 이로써 `BLOCKED ⇒ CHANGED: none ⇒ 파일 무변경`이 구성상 불변식이 된다. 편집
+중 처음 등장한 주장은 필수 주장이 아니라 보조 산문으로 규정해(신규 6단계) 사후 `BLOCKED`의
+구실이 되지 못하게 했고, 이 분기를 HARD LIMIT 1에도 명시해 "`UNSOURCED`에 올리고 본문에서
+빼라"는 화살표가 4단계의 `BLOCKED`와 충돌하지 않게 했다. 둘째, 소스를 `path:line`과 report
+anchor로만 허용해서 **결정을 처음 기록하는 문서**(ADR, 이 체인지로그)가 구조적으로 막혀 있었다 —
+그 주장은 정의상 아직 어떤 파일에도 없으므로 `scribe`의 주 용도에서 필수 주장이 항상
+`UNSOURCED`거나 `BLOCKED`가 된다.
+세 번째 형식 `spec`을 추가했다: `CHANGE SPEC`에 문자 그대로 적힌 주장만 해당하고 그 문구를
+넘어선 추론은 여전히 창작(HARD LIMIT 1)이다. 근거의 책임이 스펙 작성자로 이동하므로 위임
+템플릿에 "`→ spec`으로 돌아온 주장은 scribe의 주장이 아니라 당신의 주장"임을 명시했다.
+
+**검증 루프를 `reviewer`까지 이었다 — 이번 버전에서 `reviewer.md`가 함께 바뀐 이유다.** rule 4는
+"`SOURCES`는 자가감사이므로 규범 문서는 리뷰 필수"라고 선언하면서 정작 리뷰어에게 `SOURCES`를
+넘기라는 지시가 없어, 리뷰어가 산문의 그럴듯함만 판정할 수 있었다. 그런데 지시만 추가하면
+`reviewer`의 HARD LIMIT 3(diff 밖 검토 금지)과 **동시 충족 불가**가 된다 — 인용된 `path:line`은
+정의상 diff 밖에 있으므로 스팟체크하면 HARD LIMIT 위반이고, 안 하면 rule 4가 금지한 고무도장이다.
+평가 순서에 3번(인용 소스 대조 — 산문에는 테스트가 없으므로 이것이 문서의 검증 단계다)을 신설하고
+HARD LIMIT 3에 "인용 확인은 범위 내, 단 그 파일의 다른 결함은 여전히 범위 밖" 예외를 명시했다.
+`spec` 소스는 열 파일이 없어서 "해소되지 않는 인용 = REVISE" 규칙에 걸려 정상 변경에도 무한 REVISE
+루프를 만들 수 있으므로, 스펙 작성자의 미검증 주장으로 `REASONS`에 기록하되 스펙 원문이 제공됐고
+거기에 없을 때만 REVISE로 한정했다. 죽은 인용은 인용할 것이 없으니 포인터 이름만으로 보고하도록
+인용 규칙에 예외를 더했고, 문서 변경에는 테스트 산출물이 없으므로 `CHECKED`·평가 5번의 "테스트"
+요구를 "테스트가 돌았으면 그 출력, 문서면 인용 소스"로 조건화했다. 늘어난 의무에 맞춰 `maxTurns`를
+8 → 12로 올렸다. 리시트 18줄 상한과 "주장당 1줄"이 충돌하는 문제는 오버플로 규칙으로 처리한다:
+넘치면 전체 테이블을 `.orchestration/reports/<slug>-sources.md`로 쓰고 리시트에는 개수와 경로
+1줄만 남긴다(`REPORT` 필드가 이 용처를 갖는다).
+
+나머지는 동시 충족 불가 규칙쌍과 문구 정합이다. `coder`/`scribe`는 스펙이 지시한 ledger·raw
+캡처·리포트를 반드시 쓰는데 그것들은 `TARGET FILES`에 없어서 `SPEC` 자가감사가 항상 `exceeded`를
+내고, rule 3이 `exceeded`를 웨이브 전체 폐기 트리거로 삼으므로 **모든 ledger 태스크가 자기 결과를
+폐기 후보로 만들었다** — 스펙이 지시한 쓰기는 side effect가 아니라고 명시해 닫았다. `SOURCES`에는
+공백값이 없었는데 완료 증거로 인정되는 범위가 하필 규범적 주장이 없는 비규범 문서라 증거가
+구조적으로 공허했다 — `SOURCES: none`을 정의하고, 비규범 문서의 증거를 `SPEC: within` +
+`CONFLICTS: none`인 리시트로 바꾸고, 빈 `SOURCES`를 증거로 인용하지 못하게 했다. 같은 불일치가
+완료 게이트에도 있어(리포트 경로만으로 criterion을 도장) 증거 규칙과 동일한 문구로 맞췄다. 그
+밖에 부적합 리턴 재전송의 무한 루프를 rule 5의 2회 에스컬레이션에 편입, 리뷰어 스펙 5줄 예산과
+`SOURCES` 첨부의 충돌을 첨부물 예산 제외로 해소(오버플로 시 리포트 경로 허용), telemetry
+`kept|dropped`의 도달 불가 분기를 `dropped|re-sourced`로 교체, `VERIFY: none available`일 때 지킬
+수 없던 coder의 "ALWAYS save"에 조건 추가, 코드+문서 순차에서 불가능한 "리시트를 CONTEXT 포인터로
+전달"을 verbatim 붙여넣기로 교정(15줄 상한이 계약이라 값싸다)하고 context diet의 재인용 금지에
+리시트 예외 명시, 파일 종류 판단 기준 추가(확장자가 아니라 역할 — 앱에 연결된 HTML 템플릿은 소스,
+독립 HTML 리포트는 문서), `scribe` 병렬 fan-out 금지 명시, 라우팅 표의 `produce long output` →
+`long code or log output` 한정(worker 시절 잔재라 문서 장문까지 coder로 흡수했다), `coder`/`scribe`의
+`tools`에서 `MultiEdit` 제거 — 현 클라이언트에 도구로 존재하지 않고 권한 규칙 별칭으로만 남아
+있어 사문이다.
+
+3라운드 이후 나온 것들은 대부분 v3.36.0보다 오래된 결함이다. **완료 증거에 극성(polarity)이
+없었다** — "coder pass/fail output"이 증거로 인정되므로 `VERIFY: FAIL` 포인터로 criterion을
+도장하고 테스트가 깨진 상태로 `status: done`을 넘기는 경로가 모든 줄을 준수하면서 성립했다.
+증거를 "PASS한 VERIFY / APPROVE 판정"으로 못박고 FAIL·REVISE·REJECT는 반대 증거임을 명시했다.
+**중간 리뷰가 정상 변경에 REVISE를 냈다** — rule 4는 모든 리뷰에 ledger 경로를 요구하고
+`reviewer`는 "diff에 대응물 없는 criterion은 단독 REVISE 사유"이므로, 5개 criteria 중 1개만
+다루는 웨이브 1의 리스크 도메인 리뷰는 남은 4개로 REVISE가 되고 고칠 것이 없어 rule 5가 건강한
+태스크를 에스컬레이션한다. 리뷰 스펙이 **이번 변경이 커버할 criteria를 명시**하도록 의무화하고,
+리뷰어도 스코프 밖 criteria를 판정하지 않도록 했다. **절대경로 보장이 `TARGET FILES`에만
+있었다** — ledger·리포트·raw 캡처는 모두 상대경로로 지정되므로 다른 cwd에서 시작한 위성이 다른
+루트에 파일을 만들고, 쓰기는 성공하는데 완료 게이트가 진짜 ledger를 읽으면 비어 있다. 스펙의
+모든 경로를 절대경로로 요구하도록 확장했다. 그 밖에 rule 5가 REVISE만 계수해 REJECT 루프가
+무제한이던 것, `spec` 소스를 REASONS에 기록하라는 요구가 REASONS 5불릿 상한과 충돌하던 것(다수일
+때 1불릿 집약 허용), "side-effect write = exceeded"가 무조건이라 `TARGET FILES`에 명시된
+lockfile을 도구가 재작성해도 폐기 후보가 되던 것을 고쳤다.
+
+절대경로 문제를 제대로 닫으려면 **위임 템플릿에 `LEDGER`·`REPORT` 필드를 신설**해야 했다. 기존
+템플릿에는 ledger 슬롯이 아예 없는데 ledger 절은 "모든 스펙에 ledger 경로를 명시하라"고 요구했고,
+raw 캡처와 `SOURCES` 오버플로 경로는 위성 파일에 상대경로로 하드코딩돼 있어서 오케스트레이터가
+무슨 문구를 써도 절대경로로 만들 수 없었다. 이제 두 필드를 절대경로로 받고 위성의 side file은
+`REPORT`에서 파생시킨다(`REPORT`는 rule 0의 재사용 검색에 걸리도록 `.orchestration/reports/`
+아래로 제한). 이에 맞춰 coder의 HARD LIMIT 8(문서 편집 금지)에서 `LEDGER`·`REPORT`를 제외했다 —
+그러지 않으면 coder가 ledger 행을 쓰지 않고 `RISKS`에 적어 완료 게이트가 빈 ledger를 읽는다.
+`CHANGED` 필드에도 side file 예외를 명시했다(`SPEC`에만 있어서 rule 3의 폐기 트리거가 정상 웨이브에
+걸렸다). 오케스트레이터의 boundary ledger 갱신이 "1줄 변경만 자기 Edit"으로 제한돼 있어 같은 절이
+요구하는 10줄 join 합성·증거 walk·3줄 회고와 충돌하던 것도 해소했다 — ledger 쓰기는 HARD LIMIT 7이
+Write를 부여한 대상이므로 HARD LIMIT 1의 분량 제한에서 제외한다. `APPROVE`가 ledger 전체를 덮는
+문제(리뷰어가 판정하지 않았다고 밝힌 criteria까지 도장)와 scribe 증거 분기가 `STATUS`를 보지 않아
+`BLOCKED` 리시트가 증거로 통하던 문제도 함께 막았다.
+
+오케스트레이터 2종은 이번에도 본문 sha256 동일을 유지한다(fable 편집 → opus frontmatter 4줄
+스플라이스 → diff 검증).
 
 ### v3.36.0 — worker 분할: coder(sonnet) + scribe(opus)
 
@@ -586,11 +681,12 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `analyst` | opus / high | 온디맨드 판단. 트레이드오프 분석·리포트 적대 감사·root-cause 추적. 옵션만 반환하고 결정 금지 |
 | `coder` | sonnet / medium | **코드** 구현. 소스 편집·신규 코드·테스트. `VERIFY` 리시트 반환 |
 | `scribe` | opus / high | **문서** 작성. 규범적 주장마다 근거 필수(`SOURCES`/`UNSOURCED`/`CONFLICTS`) |
-| `reviewer` | opus / high | fresh-context 검증자. 커밋·고위험 단계 전 diff/계획 판정. read-only, 조언 아닌 판정 |
+| `reviewer` | opus / high | fresh-context 검증자. 커밋·고위험 단계 전 diff/계획 판정 + 규범 문서의 인용 소스 대조. read-only, 조언 아닌 판정 |
 
 `coder`/`scribe` 분리 근거는 **코드에는 기계적 오라클(VERIFY)이 있고 산문에는 없다**는 비대칭이다.
 소유권은 파일 종류로 가르며(소스와 그 주석·docstring은 coder, 문서는 scribe), 코드+문서 동시
-변경은 coder→scribe 순차로 처리한다. 자세한 내용은 v3.36.0 체인지로그 참조.
+변경은 coder→scribe 순차로 처리한다. 분리 근거는 v3.36.0, 근거 추적 계약의 세부(소스-퍼스트
+절차·`spec` 소스·리뷰 연결)는 v3.37.0 체인지로그 참조.
 
 #### 스킬 전용 위성 (8)
 
