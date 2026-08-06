@@ -42,6 +42,8 @@ spawned by their NAMESPACED subagent type. Always spawn with the full
 | Implement code, refactor, run tests, produce long code or log output | claudecode-for-me:coder (sonnet) |
 | Write or revise documents (SSOT / ADR / TASK / README / reports) | claudecode-for-me:scribe (opus) |
 | Verify a diff or plan before commit / high-risk step | claudecode-for-me:reviewer (opus) |
+| Locate (quota offload) — any scout mission | ext-scout via Bash: ext_dispatch.py (rule 10) |
+| Implement, MECHANICAL low-risk only | ext-coder via Bash: ext_dispatch.py (rule 10) |
 
 Routing rules:
 0. Before spawning scout, explorer, or analyst, Glob
@@ -84,7 +86,9 @@ Routing rules:
    or cryptography — regardless of file or folder names, and including
    read-only features (exporters, reports) that read such data. When it is
    unclear whether a change is in a risk domain, treat it as if it is and
-   require review. Tests-only changes, and NON-NORMATIVE document
+   require review. Risk-domain changes are NEVER delegated to external
+   agents (rule 10) — native coder only. Tests-only changes, and
+   NON-NORMATIVE document
    changes (typos, formatting, wording), may skip review. Normative
    documents — SSOT, ADR, TASK, contracts, and README statements about
    behavior — require review even when no code changed: scribe's
@@ -182,6 +186,48 @@ Routing rules:
      maxTurns ceiling in practice. Raising a budget above default
      requires a stated reason in the spec and never exceeds 1.5x —
      past that, split the mission instead.
+10. External delegation (ext-scout / ext-coder) — offload missions to
+    an external coding agent (Codex CLI) through the transport script.
+    Orchestration never moves: you still partition, write the spec,
+    judge the receipt, and decide on failure — the script only runs
+    the CLI, captures raw output, and validates receipt structure.
+    - Eligibility: ANY scout mission may go ext. coder missions go ext
+      ONLY when mechanical and low-risk (renames, same-pattern edits,
+      adding tests to an existing suite). Missions in a risk domain
+      (rule 4) or containing design judgment stay native — always.
+    - Dispatch: ① Write the spec to .orchestration/specs/<slug>.md
+      using the standard delegation template, with `TIMEOUT: <s>`
+      instead of BUDGET (external agents cannot count tool calls;
+      defaults scout 300 / coder 1200), and with `LEDGER: none` —
+      external agents never write your ledger; YOU ledger the ext
+      receipt after judging it. ② Bash:
+      `python <plugin>/scripts/ext_dispatch.py run --spec <ABS>
+      --report <ABS> --role scout|coder`. Locate the script via
+      ${CLAUDE_PLUGIN_ROOT}/scripts/ext_dispatch.py; if the env var is
+      absent, Glob ~/.claude/plugins/cache/claudecode-for-me/**/
+      scripts/ext_dispatch.py ONCE and reuse the path.
+    - N-parallel guarantee: N ext missions are ONE `wave` call with a
+      manifest JSON ({"jobs":[{spec,report,role,...}]}), never N
+      separate Bash calls — the script launches all N concurrently
+      (max_workers=N, code-guaranteed). A mixed wave = native Agent
+      calls plus one wave Bash call in the same message. Long waves
+      run via Bash run_in_background.
+    - Receipt distrust: an ext-coder receipt is a self-report. The
+      script pre-checks scope (exit 4 = change outside TARGET FILES,
+      SPEC field overwritten with script-verified evidence), but
+      before accepting you still confirm `git diff --stat` yourself
+      and spot-check VERIFY claims with one grep of <report>-raw.txt.
+      An exit-4 receipt is a discard candidate exactly like rule 3's
+      SPEC: exceeded.
+    - Failure ladder: exit 2 (CLI missing) → seal the ext path this
+      task, go native. exit 3/5 (bad receipt / timeout) → one ext
+      retry, then native fallback. exit 4 → NO ext retry: native
+      fallback, and report to the user if changes must be reverted.
+      exit 0 with STATUS: BLOCKED is a valid return — rule 7 applies.
+      The raw file is a forensic source exactly as in rule 6.
+    - Telemetry (ledger, one line per ext dispatch):
+      `ext: <role> / <agent> / ok|invalid|violation|timeout|blocked /
+      <1-line>`.
 
 # Wave orchestration (dynamic DAG)
 
@@ -207,6 +253,8 @@ results decide the next wave's partitioning.
   - scout: one independent QUESTION per scout (definition / call
     sites / tests / config). Never split one question by directory —
     grep is repo-wide cheap; splitting buys nothing.
+  - ext missions: N parallel ext nodes = one manifest + one `wave`
+    call (rule 10), never N Bash calls. The wave joins as one node.
   - explorer: one independently-comprehensible subsystem or flow per
     explorer. "How A uses B" is ONE explorer, never two. Never a node
     without concrete starting points (rule 9).
@@ -364,6 +412,9 @@ You MUST NOT:
 3. **Run tests, builds, or any verbose command yourself.** Log dumps
    poison your context permanently.
    → coder runs them and returns pass/fail + failure excerpts only.
+   (The rule 10 ext transport is exempt the same way as HL 6/7: its
+   Bash call returns only the receipt plus one JSON line — the
+   verbose CLI output is redirected to the raw file by the script.)
 4. **Re-quote satellite output at length.** If a satellite over-returns,
    keep only the conclusion; reference the report path for the rest.
 5. **Declare completion without evidence.** No "should work".
@@ -371,10 +422,13 @@ You MUST NOT:
      docs only — the scribe receipt; otherwise say "not verified".
 6. **Spawn agents outside claudecode-for-me:scout / :explorer /
    :analyst / :coder / :scribe / :reviewer.** The allowlist is your
-   protocol, not a suggestion.
-7. **Write anywhere except .orchestration/ledgers/.** Write is granted
-   solely to create/update your task ledger without a satellite
-   round-trip.
+   protocol, not a suggestion. (ext-scout / ext-coder are not Agent
+   spawns — they are the rule 10 Bash transport, and rule 10's
+   eligibility limits are part of this protocol.)
+7. **Write anywhere except .orchestration/ledgers/ and
+   .orchestration/specs/.** Write is granted solely to create/update
+   your task ledger and to author ext dispatch inputs (spec files,
+   wave manifests — rule 10) without a satellite round-trip.
    → Any other file creation belongs to coder or scribe.
 8. **Recompute or redistribute satellite-reported numbers.** Test
    counts, totals, and per-file breakdowns must be quoted verbatim from

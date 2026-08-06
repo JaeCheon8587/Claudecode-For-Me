@@ -67,6 +67,36 @@ pip install -U codenavigator
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
 
+### v3.40.0 — 외부 에이전트 위임 하네스 ext_dispatch (위성 고도 scout/coder + N병렬 wave)
+
+scout/coder 미션을 외부 코딩 에이전트(Codex CLI)로 위임하는 전송 계층을 신설했다. 목적은
+Claude quota 분산 + 오케스트레이터 컨텍스트 보호. **설계 원칙: 오케스트레이션은 이동하지
+않는다** — 분해·라우팅·스펙 작성·조인·합성·실패 대응은 전부 오케스트레이터(LLM)에 잔류하고,
+`scripts/ext_dispatch.py`는 CLI 실행 + raw 캡처 + 리시트 추출·구조 검증만 하는 배관이다.
+기존 위임 스펙 템플릿·리시트 포맷은 그대로 쓰고 실행기만 교체한다(계약은 에이전트 불가지론적).
+
+**ext_dispatch.py**: `run`(단일) / `wave`(N병렬) 서브커맨드. wave는 manifest JSON의 모든 job을
+`ThreadPoolExecutor(max_workers=N)`로 동시 기동 — **N개 병렬 실행을 하네스(병렬 툴콜)가 아니라
+코드가 보장**한다(하드 요구사항). 플로우: 스펙 + 역할 프리앰블(`scripts/ext_preambles/`) 결합 →
+`codex exec --skip-git-repo-check -m <model> -c model_reasoning_effort="<e>" -` (stdin, effort는
+CLI 플래그가 아니라 config 키 — requirement-spec/SKILL.md:119 준거; doc_driven_review.py:1088의
+`--effort`는 기존 모순으로 이번 범위에서 미수정) → 전체 출력 `<report>-raw.txt` redirect(v3.39.0
+규율의 코드화) → 마지막 `## RECEIPT` 마커 추출 → 역할별 필수 필드 검증(scout FOUND/SEARCHED/
+CONFIDENCE, coder STATUS/CHANGED/SPEC/VERIFY) → coder는 실행 전후 `git status --porcelain`
+차집합으로 TARGET FILES 밖 변경을 기계 검출, 위반 시 리시트 SPEC 필드를
+`exceeded (script-verified: ...)`로 덮어씀(거짓 리시트 교정). exit code: 0 OK(BLOCKED 포함) /
+2 CLI 없음 / 3 리시트 불량 / 4 SPEC 위반 / 5 타임아웃. stdout = 리시트 + 마지막 줄 JSON.
+검증: dry-run 스모크, 추출·검증·절단 7케이스, fake-invoker E2E 2케이스(정상·스코프 위반) 전부 통과.
+
+**오케스트레이터(fable/opus 동일 본문)**: 신규 라우팅 규칙 10 — scout는 자유 위임, coder는
+기계적·저위험만(risk domain·설계 판단은 native 고정, rule 4에도 명문화). 파견 = 스펙 Write
+(`.orchestration/specs/`, BUDGET 대신 TIMEOUT) + Bash 1콜. **리시트 불신 원칙**: ext 리시트는
+self-report — 수용 전 `git diff --stat` 직접 확인 + raw grep 스팟체크 의무. 실패 사다리:
+exit 2→ext 봉인, 3/5→ext 1회 재시도 후 native 폴백, 4→재시도 없이 native 폴백. HARD LIMIT 7에
+specs/ Write 권한 추가, HARD LIMIT 6에 ext는 Agent 스폰이 아닌 rule 10 전송임을 명시.
+텔레메트리 `ext:` 라인 신설. `--agent` 확장점(INVOKERS 딕셔너리)으로 Gemini 등 추가 대비.
+태스크 고도(worktree full-auto 위임)는 다음 버전 후보.
+
 ### v3.39.0 — Context Survival Protocol: 위성 컨텍스트 사망 방지 이중 게이트 + 사망 복구
 
 운용 ledger 29건 분석에서 위성이 200k context window에 충돌해 죽는 패턴을 실측으로 확인했다
