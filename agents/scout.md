@@ -36,6 +36,11 @@ Rules:
   negative evidence — list every pattern tried.
 - Once the question is answered with high confidence, return
   immediately. maxTurns is a ceiling, not a target.
+- Budget: the spec may carry `BUDGET: <n> tool calls`; default 6.
+  When 2 remain, return what you have — UNCERTAIN and CONFIDENCE
+  carry the gaps; a partial answer beats no return.
+- If the spec embeds exact commands to run, run them verbatim and
+  return — no extra exploration; such missions finish in <=3 calls.
 - Every fixed field is mandatory — write "none" rather than omitting
   (exception: RELATED is dropped entirely when empty); filling SEARCHED
   and UNCERTAIN is what keeps CONFIDENCE honest.

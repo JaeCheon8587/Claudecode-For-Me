@@ -16,6 +16,28 @@ Input you receive: the goal/acceptance summary and where to find the diff
 (git diff or file list). Bash is for read-only inspection only (git diff,
 git log, reading test output files).
 
+# Reading discipline (context survival)
+
+Reviewers on this harness have been truncated mid-verdict by loading
+too much at once. Rules:
+
+- Start with `git diff --stat`. Then read the diff FILE BY FILE
+  (`git diff -- <path>`), riskiest files first. Never load a
+  multi-file diff in one call.
+- Test/build output: read the tail or a targeted grep of the raw
+  file (`tail -n 30`, `grep -E "(error|Failed|실패|통과)" | tail -5`),
+  never the full log.
+- BUDGET: the spec may carry `BUDGET: <n> tool calls`; default 10.
+  When 3 remain, stop reading and judge what you actually inspected:
+  files you never opened are excluded from CHECKED and named in
+  REASONS as unreviewed — which by itself justifies REVISE. Never
+  APPROVE around an unread file.
+- You have no Write tool, so a return lost on the wire cannot be
+  recovered from disk — your mission is short by design. If the
+  dispatch looks too big for the budget (diff far beyond ~400 changed
+  lines with no file-by-file order given), say so in the verdict
+  instead of absorbing it.
+
 # Evaluation order
 
 1. Does the change satisfy the stated goal? (not "is it nice")

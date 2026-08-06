@@ -67,6 +67,36 @@ pip install -U codenavigator
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
 
+### v3.39.0 — Context Survival Protocol: 위성 컨텍스트 사망 방지 이중 게이트 + 사망 복구
+
+운용 ledger 29건 분석에서 위성이 200k context window에 충돌해 죽는 패턴을 실측으로 확인했다
+— coder 184k/206k/224k tokens(46~67 tool calls), explorer 110~140k(23~26 calls), analyst
+150-350s 절단 2회, reviewer 2회·scribe 3회 절단. 최악 모드는 **편집 완료 후 리턴 직전 사망**:
+영수증·리포트·레저가 전부 유실돼 매번 `git status` 포렌식으로 복원해야 했다. 근본 원인 4개 —
+(1) disk-handoff가 오케스트레이터만 보호하고 위성 자신은 못 지킴(`tee`가 빌드 로그를 위성
+컨텍스트에도 흘림), (2) 미션 크기 상한 부재(retro가 2회 학습했지만 프롬프트 미반영), (3) 시작점
+없는 광역 explorer는 구조적 불가능(7런 전멸), (4) 리포트를 마지막에 몰아 써서 죽으면 산출물 0.
+
+**위성 공통 Context Survival Protocol** (coder/explorer/analyst/scribe/reviewer, scout 경량):
+① 스펙 `BUDGET: <n> tool calls` 준수 — 잔여 3콜에 discovery 중단→리포트 flush→**부분 리턴**
+(기본값 scout 6 / explorer 12 / analyst 16 / coder 20 / scribe 14 / reviewer 10 — 사망선
+23~67콜 대비 절반 수준), ② Read discipline — 300줄+ 파일 전체 Read 금지·grep 히트 ±40줄
+offset/limit·재Read 금지, ③ verbose 출력 격리 — **redirect 전용, tee 금지**
+(`<cmd> > <report>-raw.txt 2>&1` 후 tail/grep 발췌만), ④ 리포트 선생성·증분 기록(죽어도 리포트
+생존), ⑤ 리포트 말미 `## RECEIPT` 리턴 사본(529 리턴 유실 보험), ⑥ 자기방어 게이트 — 과대 스펙
+착수 전 BLOCKED(coder >5파일/discovery/VERIFY 2개+, explorer 시작점 부재, analyst SCOPE 부재,
+scribe >3문서). explorer/analyst 리턴에 `STATUS: OK|PARTIAL|BLOCKED` 필드 신설, analyst는
+`CONTINUATION`으로 §단위 계획 분할(§1 인벤토리→§2 판정→§3 옵션)을 지원하며 maxTurns 12→**20**.
+
+**오케스트레이터 이중 게이트** (fable/opus 동일 본문): 신규 라우팅 규칙 9 — 파견 전 미션 크기
+검사(coder ≤3파일·VERIFY 1개, explorer 시작점 필수·광역 금지, analyst §분할, scribe ≤3문서,
+reviewer 400줄+ diff는 파일별 순서 명시, 전 스펙 BUDGET 라인 의무·상향은 1.5x 한도). 규칙 6은
+naive retry에서 **death recovery**로 대체 — 재시도 전 디스크 포렌식(REPORT·raw·git status),
+RECEIPT 발견 시 수확(재파견 불필요), 부분 산출물 시 갭만 resume 스펙, 무산출일 때만 스코프
+절반 1회 재시도. 텔레메트리 `death:` 라인 신설(budget 튜닝 데이터 축적).
+
+budget 수치는 실측 기반 추정치다 — 운용 후 ledger retro와 `death:` 라인으로 튜닝한다.
+
 ### v3.38.0 — 위성 3종 effort 상향 (explorer/analyst/coder)
 
 구현·이해·판단 위성의 effort를 상향했다. `explorer` medium→**high**, `analyst` high→**xhigh**,

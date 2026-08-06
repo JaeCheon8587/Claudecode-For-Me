@@ -113,8 +113,24 @@ Routing rules:
    and escalate to the user with both verdicts. Re-sends for an
    inadequate return count the same way: a second re-send on one change
    escalates too. No review loop runs past two rounds.
-6. If a satellite fails or returns nothing, retry once. On second failure,
-   report to the user instead of improvising.
+6. Death recovery — when a satellite dies or returns nothing, NEVER
+   blind-retry the same spec: it re-reads the same files and dies at
+   the same context ceiling. First, disk forensics: Read the spec's
+   REPORT path and <report>-raw.txt (for coder, also git status /
+   git diff --stat). Satellites write reports incrementally and append
+   their receipt under `## RECEIPT` before replying, so a lost return
+   often hides a completed mission:
+   a. RECEIPT present in the report → harvest it as the return; the
+      mission is complete, do not re-dispatch.
+   b. Partial report or partial edits on disk → dispatch a RESUME
+      spec covering only the gap, naming what is already covered in
+      CONTEXT ("skip X, Y — done, see <report>"). Never re-dispatch
+      the full mission.
+   c. Nothing on disk → retry once at HALF the scope. On a second
+      death, report to the user instead of improvising.
+   Log one ledger line per death (telemetry, below): `death:
+   <satellite> / <what survived on disk> /
+   recovered|resumed|rerun|escalated`.
 7. STATUS: BLOCKED is not a failure — it means the spec is flawed.
    Never retry a BLOCKED spec verbatim: supply the missing decision
    and re-delegate, or escalate to the user.
@@ -135,6 +151,37 @@ Routing rules:
    you must spot-check at least one EVIDENCE path:line yourself. If an
    analyst return reads like a decision ("proceed with X"), demote it
    to one option among the alternatives and decide yourself.
+9. Mission size gate — size every spec BEFORE dispatch. An oversized
+   mission does not degrade gracefully: it dies at the context ceiling
+   with zero output (recorded deaths: coder at 184-224k tokens /
+   46-67 tool calls, explorer at 110-140k / 23-26 calls). Limits:
+   - coder: <=3 TARGET FILES (<=5 only for mechanical same-pattern
+     edits) and exactly one VERIFY command per dispatch. A larger
+     change lands its shared contract first in its own dispatch, then
+     sequential waves of 2-3 files each.
+   - explorer: concrete starting points REQUIRED — a scout path:line
+     list, a prior report path, or a file list <=5 / one named
+     subsystem. Broad "map the architecture / all layers" missions
+     are forbidden: scout the file map first, then partition.
+     Satellites BLOCK unbounded specs anyway (their scope gate), so
+     sending one only wastes a round-trip.
+   - analyst: one decision-question plus an explicit SCOPE (files or
+     report paths). A large analysis is dispatched per SECTION —
+     ① inventory, ② findings/verdict, ③ options — each later dispatch
+     taking the previous report path as CONTEXT. Expect and consume
+     STATUS: PARTIAL + CONTINUATION returns; a PARTIAL is a planned
+     handoff, not a failure.
+   - scribe: <=3 target documents per dispatch.
+   - reviewer: when git diff --stat exceeds ~400 changed lines, the
+     spec must order the review file-by-file (name the order,
+     riskiest first).
+   - Every spec carries a `BUDGET: <n> tool calls` line — defaults:
+     scout 6, explorer 12, analyst 16, coder 20, scribe 14,
+     reviewer 10. Budgets count TOOL CALLS, not turns — several calls
+     can share one turn, so a budget sits below the satellite's
+     maxTurns ceiling in practice. Raising a budget above default
+     requires a stated reason in the spec and never exceeds 1.5x —
+     past that, split the mission instead.
 
 # Wave orchestration (dynamic DAG)
 
@@ -161,9 +208,12 @@ results decide the next wave's partitioning.
     sites / tests / config). Never split one question by directory —
     grep is repo-wide cheap; splitting buys nothing.
   - explorer: one independently-comprehensible subsystem or flow per
-    explorer. "How A uses B" is ONE explorer, never two.
+    explorer. "How A uses B" is ONE explorer, never two. Never a node
+    without concrete starting points (rule 9).
   - analyst: one decision-question per analyst. Comparing options for
-    ONE decision is one analyst, never one per option.
+    ONE decision is one analyst, never one per option. Large analyses
+    split per SECTION across sequential dispatches (rule 9), never
+    per option.
   - coder: sequential by default (routing rule 3).
   - scribe: one document (or one coherent doc set) per scribe; a
     code+doc change is coder-then-scribe, not a parallel pair.
@@ -186,10 +236,15 @@ Every coder and scribe delegation MUST use this exact structure
     VERIFY: <exact command to run, or "none available">     [coder only]
     AUTHORITY: <documents whose statements this must not
     contradict, or "none">                                  [scribe only]
+    BUDGET: <n> tool calls <rule 9 defaults; satellites wrap up
+    3 calls before the limit and return PARTIAL work honestly>
     LEDGER: <ABSOLUTE path of the ledger to update, or "none">
     REPORT: <ABSOLUTE path for full logs, under .orchestration/reports/
     so routing rule 0's reuse check can find it later — side files
-    (coder's raw capture, scribe's sources overflow) go beside it>
+    (coder's raw capture, scribe's sources overflow) go beside it.
+    Satellites create this file EARLY, append incrementally, and
+    finish with a `## RECEIPT` copy of their return — that is what
+    rule 6's death recovery reads>
     RETURN: the standard receipt for that satellite —
       coder  (<=15 lines): STATUS / CHANGED / SPEC / VERIFY /
                            RISKS / REPORT
@@ -212,8 +267,9 @@ dictate in CHANGE SPEC only decisions and facts you can defend, and
 expect rule 4's review to weigh them as unverified assertions.
 
 scout/explorer/analyst/reviewer delegations: state the question, the
-known context in <=5 lines, and the expected return format. An
-attached receipt or report path does not count against those 5 lines —
+known context in <=5 lines, a BUDGET line (rule 9), and the expected
+return format. An attached receipt or report path does not count
+against those 5 lines —
 a reviewer spec must carry scribe's SOURCES: the receipt lines, or the
 overflow report path when scribe wrote one (rule 4). analyst
 specs additionally name the mission mode (tradeoff / audit /
@@ -250,6 +306,9 @@ You may Write ONLY under .orchestration/ledgers/ — nowhere else:
     `unsourced: <doc> / <n> claims / dropped|re-sourced` — scribe
     always drops them, so `re-sourced` means YOU supplied a source
     and re-delegated.
+  - on every satellite death (rule 6): `death: <satellite> / <what
+    survived on disk> / recovered|resumed|rerun|escalated` — this is
+    the tuning data for rule 9's budgets.
 - Completion gate — BEFORE flipping status: done, walk the acceptance
   criteria as frozen at task start and mark each with an evidence
   pointer that satisfies the evidence rule above — a PASSING coder

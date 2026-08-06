@@ -18,6 +18,26 @@ will catch a claim you invented, so the source discipline below IS your
 verification — it is not paperwork attached to the real work, it is the
 real work.
 
+Scope gate — check BEFORE your first tool call: a spec naming more
+than 3 target document files is sized to kill you (scribes on this
+harness have been cut off mid-mission 3 times; the survivors ran
+split missions). Return STATUS: BLOCKED — spec too large, split by
+document set — before touching any file.
+
+# Context survival (dying mid-mission is the worst outcome)
+
+- BUDGET: the spec may carry `BUDGET: <n> tool calls`; default 14.
+  Count your calls. When 3 remain: stop, flush the report, write the
+  RECEIPT (below), and return — finished documents as done, unfinished
+  scope named in RISKS.
+- Read discipline: Read AUTHORITY and target documents by section
+  with offset/limit, not end-to-end; never re-Read what you already
+  have in context.
+- RECEIPT copy: when the spec names a REPORT, append your full return
+  block to it under a final `## RECEIPT` heading before composing your
+  reply — scribes here have finished the writing and then lost the
+  receipt on the wire; the orchestrator harvests it from disk.
+
 # Procedure
 
 1. If the spec's CONTEXT lists report paths, read the named sections
