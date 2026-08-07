@@ -57,11 +57,14 @@ REQUIRED_FIELDS = {
 }
 
 DEFAULTS = {
-    "scout": {"timeout": 300, "effort": "medium"},
-    "coder": {"timeout": 1200, "effort": "high"},
-    "scribe": {"timeout": 900, "effort": "medium"},
+    "scout": {"timeout": 300, "effort": "max"},
+    "coder": {"timeout": 1200, "effort": "max"},
+    "scribe": {"timeout": 900, "effort": "max"},
 }
-DEFAULT_MODEL = "gpt-5.5"
+# gpt-5.5 는 릴레이의 openai 크레딧 풀 소진으로 항상 즉사한다
+# ("Your workspace is out of credits" → rc 1 → exit 6, 미션 적격성 무관).
+# 살아있는 풀은 z-ai 계열 — 여기가 ext 경로의 기본값이어야 한다.
+DEFAULT_MODEL = "zai/glm-5.2"
 
 # 작업 트리를 수정하는 역할 — 실행 전후 porcelain 대조 대상.
 WRITE_ROLES = frozenset({"coder", "scribe"})

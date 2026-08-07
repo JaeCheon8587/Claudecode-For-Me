@@ -112,12 +112,12 @@ grill-me 정리본 + acceptance 4축 설계본을 기준(GROUND TRUTH), requirem
 
 ### 호출
 - **cwd = 프로젝트 루트** (codex가 `.requirements/*.md`를 직접 읽도록).
-- 아래 프롬프트를 **stdin**으로 전달한다 (모델 `gpt-5.5`, reasoning effort 레벨 `high` 고정):
+- 아래 프롬프트를 **stdin**으로 전달한다 (모델 `zai/glm-5.2`, reasoning effort 레벨 `max` 고정):
   ```bash
-  codex exec --skip-git-repo-check -m gpt-5.5 -c model_reasoning_effort="high" -
+  codex exec --skip-git-repo-check -m zai/glm-5.2 -c model_reasoning_effort="max" -
   ```
-  - reasoning effort는 CLI 플래그가 아니라 **config 키 `model_reasoning_effort`**로 전달한다(`-c`). 값(레벨)은 `minimal`/`low`/`medium`/`high`. (`--effort` 플래그는 존재하지 않음.)
-  - Windows에서 `codex` 실행 파일이 `.cmd`/`.bat`이면 `cmd /c codex exec --skip-git-repo-check -m gpt-5.5 -c model_reasoning_effort="high" -` 로 래핑한다.
+  - reasoning effort는 CLI 플래그가 아니라 **config 키 `model_reasoning_effort`**로 전달한다(`-c`). 값(레벨)은 `low`/`medium`/`high`/`xhigh`/`max`. (`--effort` 플래그는 존재하지 않음.)
+  - Windows에서 `codex` 실행 파일이 `.cmd`/`.bat`이면 `cmd /c codex exec --skip-git-repo-check -m zai/glm-5.2 -c model_reasoning_effort="max" -` 로 래핑한다.
   - 장시간(최대 ~30분) 걸릴 수 있다.
 
 ### codex 프롬프트 템플릿

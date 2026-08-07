@@ -67,6 +67,37 @@ pip install -U codenavigator
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
 
+### v3.42.0 — ext 경로 기본 모델 교체(gpt-5.5 → zai/glm-5.2) + effort max
+
+**ext 위임이 v3.40.0 이래 한 번도 성공한 적 없었다.** `ext_dispatch.py`의 `DEFAULT_MODEL`이
+`gpt-5.5` 하드코딩이었고, 이 환경의 codex는 로컬 릴레이(`openai_base_url =
+http://127.0.0.1:10100/v1`, opencodex 자동 주입)를 경유하는데 **릴레이의 openai 크레딧 풀이
+소진** 상태다 — `ERROR: Your workspace is out of credits.` → rc 1 → 리시트 0바이트 → exit 6.
+미션 적격성·스펙 품질과 무관하게 모든 디스패치가 즉사했다. v3.41.0이 신설한 exit 6은 이 실패를
+**정확히 분류**했을 뿐 원인(모델 강제)은 손대지 않았으므로 여전히 못 쓰는 상태였다.
+
+실측 근거 — 동일 CLI(codex-cli 0.146.1), 동일 프롬프트:
+
+| 호출 | 결과 |
+|---|---|
+| `codex exec -m gpt-5.5 ...` | `out of credits` (rc 1) |
+| `codex exec ...` (config 기본 `zai/glm-5.2`) | 정상 응답 |
+
+릴레이 `/v1/models`는 13종을 서빙하고 openai 계열(`gpt-5.5`, `gpt-5.6-*`)만 크레딧이 없다.
+z-ai 계열은 살아 있으며 `zai/glm-5.2`는 `reasoning_efforts`에 `max`를 포함한다.
+
+**변경**: `DEFAULT_MODEL = "zai/glm-5.2"`, 역할별 기본 effort 전부 `max`(scout medium→max,
+coder high→max, scribe medium→max). timeout·exit code 의미·리시트 계약·스코프 대조는 불변.
+`--model`/`--effort` per-call 오버라이드도 그대로다. 같은 이유로 죽어 있던
+`requirement-spec/SKILL.md`의 codex 자기검증 호출(`-m gpt-5.5 ... "high"`)도 동일 값으로 교체하고,
+effort 허용값 표기를 실제 지원 범위(`low`/`medium`/`high`/`xhigh`/`max`)로 정정했다.
+`doc_driven_review.py`는 `--model`이 주어질 때만 플래그를 붙여 config 기본값으로 떨어지므로
+애초에 무사했다 — 이번 결함의 대조군이자, 하네스가 모델을 강제하면 안 된다는 근거다.
+
+**검증**: 실제 codex 디스패치 1건 E2E — scout 미션 → exit 0, raw 배너 `model: zai/glm-5.2` /
+`reasoning effort: max`, 리시트 필수 3필드 통과, 보고된 `file:line` 3건 전수 대조 일치.
+`tests/test_ext_dispatch.py` 10케이스 회귀 통과(fake-invoker 경로라 모델 값에 비의존).
+
 ### v3.41.0 — ext-scribe 역할 신설 + 에이전트 실행 실패(쿼터 소진) exit 6 분류
 
 외부 위임 하네스에 **ext-scribe**(기계적 문서 전용)를 추가했다. 배경은 실제 장애 하나 —
@@ -1019,7 +1050,7 @@ git repo·입력 문서 존재·**미결 항목 없음**을 검사한다. Work P
 - **파이프라인**: `요구사항 도출(grill-me) → 완료조건·엣지·오류·검증 4축 설계(acceptance-design) → 개발 지시서 정제(meta-prompter) → .requirements/requirement-{slug}.md 저장 → codex 검증↔보완 수렴 루프(최대 3회·99% 임계)`
 - **Phase 1.5**: acceptance-design의 타겟 doc = grill-me 정리본(`grill-me-{slug}.md`). 설계본 `{slug}-acceptance.md` 산출. meta-prompter 입력·codex GROUND TRUTH가 정리본 + 설계본 둘 다를 포함 → 지시서에 완료조건·검증이 실림
 - **slug 일관**: 세 산출물이 동일 slug 공유 — `grill-me-{slug}.md`(정리본) ↔ `{slug}-acceptance.md`(설계본) ↔ `requirement-{slug}.md`(지시서)
-- **codex 자기검증**: grill-me 정리본 + acceptance 설계본=GROUND TRUTH 기준 체크리스트 생성 → 지시서 반영도 대조 → `Coverage: N%` + 보완점. 모델 `gpt-5.5`, reasoning effort 레벨 `high` (`-c model_reasoning_effort="high"`)
+- **codex 자기검증**: grill-me 정리본 + acceptance 설계본=GROUND TRUTH 기준 체크리스트 생성 → 지시서 반영도 대조 → `Coverage: N%` + 보완점. 모델 `zai/glm-5.2`, reasoning effort 레벨 `max` (`-c model_reasoning_effort="max"`)
 - **Phase 게이트**: 각 Phase 전이 조건 미충족 시 다음 Phase 진입 금지
 - **codex 미설치 시** 검증만 생략(`/codex:setup` 안내), 지시서는 보존
 - 산출물은 지시서까지 — **구현 코드 미작성·`ExitPlanMode` 미호출**
