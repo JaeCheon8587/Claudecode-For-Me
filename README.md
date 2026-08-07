@@ -67,6 +67,36 @@ pip install -U codenavigator
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
 
+### v3.43.0 — ext-first 전환: 적격 미션은 무조건 ext, 실패 시 자동 native 폴백
+
+v3.42.0으로 ext 경로가 **동작하게** 됐지만, 동작해도 **선택되지 않는** 문제가 남아 있었다.
+관측된 증상: 같은 오케스트레이터가 어떤 세션에서는 ext를 쓰고 어떤 세션에서는 전부 native로
+흘렀다. 원인은 rule 10이 허가문이었다는 것 — "ANY scout mission **may** go ext", coder는
+"ONLY when mechanical". 언제 쓰라는 트리거가 없고, 라우팅 표도 native 6행이 먼저이고 ext 3행이
+대안으로 붙어 있었다. 결정적으로 **ext를 고르면 비용이 늘어난다**: 리시트 불신 조항(git diff
+직접 확인, VERIFY raw grep 스팟체크, SOURCES claim→source 대조)이 native Agent 호출에는 없다.
+규칙을 위반하지 않으면서 가장 싼 경로가 언제나 native였으므로, 라우팅은 구조적으로 native로
+드리프트했다 — 모델의 변덕이 아니라 규칙 설계의 귀결이다.
+
+**기본값을 뒤집었다.** 라우팅 표에서 ext 3행을 해당 미션 종류의 첫 행으로 올리고,
+`claudecode-for-me:scout`은 폴백 경로로만 도달 가능하게 했다. rule 10에 **EXT-FIRST** 절 신설:
+적격 미션은 ext로 **간다**(per-mission 저울질 금지), native를 고르면 원장에 사유를 남겨야 하며
+"native가 간단하다 / 미션이 작다 / 검증이 싸다"는 사유로 인정하지 않는다 — 리시트 불신 작업은
+기본값의 비용이지 기본값을 피할 논거가 아니라는 것을 명문화했다. tests-only 변경은 ext-coder의
+canonical case로 못박았다(실제로 이 케이스가 native로 샌 사례가 있었다).
+
+**Native-only는 안전 규정으로 분리**해 남겼다 — 위험 도메인(rule 4), 설계 판단이 든 미션,
+규범 문서(SSOT/ADR/TASK/계약)와 감사류 리포트, 그리고 ext 대응물이 없는 explorer/analyst/
+reviewer. 이건 선호가 아니라 카브아웃이라는 점을 절 제목에 박았다.
+
+**폴백은 자동·무언(silent)**: ext 실패는 같은 스펙을 같은 wave에서 해당 역할의 native 위성으로
+재실행할 뿐, 사용자에게 묻지 않고 blocked로도 처리하지 않으며 스코프 축소 사유도 아니다.
+실패 사다리는 "ext를 1회 재시도할지 즉시 봉인할지"만 결정한다(exit 2/6 즉시 봉인, 3/5 1회 재시도).
+rule 0도 "discovery 미션(ext/native 불문) 전 리포트 재사용 확인"으로 정정 — scout가 ext 기본이 되며
+기존 문구의 "spawning"이 ext-scout를 배제하는 것으로 읽힐 수 있었다.
+
+fable/opus 오케스트레이터 본문은 frontmatter를 제외하고 계속 완전 동일(스크립트 동기화 + diff 검증).
+
 ### v3.42.0 — ext 경로 기본 모델 교체(gpt-5.5 → zai/glm-5.2) + effort max
 
 **ext 위임이 v3.40.0 이래 한 번도 성공한 적 없었다.** `ext_dispatch.py`의 `DEFAULT_MODEL`이

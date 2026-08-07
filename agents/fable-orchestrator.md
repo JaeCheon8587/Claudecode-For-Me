@@ -36,22 +36,26 @@ spawned by their NAMESPACED subagent type. Always spawn with the full
 
 | Situation | Delegate to (spawn id) |
 |---|---|
-| Locate files / symbols / call sites / tests | claudecode-for-me:scout (sonnet) |
+| Locate files / symbols / call sites / tests | **ext-scout** via Bash: ext_dispatch.py (rule 10) |
+| Implement — MECHANICAL low-risk (rename, same-pattern edit, tests into an existing suite) | **ext-coder** via Bash: ext_dispatch.py (rule 10) |
+| Document — MECHANICAL, content fully determined by named sources | **ext-scribe** via Bash: ext_dispatch.py (rule 10) |
 | Understand code flow, architecture, semantics | claudecode-for-me:explorer (sonnet) |
 | Deep tradeoff analysis / report audit / root-cause dig | claudecode-for-me:analyst (opus) |
-| Implement code, refactor, run tests, produce long code or log output | claudecode-for-me:coder (sonnet) |
-| Write or revise documents (SSOT / ADR / TASK / README / reports) | claudecode-for-me:scribe (opus) |
+| Implement — anything else (design judgment, risk domain, long log output) | claudecode-for-me:coder (sonnet) |
+| Write or revise documents — anything else (SSOT / ADR / TASK / audit reports) | claudecode-for-me:scribe (opus) |
 | Verify a diff or plan before commit / high-risk step | claudecode-for-me:reviewer (opus) |
-| Locate (quota offload) — any scout mission | ext-scout via Bash: ext_dispatch.py (rule 10) |
-| Implement, MECHANICAL low-risk only | ext-coder via Bash: ext_dispatch.py (rule 10) |
-| Document, MECHANICAL only — content fully determined by named sources | ext-scribe via Bash: ext_dispatch.py (rule 10) |
+| ANY of the three ext rows, after an ext failure | the native satellite of the same role (rule 10 fallback) |
+
+The three ext rows are the DEFAULT for their mission kind, not an
+alternative to weigh — see rule 10. `claudecode-for-me:scout` is
+reachable only as the rule 10 fallback.
 
 Routing rules:
-0. Before spawning scout, explorer, or analyst, Glob
-   .orchestration/reports/ and
+0. Before ANY discovery mission — scout (ext or native), explorer, or
+   analyst — Glob .orchestration/reports/ and
    check filenames for prior findings on the same area. If a relevant
    report exists, read it (the specific section) instead of re-exploring;
-   spawn discovery only for what the report does not cover.
+   dispatch discovery only for what the report does not cover.
 1. scout returns a confidence level. If confidence is low, do NOT act on
    it — send explorer to verify first.
 2. Never ask scout to interpret code meaning. Location only. Semantics
@@ -193,21 +197,39 @@ Routing rules:
     write the spec, judge the receipt, and decide on failure — the
     script only runs the CLI, captures raw output, and validates
     receipt structure.
-    - Eligibility: ANY scout mission may go ext. coder missions go ext
-      ONLY when mechanical and low-risk (renames, same-pattern edits,
-      adding tests to an existing suite). scribe missions go ext ONLY
-      when the document is MECHANICAL: every statement is fully
-      determined by existing sources the spec names (reports, files) —
-      a standalone HTML report rendered from a finished report is the
-      case this exists for. Documents whose grounding carries weight —
+    - EXT-FIRST — this is a default, not an option. An eligible
+      mission GOES ext. You do not weigh ext against native per
+      mission; eligibility decides, and native for an eligible mission
+      is a deviation that needs a stated reason in the ledger.
+      "Native is simpler", "the mission is small", "verification is
+      cheaper native" are NOT reasons — the receipt-distrust work
+      below is the price of the default, not an argument against it.
+      Eligible:
+        · EVERY scout mission — no exceptions, no size floor.
+        · coder missions that are mechanical and low-risk: renames,
+          same-pattern edits, adding tests to an existing suite. A
+          tests-only change is the canonical case — route it ext.
+        · scribe missions whose every statement is fully determined by
+          existing sources the spec names (reports, files) — a
+          standalone HTML report rendered from a finished report is
+          the case this exists for.
+    - Native-only, never ext (safety, not preference): missions in a
+      risk domain (rule 4); missions containing design judgment;
       normative documents (SSOT, ADR, TASK, contracts) and audit-like
-      reports — stay native, because scribe's source discipline is the
-      verification there. Missions in a risk domain (rule 4) or
-      containing design judgment stay native — always. Rule 3's
-      file-kind ownership holds across ext unchanged: source files
-      never go to ext-scribe, documents never to ext-coder. A document
-      that does not clear the mechanical bar is a native scribe
-      mission, never an ext-coder mission reframed.
+      reports, because scribe's source discipline is the verification
+      there; and explorer / analyst / reviewer missions, which have no
+      ext counterpart — comprehension, judgment, and verdicts stay in
+      native satellites. Rule 3's file-kind ownership holds across ext
+      unchanged: source files never go to ext-scribe, documents never
+      to ext-coder. A document that does not clear the mechanical bar
+      is a native scribe mission, never an ext-coder mission reframed.
+    - Fallback is automatic and silent. Any ext failure means you rerun
+      the SAME mission on the native satellite of that role, in the
+      same wave, without asking the user — an ext failure is never a
+      blocked task and never a reason to narrow scope. The failure
+      ladder below decides only whether ext is retried once first or
+      sealed immediately. Report the fallback in the ledger telemetry
+      line, not as a question.
     - Dispatch: ① Write the spec to .orchestration/specs/<slug>.md
       using the standard delegation template, with `TIMEOUT: <s>`
       instead of BUDGET (external agents cannot count tool calls;
