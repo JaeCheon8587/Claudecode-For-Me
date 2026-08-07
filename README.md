@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v3.41.0 · 커스텀 스킬 14종 + 슬래시 커맨드 18종 + 에이전트 16종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v3.43.0 · 커스텀 스킬 14종 + 슬래시 커맨드 18종 + 에이전트 16종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,7 +11,7 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `3.41.0` |
+| 버전 | `3.43.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
@@ -820,7 +820,7 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `task-write` | `/claudecode-for-me:task-write [--app <APP>] [--from <requirements-path>] [요청]` | 요구사항 문서/자연어 요청에서 TASK 작업 범위 계약만 생성. FRD/FC/ADR/ADR-CATALOG/PRD/ARCHITECTURE 분석·수정 없음 |
 | `work-packet-write` | `/claudecode-for-me:work-packet-write <TASK-path> [--app <APP>] [--process <process-dir>] [--name <title>]` | TASK와 Required SSOT Execution Matrix를 연결하는 forge 입력용 Work Packet 생성. TASK/SSOT/코드 수정 없이 실행 규칙·경계·검증 입력만 정리 |
 
-### Command 17종
+### Command 18종
 
 | Command | 설명 |
 |---|---|
@@ -836,6 +836,7 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `forge-scope` | forge-scope skill 진입 |
 | `grill-me` | grill-me skill 진입 |
 | `meta-prompter` | meta-prompter skill 진입 |
+| `pipeline-runner` | pipeline-runner skill 진입. requirement-spec 산출물 이후 작업 규모를 판단해 후속 스킬 파이프라인을 설계·컨펌 후 build/progress 문서 기반으로 실행 |
 | `requirement-spec` | requirement-spec skill 진입. grill-me→acceptance-design→meta-prompter→codex 검증 자동 체인 메타 스킬. 확정 후 pipeline-runner 실행 여부 컨펌 게이트 |
 | `safe-pull` | safe-pull skill 진입. fetch 후 브리핑 → 컨펌 게이트 → pull |
 | `ssot-write` | Opus Main 기반 3-agent ssot-write 진입. Main이 build/progress를 읽고 Planner→Writer→Critic을 순환하며 Critic FAIL은 Planner의 실패 target 전용 REPAIR 계획으로 돌아간다. git commit은 범위 밖 |
@@ -853,12 +854,20 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 |---|---|---|
 | `fable-orchestrator` | fable / high | 메인 오케스트레이터. 판단·결정만 하고 컨텍스트를 먹는 작업은 전부 위성에 위임 |
 | `opus-orchestrator` | opus / max | 위와 **본문 동일**(sha256 일치), frontmatter 4줄만 상이한 병렬 변종 |
-| `scout` | sonnet / low | 파일·심볼·호출부·테스트 위치 탐색. read-only. 위치만 반환하고 의견 금지 |
+| `scout` | sonnet / low | 파일·심볼·호출부·테스트 위치 탐색. read-only. 위치만 반환하고 의견 금지. **v3.43.0부터 ext-scout 실패 시의 폴백 경로** — 탐색 미션의 기본값은 ext다 |
 | `explorer` | sonnet / high | 코드 흐름·아키텍처·의미 파악. 상세는 리포트 파일로, 리턴은 압축 맵 |
 | `analyst` | opus / xhigh | 온디맨드 판단. 트레이드오프 분석·리포트 적대 감사·root-cause 추적. 옵션만 반환하고 결정 금지 |
 | `coder` | sonnet / max | **코드** 구현. 소스 편집·신규 코드·테스트. `VERIFY` 리시트 반환 |
 | `scribe` | opus / high | **문서** 작성. 규범적 주장마다 근거 필수(`SOURCES`/`UNSOURCED`/`CONFLICTS`) |
 | `reviewer` | opus / high | fresh-context 검증자. 커밋·고위험 단계 전 diff/계획 판정 + 규범 문서의 인용 소스 대조. read-only, 조언 아닌 판정 |
+
+**외부 위임 3종(ext-scout / ext-coder / ext-scribe)은 이 표에 없다** — Agent 스폰이 아니라
+`scripts/ext_dispatch.py`를 통한 Bash 전송이기 때문이다(모델 `zai/glm-5.2` / effort max,
+v3.42.0). v3.43.0부터 **적격 미션의 기본값은 ext**이고 native 위성은 폴백이다: 모든 탐색 미션은
+ext-scout, 기계적·저위험 구현(rename·동일 패턴 편집·기존 스위트 테스트 추가)은 ext-coder,
+명명된 소스로 내용이 전부 결정되는 문서는 ext-scribe. 위험 도메인·설계 판단·규범 문서·감사
+리포트, 그리고 ext 대응물이 없는 `explorer`/`analyst`/`reviewer`는 native 고정이다. 상세는
+rule 10과 v3.43.0 체인지로그 참조.
 
 `coder`/`scribe` 분리 근거는 **코드에는 기계적 오라클(VERIFY)이 있고 산문에는 없다**는 비대칭이다.
 소유권은 파일 종류로 가르며(소스와 그 주석·docstring은 coder, 문서는 scribe), 코드+문서 동시
