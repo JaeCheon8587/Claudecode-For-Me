@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v3.37.0 · 커스텀 스킬 13종 + 슬래시 커맨드 17종 + 에이전트 16종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v3.41.0 · 커스텀 스킬 13종 + 슬래시 커맨드 17종 + 에이전트 16종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,12 +11,12 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `3.37.0` |
+| 버전 | `3.41.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
 | 네임스페이스 | `/claudecode-for-me:<name>` |
-| 구성요소 | Skill 13 · Command 17 · Agent 16 (`agents/`) · Python helper 8 (`scripts/`) |
+| 구성요소 | Skill 13 · Command 17 · Agent 16 (`agents/`) · Python helper 9 (`scripts/`) |
 | 외부 연동 도구 | [`codenavigator`](https://github.com/JaeCheon8587/codenavigator) (PyPI) — codenav-bootstrap / codenav-frontmatter-gen 슬래시가 호출 |
 
 플러그인은 **글로벌 캐시**에 설치되므로 한 번 설치 후 모든 프로젝트의 **새 세션**에서 자동 노출된다. 프로젝트별 재설치 불필요.
@@ -66,6 +66,43 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v3.41.0 — ext-scribe 역할 신설 + 에이전트 실행 실패(쿼터 소진) exit 6 분류
+
+외부 위임 하네스에 **ext-scribe**(기계적 문서 전용)를 추가했다. 배경은 실제 장애 하나 —
+"앱에 배선되지 않은 단독 HTML 보고서"는 rule 3에 따라 문서(scribe 전속)인데 ext 경로에는
+scout/coder만 있어서, 오케스트레이터가 쿼터 오프로드를 하려면 문서 미션을 ext-coder 프레임으로
+구부려야 했다. 이제 정식 경로가 생겼고, 동시에 그 우회로를 명문으로 막았다: **"기계적 바를
+넘지 못한 문서는 native scribe 미션이지, 재프레이밍한 ext-coder 미션이 아니다"**(rule 10).
+
+적격은 "모든 진술이 스펙에 명명된 기존 소스(리포트/파일)에서 전부 결정되는 문서"뿐 — 완성된
+리포트를 렌더한 단독 HTML 보고서가 이 경로가 존재하는 이유다. 규범 문서(SSOT/ADR/TASK/계약)와
+감사류 리포트는 native 고정 — 거기서는 scribe의 출처 규율 자체가 검증이기 때문이다. rule 3의
+파일 종류 소유권은 ext에도 그대로 적용(소스 파일은 ext-scribe 금지, 문서는 ext-coder 금지).
+리시트 필수 필드 STATUS/CHANGED/SPEC/SOURCES, 프리앰블 `scripts/ext_preambles/scribe.md` 신설,
+기본 timeout 900s / effort medium. **리시트 불신 원칙 확장**: SOURCES는 self-report이므로 수용 전
+claim→source 1건을 명명된 소스와 직접 대조해야 하고, 스팟체크 없는 ext-scribe 리시트는 HARD
+LIMIT 5의 완료 근거로 쓸 수 없다. git porcelain 스코프 대조(exit 4)는 coder와 동일 적용
+(`WRITE_ROLES`), scribe 계약상 오버플로 `<report>-sources.md`는 면제. rule 4의 "native coder
+only"는 위험 도메인 문서 변경이 native scribe 몫이 되므로 "native satellites only"로 정정.
+
+**exit 6 (EXIT_AGENT_ERROR) 신설**: codex가 실행되고 비정상 종료(rc != 0)하면서 리시트 마커가
+없는 경우 — 크레딧/쿼터 소진, 인증 실패, 크래시 — 종전에는 returncode가 분류에 전혀 쓰이지 않아
+exit 3(리시트 불량)으로 오분류됐고, 실패 사다리가 **죽은 크레딧 풀에 ext 재시도 1회를 낭비**한 뒤
+native로 폴백했다. 이제 exit 6으로 분류하고, stdout+stderr에서 쿼터 시그널("quota"/"usage limit"/
+"credit"/"rate limit"/"insufficient"/"429") 매칭 시 JSON 결과 라인에 `reason` 필드를 붙인다.
+사다리: exit 6 = exit 2와 같은 "이 태스크 동안 ext 봉인"(재시도 없음). rc==0 + 마커 부재는 여전히
+exit 3이고 유효 리시트가 있으면 rc와 무관하게 기존 흐름 — **기존 exit code 의미 불변**.
+텔레메트리 상태값에 `agent-error` 추가.
+
+**거짓 위반(exit 4) 버그 수정**: `git status --porcelain` 기본값은 새 디렉터리 전체가 untracked면
+파일이 아니라 디렉터리(`doc/`)로 접어 보고한다 — TARGET FILES(`doc/out.md`)와 절대 매칭되지 않아
+**새 디렉터리에 산출물을 만드는 정상 미션이 전부 SPEC 위반 처리**됐다(v3.40.0부터, coder 경로도
+동일). `-uall` 추가로 수정. 신규 테스트가 잡아낸 결함이다.
+
+**테스트**: `tests/test_ext_dispatch.py` 신설(10케이스) — scribe 정상/스코프 위반/sources 면제/
+필드 누락, rc!=0→exit 6, 쿼터 reason, rc==0→exit 3 회귀 가드, 리시트 우선 하위 호환,
+새 디렉터리 거짓 위반 회귀 가드, `--role scribe` CLI 스모크(프리앰블 존재 검증 겸함).
 
 ### v3.40.0 — 외부 에이전트 위임 하네스 ext_dispatch (위성 고도 scout/coder + N병렬 wave)
 

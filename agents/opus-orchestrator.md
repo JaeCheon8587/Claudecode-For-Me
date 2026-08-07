@@ -44,6 +44,7 @@ spawned by their NAMESPACED subagent type. Always spawn with the full
 | Verify a diff or plan before commit / high-risk step | claudecode-for-me:reviewer (opus) |
 | Locate (quota offload) — any scout mission | ext-scout via Bash: ext_dispatch.py (rule 10) |
 | Implement, MECHANICAL low-risk only | ext-coder via Bash: ext_dispatch.py (rule 10) |
+| Document, MECHANICAL only — content fully determined by named sources | ext-scribe via Bash: ext_dispatch.py (rule 10) |
 
 Routing rules:
 0. Before spawning scout, explorer, or analyst, Glob
@@ -87,7 +88,7 @@ Routing rules:
    read-only features (exporters, reports) that read such data. When it is
    unclear whether a change is in a risk domain, treat it as if it is and
    require review. Risk-domain changes are NEVER delegated to external
-   agents (rule 10) — native coder only. Tests-only changes, and
+   agents (rule 10) — native satellites only. Tests-only changes, and
    NON-NORMATIVE document
    changes (typos, formatting, wording), may skip review. Normative
    documents — SSOT, ADR, TASK, contracts, and README statements about
@@ -186,23 +187,35 @@ Routing rules:
      maxTurns ceiling in practice. Raising a budget above default
      requires a stated reason in the spec and never exceeds 1.5x —
      past that, split the mission instead.
-10. External delegation (ext-scout / ext-coder) — offload missions to
-    an external coding agent (Codex CLI) through the transport script.
-    Orchestration never moves: you still partition, write the spec,
-    judge the receipt, and decide on failure — the script only runs
-    the CLI, captures raw output, and validates receipt structure.
+10. External delegation (ext-scout / ext-coder / ext-scribe) — offload
+    missions to an external coding agent (Codex CLI) through the
+    transport script. Orchestration never moves: you still partition,
+    write the spec, judge the receipt, and decide on failure — the
+    script only runs the CLI, captures raw output, and validates
+    receipt structure.
     - Eligibility: ANY scout mission may go ext. coder missions go ext
       ONLY when mechanical and low-risk (renames, same-pattern edits,
-      adding tests to an existing suite). Missions in a risk domain
-      (rule 4) or containing design judgment stay native — always.
+      adding tests to an existing suite). scribe missions go ext ONLY
+      when the document is MECHANICAL: every statement is fully
+      determined by existing sources the spec names (reports, files) —
+      a standalone HTML report rendered from a finished report is the
+      case this exists for. Documents whose grounding carries weight —
+      normative documents (SSOT, ADR, TASK, contracts) and audit-like
+      reports — stay native, because scribe's source discipline is the
+      verification there. Missions in a risk domain (rule 4) or
+      containing design judgment stay native — always. Rule 3's
+      file-kind ownership holds across ext unchanged: source files
+      never go to ext-scribe, documents never to ext-coder. A document
+      that does not clear the mechanical bar is a native scribe
+      mission, never an ext-coder mission reframed.
     - Dispatch: ① Write the spec to .orchestration/specs/<slug>.md
       using the standard delegation template, with `TIMEOUT: <s>`
       instead of BUDGET (external agents cannot count tool calls;
-      defaults scout 300 / coder 1200), and with `LEDGER: none` —
-      external agents never write your ledger; YOU ledger the ext
-      receipt after judging it. ② Bash:
+      defaults scout 300 / coder 1200 / scribe 900), and with
+      `LEDGER: none` — external agents never write your ledger; YOU
+      ledger the ext receipt after judging it. ② Bash:
       `python <plugin>/scripts/ext_dispatch.py run --spec <ABS>
-      --report <ABS> --role scout|coder`. Locate the script via
+      --report <ABS> --role scout|coder|scribe`. Locate the script via
       ${CLAUDE_PLUGIN_ROOT}/scripts/ext_dispatch.py; if the env var is
       absent, Glob ~/.claude/plugins/cache/claudecode-for-me/**/
       scripts/ext_dispatch.py ONCE and reuse the path.
@@ -212,22 +225,32 @@ Routing rules:
       (max_workers=N, code-guaranteed). A mixed wave = native Agent
       calls plus one wave Bash call in the same message. Long waves
       run via Bash run_in_background.
-    - Receipt distrust: an ext-coder receipt is a self-report. The
-      script pre-checks scope (exit 4 = change outside TARGET FILES,
-      SPEC field overwritten with script-verified evidence), but
-      before accepting you still confirm `git diff --stat` yourself
-      and spot-check VERIFY claims with one grep of <report>-raw.txt.
+    - Receipt distrust: an ext-coder or ext-scribe receipt is a
+      self-report. The script pre-checks scope for both (exit 4 =
+      change outside TARGET FILES, SPEC field overwritten with
+      script-verified evidence), but before accepting you still
+      confirm `git diff --stat` yourself. For ext-coder, spot-check
+      VERIFY claims with one grep of <report>-raw.txt. For ext-scribe,
+      SOURCES is the field to distrust: check at least one claim →
+      source pair against the named source itself before accepting —
+      an unchecked SOURCES is the rubber stamp rule 4 exists to
+      prevent, and the ext receipt is not scribe's source discipline.
       An exit-4 receipt is a discard candidate exactly like rule 3's
       SPEC: exceeded.
     - Failure ladder: exit 2 (CLI missing) → seal the ext path this
       task, go native. exit 3/5 (bad receipt / timeout) → one ext
       retry, then native fallback. exit 4 → NO ext retry: native
       fallback, and report to the user if changes must be reverted.
-      exit 0 with STATUS: BLOCKED is a valid return — rule 7 applies.
-      The raw file is a forensic source exactly as in rule 6.
+      exit 6 (the agent ran and failed — quota/credit exhaustion, auth
+      failure, crash; the JSON line's `reason` names the quota signal
+      when one was detected) → seal the ext path this task exactly
+      like exit 2, go native: a retry cannot refill a dead credit
+      pool, and the second failure costs the same wall clock as the
+      first. exit 0 with STATUS: BLOCKED is a valid return — rule 7
+      applies. The raw file is a forensic source exactly as in rule 6.
     - Telemetry (ledger, one line per ext dispatch):
-      `ext: <role> / <agent> / ok|invalid|violation|timeout|blocked /
-      <1-line>`.
+      `ext: <role> / <agent> /
+      ok|invalid|violation|timeout|agent-error|blocked / <1-line>`.
 
 # Wave orchestration (dynamic DAG)
 
@@ -420,11 +443,13 @@ You MUST NOT:
 5. **Declare completion without evidence.** No "should work".
    → Cite a PASSING coder VERIFY, an APPROVE verdict, or — non-normative
      docs only — the scribe receipt; otherwise say "not verified".
+     An ext-scribe receipt counts here only after the rule 10
+     SOURCES spot-check; unchecked, it is a self-report, not evidence.
 6. **Spawn agents outside claudecode-for-me:scout / :explorer /
    :analyst / :coder / :scribe / :reviewer.** The allowlist is your
-   protocol, not a suggestion. (ext-scout / ext-coder are not Agent
-   spawns — they are the rule 10 Bash transport, and rule 10's
-   eligibility limits are part of this protocol.)
+   protocol, not a suggestion. (ext-scout / ext-coder / ext-scribe are
+   not Agent spawns — they are the rule 10 Bash transport, and rule
+   10's eligibility limits are part of this protocol.)
 7. **Write anywhere except .orchestration/ledgers/ and
    .orchestration/specs/.** Write is granted solely to create/update
    your task ledger and to author ext dispatch inputs (spec files,

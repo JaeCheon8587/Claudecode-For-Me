@@ -3,12 +3,12 @@
 
 오케스트레이션은 하지 않는다. 전송 계층만 담당한다:
 스펙 파일 + 역할 프리앰블 → 외부 CLI 실행 → raw 캡처 → 리시트 추출·구조 검증
-→ (coder) git diff 대조 → stdout 리시트 + 마지막 줄 JSON.
+→ (coder/scribe) git diff 대조 → stdout 리시트 + 마지막 줄 JSON.
 
 판단(재시도·폴백·수용·폐기)은 전부 호출한 오케스트레이터의 몫이다.
 
 Subcommands:
-    run   --spec <ABS> --report <ABS> --role scout|coder [옵션]   단일 위임
+    run   --spec <ABS> --report <ABS> --role scout|coder|scribe   단일 위임
     wave  --manifest <ABS json> [--dry-run]                       N개 병렬 보장
 
 wave 는 manifest 의 모든 job 을 ThreadPoolExecutor(max_workers=N) 로
@@ -21,6 +21,7 @@ Exit codes:
     3  리시트 추출·구조 검증 실패
     4  SPEC 위반 (TARGET FILES 밖 변경 — script-verified)
     5  타임아웃
+    6  에이전트 실행 실패 (rc != 0 + 리시트 마커 없음 — 쿼터/크레딧 소진 포함)
 """
 
 # Encoding bootstrap — FIRST executable code (Windows cp949 콘솔 회피)
@@ -44,6 +45,7 @@ EXIT_NO_AGENT = 2
 EXIT_BAD_RECEIPT = 3
 EXIT_SPEC_VIOLATION = 4
 EXIT_TIMEOUT = 5
+EXIT_AGENT_ERROR = 6
 
 RECEIPT_MARKER = "## RECEIPT"
 RECEIPT_MAX_LINES = 30
@@ -51,13 +53,22 @@ RECEIPT_MAX_LINES = 30
 REQUIRED_FIELDS = {
     "scout": ("FOUND", "SEARCHED", "CONFIDENCE"),
     "coder": ("STATUS", "CHANGED", "SPEC", "VERIFY"),
+    "scribe": ("STATUS", "CHANGED", "SPEC", "SOURCES"),
 }
 
 DEFAULTS = {
     "scout": {"timeout": 300, "effort": "medium"},
     "coder": {"timeout": 1200, "effort": "high"},
+    "scribe": {"timeout": 900, "effort": "medium"},
 }
 DEFAULT_MODEL = "gpt-5.5"
+
+# 작업 트리를 수정하는 역할 — 실행 전후 porcelain 대조 대상.
+WRITE_ROLES = frozenset({"coder", "scribe"})
+
+# rc != 0 + 리시트 부재일 때만 스캔하는 원인 추정 시그널 (소문자 부분 매칭).
+QUOTA_SIGNALS = ("quota", "usage limit", "credit", "rate limit",
+                 "insufficient", "429")
 
 PREAMBLE_DIR = Path(__file__).resolve().parent / "ext_preambles"
 
@@ -103,6 +114,11 @@ def _raw_path(report: Path) -> Path:
     return report.with_name(report.stem + "-raw.txt")
 
 
+def _sources_path(report: Path) -> Path:
+    """scribe 계약상 SOURCES 오버플로 side file (스코프 대조 면제 대상)."""
+    return report.with_name(report.stem + "-sources.md")
+
+
 def _load_prompt(spec_path: Path, role: str) -> str:
     preamble_path = PREAMBLE_DIR / f"{role}.md"
     if not preamble_path.is_file():
@@ -139,11 +155,25 @@ def _validate_fields(receipt: str, role: str):
     return missing
 
 
+def _detect_quota_signal(text: str):
+    """쿼터/크레딧 계열 시그널 탐지. 매칭 문자열 or None (원인 표기용)."""
+    lowered = text.lower()
+    for sig in QUOTA_SIGNALS:
+        if sig in lowered:
+            return sig
+    return None
+
+
 def _git_porcelain(repo: str):
     # core.quotepath=false: 비ASCII(한글) 경로가 8진 이스케이프로 인용되면
     # TARGET FILES 대조가 항상 어긋나 거짓 위반(exit 4)을 만든다.
+    # -uall: 새 디렉터리 전체가 untracked 면 porcelain 기본값은 파일이 아니라
+    # 디렉터리("doc/")로 접어 보고한다 — TARGET FILES("doc/out.md")와 절대
+    # 매칭되지 않아, 새 디렉터리에 산출물을 만드는 정상 미션이 전부 거짓
+    # 위반(exit 4)이 된다.
     proc = subprocess.run(
-        ["git", "-c", "core.quotepath=false", "status", "--porcelain"],
+        ["git", "-c", "core.quotepath=false", "status", "--porcelain",
+         "-uall"],
         capture_output=True, text=True,
         encoding="utf-8", errors="replace", cwd=repo,
     )
@@ -260,7 +290,7 @@ def _execute_job(job: dict, dry_run: bool) -> dict:
     result = {"status": "error", "exit": EXIT_ERR, "role": role,
               "agent": agent, "spec": str(spec_path),
               "report": str(report_path), "raw": str(raw_path),
-              "receipt": None}
+              "receipt": None, "reason": None}
 
     if role not in REQUIRED_FIELDS:
         result["status"] = f"unknown role: {role}"
@@ -290,7 +320,7 @@ def _execute_job(job: dict, dry_run: bool) -> dict:
         result.update(status="dry-run", exit=EXIT_OK)
         return result
 
-    pre_snapshot = _git_porcelain(str(repo)) if role == "coder" else None
+    pre_snapshot = _git_porcelain(str(repo)) if role in WRITE_ROLES else None
 
     try:
         out, err, rc = INVOKERS[agent](prompt, model, effort, timeout,
@@ -320,6 +350,18 @@ def _execute_job(job: dict, dry_run: bool) -> dict:
     # 리시트는 stdout 에서만 추출 — stderr 가 뒤에 붙으면 추출 창이 오염됨
     receipt = _extract_receipt(out)
     if receipt is None:
+        if rc != 0:
+            # CLI 는 돌았지만 비정상 종료 + 리시트 부재 = 에이전트 실행 실패
+            # (쿼터 소진·인증 실패·크래시). 리시트 불량(3)으로 분류하면
+            # 오케스트레이터가 죽은 크레딧 풀에 재시도 1회를 낭비한다.
+            signal = _detect_quota_signal(out + "\n" + err)
+            if signal:
+                result["reason"] = f"quota-signal: {signal}"
+            result.update(
+                status=f"agent-error: exit {rc}"
+                       + (f" ({signal})" if signal else ""),
+                exit=EXIT_AGENT_ERROR)
+            return result
         result.update(status="invalid: RECEIPT marker missing",
                       exit=EXIT_BAD_RECEIPT)
         return result
@@ -332,11 +374,12 @@ def _execute_job(job: dict, dry_run: bool) -> dict:
 
     exit_code = EXIT_OK
     status = "ok"
-    if role == "coder" and pre_snapshot is not None:
+    if role in WRITE_ROLES and pre_snapshot is not None:
         post_snapshot = _git_porcelain(str(repo))
         if post_snapshot is not None:
             spec_text = spec_path.read_text(encoding="utf-8")
-            exempt = [report_path, raw_path, spec_path]
+            exempt = [report_path, raw_path, spec_path,
+                      _sources_path(report_path)]
             ledger = _parse_field_value(spec_text, "LEDGER")
             if ledger:  # 스펙이 LEDGER 를 지시했다면 그 기록은 위반이 아님
                 exempt.append(Path(ledger))
@@ -347,7 +390,7 @@ def _execute_job(job: dict, dry_run: bool) -> dict:
                 receipt = _override_spec_field(receipt, violations)
                 status = f"violation: {', '.join(violations)}"
                 exit_code = EXIT_SPEC_VIOLATION
-    elif role == "coder" and pre_snapshot is None:
+    elif role in WRITE_ROLES and pre_snapshot is None:
         status = "ok (git unavailable — SPEC not script-verified)"
 
     report_path.parent.mkdir(parents=True, exist_ok=True)
@@ -375,7 +418,8 @@ def cmd_run(args) -> int:
     if res["receipt"]:
         print(res["receipt"])
     summary = {k: res[k] for k in
-               ("status", "exit", "role", "agent", "spec", "report", "raw")}
+               ("status", "exit", "role", "agent", "spec", "report", "raw",
+                "reason")}
     print(json.dumps(summary, ensure_ascii=False))
     return res["exit"]
 
@@ -410,7 +454,8 @@ def cmd_wave(args) -> int:
     summary = {
         "status": "ok" if ok else "partial",
         "jobs": [{k: r[k] for k in
-                  ("status", "exit", "role", "agent", "spec", "report", "raw")}
+                  ("status", "exit", "role", "agent", "spec", "report", "raw",
+                   "reason")}
                  for r in results],
     }
     print()
