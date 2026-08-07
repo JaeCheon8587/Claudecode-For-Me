@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v3.41.0 · 커스텀 스킬 13종 + 슬래시 커맨드 17종 + 에이전트 16종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v3.41.0 · 커스텀 스킬 14종 + 슬래시 커맨드 18종 + 에이전트 16종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -16,7 +16,7 @@
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
 | 네임스페이스 | `/claudecode-for-me:<name>` |
-| 구성요소 | Skill 13 · Command 17 · Agent 16 (`agents/`) · Python helper 9 (`scripts/`) |
+| 구성요소 | Skill 14 · Command 18 · Agent 16 (`agents/`) · Python helper 9 (`scripts/`) |
 | 외부 연동 도구 | [`codenavigator`](https://github.com/JaeCheon8587/codenavigator) (PyPI) — codenav-bootstrap / codenav-frontmatter-gen 슬래시가 호출 |
 
 플러그인은 **글로벌 캐시**에 설치되므로 한 번 설치 후 모든 프로젝트의 **새 세션**에서 자동 노출된다. 프로젝트별 재설치 불필요.
