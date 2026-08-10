@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v3.44.0 · 커스텀 스킬 14종 + 슬래시 커맨드 18종 + 에이전트 16종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v3.45.0 · 커스텀 스킬 14종 + 슬래시 커맨드 18종 + 에이전트 17종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,12 +11,12 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `3.44.0` |
+| 버전 | `3.45.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
 | 네임스페이스 | `/claudecode-for-me:<name>` |
-| 구성요소 | Skill 14 · Command 18 · Agent 16 (`agents/`) · Python helper 9 (`scripts/`) |
+| 구성요소 | Skill 14 · Command 18 · Agent 17 (`agents/`) · Python helper 9 (`scripts/`) |
 | 외부 연동 도구 | [`codenavigator`](https://github.com/JaeCheon8587/codenavigator) (PyPI) — codenav-bootstrap / codenav-frontmatter-gen 슬래시가 호출 |
 
 플러그인은 **글로벌 캐시**에 설치되므로 한 번 설치 후 모든 프로젝트의 **새 세션**에서 자동 노출된다. 프로젝트별 재설치 불필요.
@@ -66,6 +66,57 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v3.45.0 — 뇌/손 분리: ext-explorer 신설 · ext-scribe 폐지 · JUDGMENT-FREE 게이트 · reviewer 티어링
+
+v3.43.0이 ext-first를 기본값으로 만들었지만, **정작 무엇을 내보내는지가 절약 목표와 반대로
+서 있었다.** 위성별 실측 무게는 coder 184~224k · explorer 110~140k(v3.39.0 사망 기록) 대
+scout BUDGET 6콜인데, 라우팅은 제일 싼 scout을 전량 내보내고 제일 비싼 coder·explorer·
+reviewer를 전부 native에 붙잡고 있었다. 게다가 적격 조건("기계적·저위험")은 v3.40.0에
+gpt-5.5 기준으로 쓰인 뒤, v3.42.0의 모델 교체(크레딧 소진에 의한 **강제** 이전)에도
+v3.43.0의 기본값 반전에도 재조정되지 않아 **어느 모델에도 맞춰져 있지 않았다.**
+
+**원칙**: 분할선을 에이전트가 아니라 **노동/판단**에 긋는다. 외부는 약하지만 별도 지갑이다 —
+읽기와 타이핑은 내보내고, 결정·종합·평결은 남긴다. 판단을 내보내면 그 검증이 다시 native
+위성을 요구해 절약이 상쇄되기 때문이다(이것이 ext 행이 멈추는 지점의 유일한 근거다).
+
+**ext-explorer 신설**: native explorer 리턴 필드 중 노동(`KEY FACTS`/`COVERAGE`)만 물려받고
+판단(`ANSWER`/`MAP`/`RISKS`)은 제거한 축소 계약. 역할 id를 native와 **같은 `explorer`로**
+맞춘 이유는 rule 10 폴백이 "같은 역할의 native 위성"으로 정의돼 있어서다 — 새 이름은 폴백
+대상이 정의되지 않는다. 시작점 필수 게이트(무경계 미션 7런 전멸 기록)를 프리앰블에 상속.
+상세는 `<report>-facts.md`에 쓴다 — 스크립트가 REPORT를 리시트로 무조건 덮어쓰기 때문.
+`native explorer`는 축소하지 않고 **입력 모드 2개**(facts 공급 / 미공급)로 확장했다: 폴백
+경로가 전체 미션을 수행해야 하므로 계약 축소는 폴백을 깨뜨린다.
+
+**ext-scribe 폐지**: 문서는 예외 없이 native scribe(opus). scribe의 출처 규율 자체가 그
+검증이라 외부 자기신고로 대체 불가. `_sources_path`(SOURCES 오버플로 면제)도 동반 제거.
+
+**JUDGMENT-FREE 스펙 게이트**: coder 적격을 미션 속성("기계적이냐")이 아니라 **스펙 속성**으로
+옮겼다. ①편집 지점 file:line 고정 ②시그니처/타입 축자 기재 ③알고리즘 단계 또는 참조 구현
+file:line ④VERIFY 단일 명령·이진 판정 — 넷 다 쓸 수 있으면 적격. 못 쓰면 결정이 남은 것이니
+결정을 내리면 적격이 된다. 판단은 여전히 오케스트레이터가 하되 산출물이 **구현 코드가 아니라
+스펙**이 되므로, 판단당 비용이 184k에서 수 k로 내려간다. **위험 도메인은 이 게이트의 입력이
+아니다** — v3.44.0이 주제 기반 판정을 라우팅에서 제거했고, 이 버전은 그 자리에 들어갈 판정
+기준을 스펙 속성으로 구체화한다. auth·payment·crypto 파일이라도 스펙이 넷을 다 채우면 ext로
+나가고, 안전은 rule 4의 opus reviewer 의무가 담보한다. 도메인이 바꾸는 것은 라우팅이 아니라
+검증 강도다: 그 결정이 딛는 사실은 표본이 아니라 **전건** 스팟체크를 요구한다.
+
+**reviewer 티어링**: rule 4가 커밋마다 강제하는 opus reviewer가 최빈 opus 소비원이었다.
+`reviewer-lite`(sonnet) 신설 — 스펙 대조·VERIFY raw 확인·호출처 점검만. 위험 도메인·설계
+판단·규범 문서를 발견하면 검토를 중단하고 `VERDICT: ESCALATE`로 상위 티어에 넘긴다(평결이
+아니므로 rule 5의 2라운드 한도에 계상하지 않는다). 애매하면 opus.
+
+**부수 수정**: `DEFAULTS[role]` 조회가 `unknown role` 가드보다 먼저 실행돼 미등록 역할이
+KeyError로 크래시하던 경로 — wave에서 job 하나가 나머지 결과까지 삼켰다. 검증 순서 교정.
+리시트는 `RECEIPT_MAX_LINES=30` 절단이 필드 검증보다 **먼저** 일어나므로, 프리앰블이 필드
+순서를 계약으로 못박는다(짧은 필수 필드 먼저, 가변 길이 `KEY FACTS` 마지막). 양방향 회귀
+테스트 2건으로 고정. 렛저 텔레메트리에 `native:` 라인 신설 — `ext:`와 쌍을 이뤄야 분할이
+실제로 예산을 옮겼는지 사후 측정이 가능하다(이번 캘리브레이션 지연의 재발 방지).
+
+**검증**: glm-5.2 실측 재스모크(wave 2-job) — 폴백 0/2, 리시트 유효 2/2, 스팟체크 **14/14
+라인 정확 일치**(기준선 gpt-5.5 스모크 5/5 이상), 워킹트리 대조 결과 범위 밖 쓰기 0건.
+`tests/test_ext_dispatch.py` 18케이스 통과. 실측·한계·미해결은
+`.orchestration/ledgers/20260808-ext-rebalance.md`.
 
 ### v3.44.0 — risk domain을 위임 기준에서 제외: ext 적격성은 "판단 유무"로만 판정
 
@@ -886,21 +937,24 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `fable-orchestrator` | fable / high | 메인 오케스트레이터. 판단·결정만 하고 컨텍스트를 먹는 작업은 전부 위성에 위임 |
 | `opus-orchestrator` | opus / max | 위와 **본문 동일**(sha256 일치), frontmatter 4줄만 상이한 병렬 변종 |
 | `scout` | sonnet / low | 파일·심볼·호출부·테스트 위치 탐색. read-only. 위치만 반환하고 의견 금지. **v3.43.0부터 ext-scout 실패 시의 폴백 경로** — 탐색 미션의 기본값은 ext다 |
-| `explorer` | sonnet / high | 코드 흐름·아키텍처·의미 파악. 상세는 리포트 파일로, 리턴은 압축 맵 |
+| `explorer` | sonnet / high | 코드 흐름·아키텍처·의미 파악. 상세는 리포트 파일로, 리턴은 압축 맵. **v3.45.0부터 입력 모드 2개** — ext-explorer facts 공급 시 종합만, 미공급 시 수집+종합(폴백 경로) |
 | `analyst` | opus / xhigh | 온디맨드 판단. 트레이드오프 분석·리포트 적대 감사·root-cause 추적. 옵션만 반환하고 결정 금지 |
 | `coder` | sonnet / max | **코드** 구현. 소스 편집·신규 코드·테스트. `VERIFY` 리시트 반환 |
 | `scribe` | opus / high | **문서** 작성. 규범적 주장마다 근거 필수(`SOURCES`/`UNSOURCED`/`CONFLICTS`) |
 | `reviewer` | opus / high | fresh-context 검증자. 커밋·고위험 단계 전 diff/계획 판정 + 규범 문서의 인용 소스 대조. read-only, 조언 아닌 판정 |
+| `reviewer-lite` | sonnet / high | **v3.45.0 신설**. 모든 hunk가 스펙에 받아쓰기된 diff 전용 — 스펙 대조·VERIFY raw 확인·호출부 점검. 티어 밖(위험 도메인·설계 판단·규범 문서)을 발견하면 `VERDICT: ESCALATE`로 opus reviewer에 이관 |
 
-**외부 위임 3종(ext-scout / ext-coder / ext-scribe)은 이 표에 없다** — Agent 스폰이 아니라
+**외부 위임 3종(ext-scout / ext-explorer / ext-coder)은 이 표에 없다** — Agent 스폰이 아니라
 `scripts/ext_dispatch.py`를 통한 Bash 전송이기 때문이다(모델 `zai/glm-5.2` / effort max,
 v3.42.0). v3.43.0부터 **적격 미션의 기본값은 ext**이고 native 위성은 폴백이다: 모든 탐색 미션은
-ext-scout, 기계적 구현(rename·동일 패턴 편집·타입/시그니처 정합·기존 스위트 테스트 추가)은
-ext-coder, 명명된 소스로 내용이 전부 결정되는 문서는 ext-scribe. 설계 판단·규범 문서·감사
-리포트, 그리고 ext 대응물이 없는 `explorer`/`analyst`/`reviewer`는 native 고정이다.
-**v3.44.0부터 위험 도메인은 위임 기준이 아니다** — auth·결제·크립토 파일이라도 변경이 기계적이면
-ext로 가고, 판단이 든 변경만 native에 남는다(리뷰 의무 rule 4는 그대로 유지). 상세는
-rule 10과 v3.44.0 체인지로그 참조.
+ext-scout, 명명된 시작점에서 `path:line` 사실을 수집하는 모든 fact-harvest는 ext-explorer,
+스펙이 판단을 남기지 않는 구현(JUDGMENT-FREE 게이트, v3.45.0)은 ext-coder. 설계 판단, **모든**
+문서(ext-scribe는 v3.45.0에서 폐지), 그리고 ext 대응물이 없는 종합·`analyst`·`reviewer`는
+native 고정이다.
+**v3.44.0부터 위험 도메인은 위임 기준이 아니다** — auth·결제·크립토 파일이라도 스펙이
+JUDGMENT-FREE 게이트를 통과하면 ext로 가고, 판단이 남은 변경만 native에 남는다(리뷰 의무
+rule 4는 그대로 유지, 위험 도메인은 opus reviewer 티어 고정). 상세는 rule 10과 v3.44.0 /
+v3.45.0 체인지로그 참조.
 
 `coder`/`scribe` 분리 근거는 **코드에는 기계적 오라클(VERIFY)이 있고 산문에는 없다**는 비대칭이다.
 소유권은 파일 종류로 가르며(소스와 그 주석·docstring은 coder, 문서는 scribe), 코드+문서 동시

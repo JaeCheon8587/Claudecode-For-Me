@@ -3,13 +3,17 @@
 
 오케스트레이션은 하지 않는다. 전송 계층만 담당한다:
 스펙 파일 + 역할 프리앰블 → 외부 CLI 실행 → raw 캡처 → 리시트 추출·구조 검증
-→ (coder/scribe) git diff 대조 → stdout 리시트 + 마지막 줄 JSON.
+→ (coder) git diff 대조 → stdout 리시트 + 마지막 줄 JSON.
 
 판단(재시도·폴백·수용·폐기)은 전부 호출한 오케스트레이터의 몫이다.
 
+역할은 전부 "노동" 계약이다 — 위치(scout) / 사실(explorer) / 타이핑(coder).
+종합·판정·문서 저작은 외부로 내리지 않는다: 판단을 외부에 맡기면 그 검증이
+다시 내부 모델의 읽기를 요구해 절약이 상쇄된다.
+
 Subcommands:
-    run   --spec <ABS> --report <ABS> --role scout|coder|scribe   단일 위임
-    wave  --manifest <ABS json> [--dry-run]                       N개 병렬 보장
+    run   --spec <ABS> --report <ABS> --role scout|explorer|coder  단일 위임
+    wave  --manifest <ABS json> [--dry-run]                        N개 병렬 보장
 
 wave 는 manifest 의 모든 job 을 ThreadPoolExecutor(max_workers=N) 로
 동시 기동한다 — 큐잉 없음. N개 병렬 실행은 코드가 보장한다.
@@ -52,14 +56,16 @@ RECEIPT_MAX_LINES = 30
 
 REQUIRED_FIELDS = {
     "scout": ("FOUND", "SEARCHED", "CONFIDENCE"),
+    # explorer 는 native explorer 의 "노동" 필드만 물려받은 축소 계약이다.
+    # 판단 필드(ANSWER/MAP/RISKS)는 요구하지 않는다 — 프리앰블이 금지한다.
+    "explorer": ("KEY FACTS", "COVERAGE", "CONFIDENCE"),
     "coder": ("STATUS", "CHANGED", "SPEC", "VERIFY"),
-    "scribe": ("STATUS", "CHANGED", "SPEC", "SOURCES"),
 }
 
 DEFAULTS = {
     "scout": {"timeout": 300, "effort": "max"},
+    "explorer": {"timeout": 600, "effort": "max"},
     "coder": {"timeout": 1200, "effort": "max"},
-    "scribe": {"timeout": 900, "effort": "max"},
 }
 # gpt-5.5 는 릴레이의 openai 크레딧 풀 소진으로 항상 즉사한다
 # ("Your workspace is out of credits" → rc 1 → exit 6, 미션 적격성 무관).
@@ -67,7 +73,8 @@ DEFAULTS = {
 DEFAULT_MODEL = "zai/glm-5.2"
 
 # 작업 트리를 수정하는 역할 — 실행 전후 porcelain 대조 대상.
-WRITE_ROLES = frozenset({"coder", "scribe"})
+# scout/explorer 는 읽기 전용이라 대조를 생략한다.
+WRITE_ROLES = frozenset({"coder"})
 
 # rc != 0 + 리시트 부재일 때만 스캔하는 원인 추정 시그널 (소문자 부분 매칭).
 QUOTA_SIGNALS = ("quota", "usage limit", "credit", "rate limit",
@@ -115,11 +122,6 @@ INVOKERS = {"codex": _invoke_codex}  # 확장점: 실행기 추가 = 함수 1개
 
 def _raw_path(report: Path) -> Path:
     return report.with_name(report.stem + "-raw.txt")
-
-
-def _sources_path(report: Path) -> Path:
-    """scribe 계약상 SOURCES 오버플로 side file (스코프 대조 면제 대상)."""
-    return report.with_name(report.stem + "-sources.md")
 
 
 def _load_prompt(spec_path: Path, role: str) -> str:
@@ -286,18 +288,22 @@ def _execute_job(job: dict, dry_run: bool) -> dict:
     report_path = Path(job["report"])
     raw_path = _raw_path(report_path)
     repo = Path(job.get("repo") or Path.cwd())
-    model = job.get("model", DEFAULT_MODEL)
-    effort = job.get("effort", DEFAULTS[role]["effort"])
-    timeout = int(job.get("timeout", DEFAULTS[role]["timeout"]))
 
     result = {"status": "error", "exit": EXIT_ERR, "role": role,
               "agent": agent, "spec": str(spec_path),
               "report": str(report_path), "raw": str(raw_path),
               "receipt": None, "reason": None}
 
+    # 역할 검증이 DEFAULTS 조회보다 먼저다 — 순서가 뒤집히면 미등록 역할이
+    # KeyError 로 터져, wave 에서 job 하나가 나머지 결과까지 삼킨다.
     if role not in REQUIRED_FIELDS:
         result["status"] = f"unknown role: {role}"
         return result
+
+    model = job.get("model", DEFAULT_MODEL)
+    effort = job.get("effort", DEFAULTS[role]["effort"])
+    timeout = int(job.get("timeout", DEFAULTS[role]["timeout"]))
+
     if agent not in INVOKERS:
         result["status"] = f"unknown agent: {agent}"
         result["exit"] = EXIT_NO_AGENT
@@ -381,8 +387,7 @@ def _execute_job(job: dict, dry_run: bool) -> dict:
         post_snapshot = _git_porcelain(str(repo))
         if post_snapshot is not None:
             spec_text = spec_path.read_text(encoding="utf-8")
-            exempt = [report_path, raw_path, spec_path,
-                      _sources_path(report_path)]
+            exempt = [report_path, raw_path, spec_path]
             ledger = _parse_field_value(spec_text, "LEDGER")
             if ledger:  # 스펙이 LEDGER 를 지시했다면 그 기록은 위반이 아님
                 exempt.append(Path(ledger))

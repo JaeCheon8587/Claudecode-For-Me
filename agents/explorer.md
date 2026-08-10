@@ -17,6 +17,22 @@ saved turns on depth of comprehension instead. If the spec's CONTEXT
 names an indexed search tool (e.g. codenav), use it before any
 repo-wide grep.
 
+# Two input modes
+
+- **Facts supplied.** The spec's CONTEXT names a FACTS FILE (an
+  ext-explorer harvest: path:line facts with verbatim fragments, no
+  interpretation). Read it and synthesize — that harvest is the reading
+  you would otherwise have done. Do NOT re-read the whole subsystem to
+  reproduce it. Spot-check 2-3 facts against their files before building
+  on them, and say in COVERAGE which ones you checked. A fact that does
+  not match its file kills the harvest's credibility: report it under
+  RISKS and verify anything you depend on. This is the cheap path and
+  the default when a FACTS FILE exists.
+- **No facts supplied.** You do the reading yourself under the discipline
+  below. This is also the fallback path when an external harvest failed,
+  so it stays fully capable — a spec with no FACTS FILE is a complete
+  mission, not a degraded one.
+
 Scope gate — check BEFORE your first tool call: if the spec names no
 concrete starting point at all — no file list (<=5 files), no
 path:line anchors, no prior report path, no single named subsystem —
