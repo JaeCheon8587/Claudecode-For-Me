@@ -32,6 +32,25 @@ EXPLORER_RECEIPT = (
 )
 
 
+SCOUT_RECEIPT = (
+    "looked around\n\n"
+    "## RECEIPT\n"
+    "FOUND:\n"
+    '- src/a.py:10 [definition] - "def handle():"\n'
+    '- src/b.py:22 [usage] - "handle()"\n'
+    "RELATED:\n"
+    '- src/a.py:3 - "from .x import handle"\n'
+    "SEARCHED: rg handle across src/\n"
+    "UNCERTAIN: none\n"
+    "CONFIDENCE: high - both sites opened\n"
+)
+
+
+def receipt_body(raw: str) -> str:
+    """리시트 마커 이후 본문 — _control_summary 단위 테스트 입력."""
+    return raw.split("## RECEIPT", 1)[1].strip()
+
+
 def run_git(repo: Path, *args: str) -> subprocess.CompletedProcess:
     return subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True, text=True)
 
@@ -55,6 +74,18 @@ def git_repo(tmp_path: Path) -> Path:
     run_git(tmp_path, "add", "README.md")
     run_git(tmp_path, "commit", "-q", "-m", "initial")
     return tmp_path
+
+
+def make_mission_job(repo: Path, role: str = "scout", **extra) -> dict:
+    job = {
+        "report": str(repo / "out" / "report.md"),
+        "role": role,
+        "agent": "codex",
+        "repo": str(repo),
+        "mission": "find every call site of handle()",
+    }
+    job.update(extra)
+    return job
 
 
 def make_job(repo: Path, role: str = "coder") -> dict:
@@ -294,3 +325,214 @@ def test_cli_rejects_removed_scribe_role(tmp_path):
     )
     assert proc.returncode != 0
     assert "invalid choice" in proc.stderr
+
+
+# ------------------------------------------------- stdout 화물 분리 (요약)
+
+def test_scout_summary_folds_cargo_into_counts(ext):
+    """FOUND/RELATED 의 path:line 목록은 건수로 접히고 제어 필드는 원문 유지."""
+    out = ext._control_summary("scout", receipt_body(SCOUT_RECEIPT))
+    assert "src/a.py:10" not in out and "src/b.py:22" not in out
+    assert "FOUND: 2 across 2 files" in out
+    assert "RELATED: 1 across 1 file" in out
+    assert "SEARCHED: rg handle across src/" in out
+    assert "CONFIDENCE: high - both sites opened" in out
+    assert "UNCERTAIN: none" in out
+
+
+def test_explorer_summary_folds_key_facts(ext):
+    out = ext._control_summary("explorer", receipt_body(EXPLORER_RECEIPT))
+    assert "doc/out.md:1" not in out
+    assert "KEY FACTS: 1 across 1 file" in out
+    assert "FACTS FILE: out/report-facts.md" in out
+    assert "STATUS: OK" in out
+
+
+def test_coder_is_never_summarized(ext):
+    """coder 리시트는 전부 제어 필드 — VERIFY/SPEC 판정이 호출측 몫이라 접지 않는다."""
+    assert ext._control_summary("coder", receipt_body(CODER_RECEIPT)) is None
+
+
+def test_summary_falls_back_when_shape_is_unknown(ext):
+    """제어 필드를 하나도 못 찾으면 None → 호출측이 전문 출력. 정보 무손실 우선."""
+    assert ext._control_summary("scout", "totally unexpected prose\n") is None
+
+
+def test_summary_preserves_truncation_marker(ext):
+    receipt = receipt_body(SCOUT_RECEIPT) + \
+        "\n[ext] (receipt truncated to 30 lines)"
+    out = ext._control_summary("scout", receipt)
+    assert "(receipt truncated to 30 lines)" in out
+
+
+def test_summary_keeps_aggregate_inline_value(ext):
+    """8건 초과 집계 모드: 에이전트가 쓴 요약 문장을 살리고 줄 수만 덧붙인다."""
+    receipt = (
+        "FOUND: 42 usages across 6 files\n"
+        '- src/a.py:1 [usage] - "handle()"\n'
+        '- src/b.py:2 [usage] - "handle()"\n'
+        "SEARCHED: rg handle\n"
+        "CONFIDENCE: medium - aggregated per file\n"
+    )
+    out = ext._control_summary("scout", receipt)
+    assert "FOUND: 42 usages across 6 files [2 lines]" in out
+
+
+def test_print_receipt_summarizes_scout_success(ext, capsys):
+    res = {"receipt": receipt_body(SCOUT_RECEIPT), "exit": ext.EXIT_OK,
+           "role": "scout", "status": "ok", "report": "/x/out/report.md"}
+    ext._print_receipt(res, full=False)
+    out = capsys.readouterr().out
+    assert "src/a.py:10" not in out
+    assert "FOUND: 2 across 2 files" in out
+    assert "data: /x/out/report.md" in out
+
+
+def test_print_receipt_full_on_failure(ext, capsys):
+    """실패는 항상 전문 — 진단에는 화물까지 필요하다."""
+    res = {"receipt": receipt_body(SCOUT_RECEIPT),
+           "exit": ext.EXIT_BAD_RECEIPT, "role": "scout",
+           "status": "invalid: fields missing CONFIDENCE",
+           "report": "/x/out/report.md"}
+    ext._print_receipt(res, full=False)
+    assert "src/a.py:10" in capsys.readouterr().out
+
+
+def test_print_receipt_full_flag_restores_cargo(ext, capsys):
+    res = {"receipt": receipt_body(SCOUT_RECEIPT), "exit": ext.EXIT_OK,
+           "role": "scout", "status": "ok", "report": "/x/out/report.md"}
+    ext._print_receipt(res, full=True)
+    assert "src/a.py:10" in capsys.readouterr().out
+
+
+def test_report_file_always_keeps_full_receipt(ext, git_repo):
+    """요약은 stdout 전용 — REPORT 파일에는 화물이 전문으로 남아야 한다."""
+    ext.INVOKERS["codex"] = fake(SCOUT_RECEIPT)
+    res = ext._execute_job(make_job(git_repo, role="scout"), False)
+    assert res["exit"] == ext.EXIT_OK, res["status"]
+    written = Path(res["report"]).read_text(encoding="utf-8")
+    assert "src/a.py:10" in written and "src/b.py:22" in written
+
+
+# ------------------------------------------------- 인라인 미션 모드
+
+def test_inline_mission_synthesizes_spec_file(ext, git_repo):
+    res = ext._execute_job(make_mission_job(git_repo), True)
+    assert res["exit"] == ext.EXIT_OK, res["status"]
+    spec_path = Path(res["spec"])
+    assert spec_path.name == "report-spec.md"
+    text = spec_path.read_text(encoding="utf-8")
+    assert "TASK: find every call site of handle()" in text
+    assert "TIMEOUT: 300" in text and "LEDGER: none" in text
+    assert f"REPORT: {res['report']}" in text
+    assert "CONTEXT:" not in text  # --context 미지정 시 생략
+
+
+def test_inline_mission_return_uses_full_contract(ext, git_repo):
+    """RETURN 은 프리앰블 계약 전체 — REQUIRED_FIELDS(부분집합)를 쓰면 안 된다."""
+    res = ext._execute_job(make_mission_job(git_repo), True)
+    text = Path(res["spec"]).read_text(encoding="utf-8")
+    assert "RETURN: FOUND / RELATED / SEARCHED / UNCERTAIN / CONFIDENCE" in text
+
+
+def test_inline_mission_includes_context_when_given(ext, git_repo):
+    res = ext._execute_job(
+        make_mission_job(git_repo, role="explorer", context="src/a.py:10"),
+        True)
+    assert "CONTEXT: src/a.py:10" in Path(res["spec"]).read_text(
+        encoding="utf-8")
+
+
+def test_inline_mission_rejected_for_coder(ext, git_repo):
+    """쓰기 역할은 TARGET FILES 고정이 계약 — 한 줄 미션으로 표현 불가."""
+    res = ext._execute_job(make_mission_job(git_repo, role="coder"), True)
+    assert res["exit"] == ext.EXIT_ERR
+    assert "inline mission not allowed" in res["status"]
+    assert not Path(res["spec"]).exists()
+
+
+def test_spec_and_mission_are_exclusive(ext, git_repo):
+    job = make_mission_job(git_repo)
+    job["spec"] = str(git_repo / "spec.md")
+    res = ext._execute_job(job, True)
+    assert res["exit"] == ext.EXIT_ERR
+    assert "mutually exclusive" in res["status"]
+
+
+def test_job_without_spec_or_mission_is_rejected(ext, git_repo):
+    job = make_mission_job(git_repo)
+    del job["mission"]
+    res = ext._execute_job(job, True)
+    assert res["exit"] == ext.EXIT_ERR
+    assert "either spec or mission" in res["status"]
+
+
+def test_cli_inline_mission_dry_run(tmp_path):
+    report = tmp_path / "report.md"
+    proc = subprocess.run(
+        [sys.executable, str(SCRIPT), "run", "--role", "scout",
+         "--report", str(report), "--mission", "locate handle()",
+         "--dry-run"],
+        capture_output=True, text=True, encoding="utf-8",
+    )
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout.strip().splitlines()[-1])
+    assert Path(payload["spec"]).name == "report-spec.md"
+    assert (tmp_path / "report-spec.md").is_file()
+
+
+def test_cli_rejects_spec_and_mission_together(tmp_path):
+    spec = tmp_path / "spec.md"
+    spec.write_text("TASK: x\n", encoding="utf-8")
+    proc = subprocess.run(
+        [sys.executable, str(SCRIPT), "run", "--role", "scout",
+         "--report", str(tmp_path / "report.md"), "--spec", str(spec),
+         "--mission", "locate handle()", "--dry-run"],
+        capture_output=True, text=True, encoding="utf-8",
+    )
+    assert proc.returncode == 1
+    assert "exactly one of --spec / --mission" in proc.stderr
+
+
+def test_cli_rejects_neither_spec_nor_mission(tmp_path):
+    proc = subprocess.run(
+        [sys.executable, str(SCRIPT), "run", "--role", "scout",
+         "--report", str(tmp_path / "report.md"), "--dry-run"],
+        capture_output=True, text=True, encoding="utf-8",
+    )
+    assert proc.returncode == 1
+    assert "exactly one of --spec / --mission" in proc.stderr
+
+
+def test_cli_explorer_inline_mission_without_context_warns(tmp_path):
+    """프리앰블의 시작점 게이트는 기계 판정 불가 — 경고만 내고 실행은 막지 않는다."""
+    proc = subprocess.run(
+        [sys.executable, str(SCRIPT), "run", "--role", "explorer",
+         "--report", str(tmp_path / "report.md"), "--mission", "map job core",
+         "--dry-run"],
+        capture_output=True, text=True, encoding="utf-8",
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "WARNING" in proc.stderr and "BLOCKED" in proc.stderr
+
+
+def test_wave_manifest_accepts_mission_and_spec_jobs(tmp_path):
+    """기존 spec job 과 mission job 이 한 manifest 에 섞여도 동작 (하위 호환)."""
+    spec = tmp_path / "spec.md"
+    spec.write_text("TASK: x\nCONTEXT: src/a.py:1\n", encoding="utf-8")
+    manifest = tmp_path / "wave.json"
+    manifest.write_text(json.dumps({"jobs": [
+        {"spec": str(spec), "report": str(tmp_path / "r1.md"),
+         "role": "explorer"},
+        {"mission": "locate handle()", "report": str(tmp_path / "r2.md"),
+         "role": "scout"},
+    ]}), encoding="utf-8")
+    proc = subprocess.run(
+        [sys.executable, str(SCRIPT), "wave", "--manifest", str(manifest),
+         "--dry-run"],
+        capture_output=True, text=True, encoding="utf-8",
+    )
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout.strip().splitlines()[-1])
+    assert payload["status"] == "ok"
+    assert (tmp_path / "r2-spec.md").is_file()

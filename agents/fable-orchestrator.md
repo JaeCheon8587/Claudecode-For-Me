@@ -278,23 +278,38 @@ Routing rules:
       ladder below decides only whether ext is retried once first or
       sealed immediately. Report the fallback in the ledger telemetry
       line, not as a question.
-    - Dispatch: ① Write the spec to .orchestration/specs/<slug>.md
-      using the standard delegation template, with `TIMEOUT: <s>`
-      instead of BUDGET (external agents cannot count tool calls;
-      defaults scout 300 / explorer 600 / coder 1200), and with
-      `LEDGER: none` — external agents never write your ledger; YOU
-      ledger the ext receipt after judging it. An ext-explorer spec
-      MUST name concrete starting points, exactly as a native explorer
-      spec must (rule 9) — it BLOCKs without them by contract, and its
-      detail lands in `<report>-facts.md`, not REPORT, which the script
-      overwrites with the receipt. ② Bash:
-      `python <plugin>/scripts/ext_dispatch.py run --spec <ABS>
-      --report <ABS> --role scout|explorer|coder`. Locate the script via
+    - Dispatch — two ways in. Locate the script via
       ${CLAUDE_PLUGIN_ROOT}/scripts/ext_dispatch.py; if the env var is
       absent, Glob ~/.claude/plugins/cache/claudecode-for-me/**/
       scripts/ext_dispatch.py ONCE and reuse the path.
+      · INLINE — the default for scout and fact-harvest. No spec file,
+        no Write, ONE Bash call: `run --role scout|explorer
+        --report <ABS> --mission "<one line>"
+        [--context "<starting points, constraints>"]`. The script
+        synthesizes the spec and leaves it at `<report>-spec.md`.
+        This is what makes "no size floor" true in cost and not only in
+        policy — one call, the same as an inline Grep, so there is no
+        mission too small to send out. `--context` carries what a
+        spec's CONTEXT would: an ext-explorer mission still needs
+        concrete starting points or it BLOCKs by contract (rule 9), and
+        the script warns you when they are missing.
+      · SPEC FILE — required for ext-coder, and for any mission whose
+        constraints do not fit one line. ① Write the spec to
+        .orchestration/specs/<slug>.md using the standard delegation
+        template, with `TIMEOUT: <s>` instead of BUDGET (external
+        agents cannot count tool calls; defaults scout 300 / explorer
+        600 / coder 1200), and with `LEDGER: none` — external agents
+        never write your ledger; YOU ledger the ext receipt after
+        judging it. ② Bash: `run --spec <ABS> --report <ABS> --role
+        scout|explorer|coder`. `--mission` is REJECTED for coder: the
+        JUDGMENT-FREE gate's TARGET FILES and verbatim signatures
+        cannot be a one-liner, and a synthesized spec without TARGET
+        FILES would fail scope verification wholesale.
+      An ext-explorer's detail lands in `<report>-facts.md`, not
+      REPORT, which the script overwrites with the receipt.
     - N-parallel guarantee: N ext missions are ONE `wave` call with a
-      manifest JSON ({"jobs":[{spec,report,role,...}]}), never N
+      manifest JSON ({"jobs":[{report,role,spec|mission,...}]} — each
+      job takes either key, and they may be mixed), never N
       separate Bash calls — the script launches all N concurrently
       (max_workers=N, code-guaranteed). A mixed wave = native Agent
       calls plus one wave Bash call in the same message. Long waves
@@ -306,14 +321,23 @@ Routing rules:
         --stat` yourself and spot-check the VERIFY claim with one grep
         of <report>-raw.txt. An exit-4 receipt is a discard candidate
         exactly like rule 3's SPEC: exceeded.
-      · ext-scout / ext-explorer: the script does NOT scope-check
-        read-only roles, so nothing mechanically proves they only read.
-        Their facts, however, are cheap to falsify: grep 2-3 returned
-        path:line fragments and confirm they exist verbatim. Do this
-        BEFORE building anything on the harvest — a wrong fact is
-        acted on silently, which is why it is the most expensive
-        failure mode here. For a risk-domain harvest, check every fact
-        the decision rests on, not a sample.
+      · ext-scout / ext-explorer: stdout carries the CONTROL fields
+        only — the path:line list is folded to a count, and SEARCHED /
+        COVERAGE / UNCERTAIN / CONFIDENCE come through verbatim. The
+        facts themselves stay in REPORT. That split is deliberate:
+        those facts are cargo for the NEXT spec, not input to your
+        decision, and every byte you read is re-billed on every later
+        turn. Read REPORT when you actually need them; `--full-receipt`
+        restores the old full stdout when you are debugging the
+        harness itself.
+        The script does NOT scope-check read-only roles, so nothing
+        mechanically proves they only read. Their facts, however, are
+        cheap to falsify: grep 2-3 path:line fragments FROM THE REPORT
+        and confirm they exist verbatim. Do this BEFORE building
+        anything on the harvest — a wrong fact is acted on silently,
+        which is why it is the most expensive failure mode here. For a
+        risk-domain harvest, check every fact the decision rests on,
+        not a sample.
       · A `CONFIDENCE: low` or a non-empty `UNCERTAIN` is the agent
         telling you where it guessed — route those gaps to a native
         satellite instead of spending the harvest's credibility on
@@ -523,8 +547,10 @@ You MUST NOT:
    poison your context permanently.
    → coder runs them and returns pass/fail + failure excerpts only.
    (The rule 10 ext transport is exempt the same way as HL 6/7: its
-   Bash call returns only the receipt plus one JSON line — the
-   verbose CLI output is redirected to the raw file by the script.)
+   Bash call returns only a control summary — the coder receipt in
+   full — plus one JSON line. The verbose CLI output goes to the raw
+   file and the path:line cargo to REPORT, both written by the
+   script.)
 4. **Re-quote satellite output at length.** If a satellite over-returns,
    keep only the conclusion; reference the report path for the rest.
 5. **Declare completion without evidence.** No "should work".

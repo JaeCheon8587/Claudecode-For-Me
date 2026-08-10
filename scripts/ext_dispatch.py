@@ -12,11 +12,20 @@
 다시 내부 모델의 읽기를 요구해 절약이 상쇄된다.
 
 Subcommands:
-    run   --spec <ABS> --report <ABS> --role scout|explorer|coder  단일 위임
+    run   --role scout|explorer|coder --report <ABS>
+          (--spec <ABS> | --mission "<한 줄>" [--context "<시작점>"])  단일 위임
     wave  --manifest <ABS json> [--dry-run]                        N개 병렬 보장
 
 wave 는 manifest 의 모든 job 을 ThreadPoolExecutor(max_workers=N) 로
 동시 기동한다 — 큐잉 없음. N개 병렬 실행은 코드가 보장한다.
+
+호출측 비용 설계 (오케스트레이터의 context 가 이 시스템에서 제일 비싸다):
+  - 인라인 미션: --mission 을 주면 스펙 파일을 스크립트가 합성해
+    <report>-spec.md 로 남긴다. 호출측은 Write 없이 Bash 1콜로 끝난다.
+    쓰기 역할(coder)은 제외 — TARGET FILES 고정이 계약이라 한 줄로 못 쓴다.
+  - stdout 화물 분리: 읽기 전용 역할의 리시트는 제어 필드만 stdout 에
+    싣고, path:line 목록(화물)은 REPORT 파일에만 남긴다. 상세가 필요하면
+    호출측이 REPORT 를 명시적으로 읽는다. --full-receipt 로 해제.
 
 Exit codes:
     0  OK (BLOCKED 리시트 포함 — BLOCKED 는 유효한 결과)
@@ -37,6 +46,7 @@ if hasattr(sys.stdout, "reconfigure"):
 
 import argparse
 import json
+import re
 import shutil
 import subprocess
 import threading
@@ -60,6 +70,34 @@ REQUIRED_FIELDS = {
     # 판단 필드(ANSWER/MAP/RISKS)는 요구하지 않는다 — 프리앰블이 금지한다.
     "explorer": ("KEY FACTS", "COVERAGE", "CONFIDENCE"),
     "coder": ("STATUS", "CHANGED", "SPEC", "VERIFY"),
+}
+
+# 합성 스펙의 RETURN 에 쓰는 계약 전체 필드 — 프리앰블 리시트 스키마와 1:1.
+# REQUIRED_FIELDS 를 재사용하면 안 된다: 그쪽은 스크립트가 강제하는 부분집합
+# 이라 scout 의 RELATED/UNCERTAIN 이 빠져 계약이 조용히 축소된다.
+SPEC_RETURN = {
+    "scout": ("FOUND", "RELATED", "SEARCHED", "UNCERTAIN", "CONFIDENCE"),
+    "explorer": ("STATUS", "COVERAGE", "CONFIDENCE", "UNCERTAIN",
+                 "FACTS FILE", "KEY FACTS"),
+    "coder": ("STATUS", "CHANGED", "SPEC", "VERIFY", "RISKS"),
+}
+
+# 인라인 미션(--mission)이 허용되는 역할. coder 는 제외한다 — ext-coder 적격은
+# TARGET FILES 절대경로·축자 시그니처·VERIFY 단일 명령을 스펙에 적을 수 있을 때
+# 성립하므로(JUDGMENT-FREE 게이트) 한 줄 미션으로 표현될 수 없고, TARGET FILES
+# 없는 합성 스펙은 porcelain 대조에서 전량 거짓 위반(exit 4)이 된다.
+INLINE_MISSION_ROLES = frozenset({"scout", "explorer"})
+
+# stdout 요약에서 원문 그대로 싣는 제어 필드 / 건수로 접는 화물 필드.
+# coder 는 항목이 없다 = 항상 리시트 전문 출력 (VERIFY·SPEC 판정이 호출측 몫).
+CONTROL_FIELDS = {
+    "scout": ("SEARCHED", "UNCERTAIN", "CONFIDENCE"),
+    "explorer": ("STATUS", "COVERAGE", "CONFIDENCE", "UNCERTAIN",
+                 "FACTS FILE"),
+}
+CARGO_FIELDS = {
+    "scout": ("FOUND", "RELATED"),
+    "explorer": ("KEY FACTS",),
 }
 
 DEFAULTS = {
@@ -124,6 +162,28 @@ def _raw_path(report: Path) -> Path:
     return report.with_name(report.stem + "-raw.txt")
 
 
+def _synth_spec_path(report: Path) -> Path:
+    """--mission 으로 합성한 스펙이 남는 경로. _raw_path 와 같은 유도 방식."""
+    return report.with_name(report.stem + "-spec.md")
+
+
+def _synth_spec(role: str, mission: str, context, report: Path,
+                timeout: int) -> str:
+    """한 줄 미션 → 표준 위임 스펙 텍스트.
+
+    CONSTRAINTS 는 합성하지 않는다 — 역할 프리앰블이 이미 규정한다
+    (ext_preambles/scout.md 의 Rules 절). 중복 제거가 이 모드의 요점이다.
+    """
+    parts = [f"TASK: {mission.strip()}"]
+    if context and context.strip():
+        parts.append(f"CONTEXT: {context.strip()}")
+    parts += [f"TIMEOUT: {timeout}",
+              "LEDGER: none",
+              f"REPORT: {report}",
+              f"RETURN: {' / '.join(SPEC_RETURN[role])}"]
+    return "\n\n".join(parts) + "\n"
+
+
 def _load_prompt(spec_path: Path, role: str) -> str:
     preamble_path = PREAMBLE_DIR / f"{role}.md"
     if not preamble_path.is_file():
@@ -158,6 +218,76 @@ def _validate_fields(receipt: str, role: str):
     missing = [f for f in REQUIRED_FIELDS[role]
                if f"{f}:" not in receipt]
     return missing
+
+
+# 화물 불릿에서 파일 수를 세기 위한 최소 파서. 라인번호 뒤에 태그·구분자가
+# 오도록 앵커링한다 — `.+?:\d+` 만으로는 Windows 드라이브 경로("E:\...")의
+# 콜론에서 잘못 끊긴다.
+_CARGO_BULLET_RX = re.compile(
+    r"^-\s+(?P<loc>.+?):(?P<line>\d+)\s*(?=\[|[—–-]|$)")
+_TRUNC_MARK = "[ext] (receipt truncated"
+
+
+def _fold_cargo(label: str, lines: list) -> str:
+    """화물 필드(FOUND/RELATED/KEY FACTS)를 한 줄 건수로 접는다."""
+    head = lines[0].strip()
+    inline = head[len(label) + 1:].strip() if len(head) > len(label) + 1 else ""
+    bullets = [ln for ln in lines[1:] if ln.strip().startswith("- ")]
+    if not bullets:
+        return f"{label}: {inline or '(none)'}"
+    files = {m.group("loc").strip().replace("\\", "/").casefold()
+             for m in (_CARGO_BULLET_RX.match(ln.strip()) for ln in bullets)
+             if m}
+    n = len(bullets)
+    if inline:  # 8건 초과 집계 모드: 에이전트가 쓴 요약을 살리고 줄 수만 덧붙임
+        return f"{label}: {inline} [{n} lines]"
+    if files:
+        unit = "file" if len(files) == 1 else "files"
+        return f"{label}: {n} across {len(files)} {unit}"
+    return f"{label}: {n}"
+
+
+def _control_summary(role: str, receipt: str):
+    """읽기 전용 역할의 리시트에서 제어 필드만 남긴 stdout 요약.
+
+    화물(path:line 목록)은 건수로 접는다 — 그 상세는 REPORT 파일에 전문으로
+    남아 있고, 필요할 때 호출측이 명시적으로 읽는 편이 싸다.
+
+    형태를 못 알아보면 None 을 돌려 호출측이 리시트 전문으로 폴백한다.
+    정보를 조용히 잃지 않는 것이 요약보다 우선한다.
+    """
+    control = CONTROL_FIELDS.get(role)
+    cargo = CARGO_FIELDS.get(role)
+    if not control or not cargo:
+        return None
+
+    known = {f.upper(): f for f in tuple(control) + tuple(cargo)}
+    blocks = []  # [(label|None, [lines])]
+    cur = None
+    for ln in receipt.splitlines():
+        stripped = ln.strip()
+        label = next((orig for up, orig in known.items()
+                      if stripped.upper().startswith(up + ":")), None)
+        if label is not None:
+            cur = (label, [ln])
+            blocks.append(cur)
+        elif stripped.startswith(_TRUNC_MARK):
+            blocks.append((None, [ln]))  # 절단 표시는 항상 보존
+            cur = None
+        elif cur is not None:
+            cur[1].append(ln)
+        # 소유 필드가 없는 줄은 버린다 (제어도 화물도 아님)
+
+    if not any(lbl in control for lbl, _ in blocks if lbl):
+        return None  # 제어 필드를 하나도 못 찾음 = 미상 형태 → 전문 폴백
+
+    out = []
+    for label, lines in blocks:
+        if label is None or label in control:
+            out.extend(lines)
+        else:
+            out.append(_fold_cargo(label, lines))
+    return "\n".join(out).strip() or None
 
 
 def _detect_quota_signal(text: str):
@@ -284,13 +414,21 @@ def _execute_job(job: dict, dry_run: bool) -> dict:
     """단일 job 실행. 결과 dict {status, exit, role, spec, report, raw, receipt}."""
     role = job["role"]
     agent = job.get("agent", "codex")
-    spec_path = Path(job["spec"])
     report_path = Path(job["report"])
     raw_path = _raw_path(report_path)
     repo = Path(job.get("repo") or Path.cwd())
+    mission = job.get("mission")
+    # 인라인 미션이면 스펙을 스크립트가 합성해 <report>-spec.md 에 남긴다.
+    if mission:
+        spec_path = _synth_spec_path(report_path)
+    elif job.get("spec"):
+        spec_path = Path(job["spec"])
+    else:
+        spec_path = None
 
     result = {"status": "error", "exit": EXIT_ERR, "role": role,
-              "agent": agent, "spec": str(spec_path),
+              "agent": agent,
+              "spec": str(spec_path) if spec_path else None,
               "report": str(report_path), "raw": str(raw_path),
               "receipt": None, "reason": None}
 
@@ -308,7 +446,32 @@ def _execute_job(job: dict, dry_run: bool) -> dict:
         result["status"] = f"unknown agent: {agent}"
         result["exit"] = EXIT_NO_AGENT
         return result
-    if not spec_path.is_file():
+
+    if mission and job.get("spec"):
+        result["status"] = "spec and mission are mutually exclusive"
+        return result
+    if spec_path is None:
+        result["status"] = "job needs either spec or mission"
+        return result
+    if mission:
+        if role not in INLINE_MISSION_ROLES:
+            result["status"] = (f"inline mission not allowed for role: {role}"
+                                " (write roles need a spec file with "
+                                "TARGET FILES)")
+            return result
+        context = job.get("context")
+        spec_path.parent.mkdir(parents=True, exist_ok=True)
+        spec_path.write_text(
+            _synth_spec(role, mission, context, report_path, timeout),
+            encoding="utf-8")
+        if role == "explorer" and not (context or "").strip():
+            # 프리앰블은 구체적 시작점이 없으면 BLOCKED 로 반송한다. "구체적"은
+            # 기계 판정이 불가하므로 경고만 낸다 (stderr — 리시트 추출 창 밖).
+            with _print_lock:
+                print("[ext] WARNING: explorer mission without context — the "
+                      "preamble requires concrete starting points and will "
+                      "return STATUS: BLOCKED without them.", file=sys.stderr)
+    elif not spec_path.is_file():
         result["status"] = f"spec not found: {spec_path}"
         return result
 
@@ -413,9 +576,36 @@ def _execute_job(job: dict, dry_run: bool) -> dict:
 
 # ---------------------------------------------------------------- commands
 
+def _print_receipt(res: dict, full: bool) -> None:
+    """리시트 출력. 읽기 전용 역할의 성공 결과만 제어 요약으로 접는다.
+
+    실패(exit != 0)는 항상 전문 — 진단에는 화물까지 필요하고, 실패는 드물다.
+    """
+    receipt = res["receipt"]
+    if not receipt:
+        return
+    summary = None
+    if not full and res["exit"] == EXIT_OK:
+        summary = _control_summary(res["role"], receipt)
+    if summary is None:
+        print(receipt)
+        return
+    print(f"[ext] {res['role']} {res['status']}")
+    print(summary)
+    print(f"data: {res['report']}")
+
+
 def cmd_run(args) -> int:
+    if bool(args.spec) == bool(args.mission):
+        _err("exactly one of --spec / --mission is required", EXIT_ERR)
+    if args.context and not args.mission:
+        _err("--context is only valid with --mission", EXIT_ERR)
     job = {"spec": args.spec, "report": args.report, "role": args.role,
            "agent": args.agent, "repo": args.repo}
+    if args.mission:
+        job["mission"] = args.mission
+    if args.context:
+        job["context"] = args.context
     if args.model:
         job["model"] = args.model
     if args.effort:
@@ -423,8 +613,7 @@ def cmd_run(args) -> int:
     if args.timeout:
         job["timeout"] = args.timeout
     res = _execute_job(job, args.dry_run)
-    if res["receipt"]:
-        print(res["receipt"])
+    _print_receipt(res, args.full_receipt)
     summary = {k: res[k] for k in
                ("status", "exit", "role", "agent", "spec", "report", "raw",
                 "reason")}
@@ -453,10 +642,9 @@ def cmd_wave(args) -> int:
         results = [f.result() for f in futures]  # 제출 순서 = 출력 순서
 
     for i, res in enumerate(results, 1):
-        name = Path(res["spec"]).name
+        name = Path(res["spec"]).name if res["spec"] else f"job{i}"
         print(f"\n=== JOB {i}: {name} (exit {res['exit']}, {res['status']}) ===")
-        if res["receipt"]:
-            print(res["receipt"])
+        _print_receipt(res, args.full_receipt)
 
     ok = all(r["exit"] == EXIT_OK for r in results)
     summary = {
@@ -476,7 +664,15 @@ def main() -> int:
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_run = sub.add_parser("run", help="단일 ext 위임")
-    p_run.add_argument("--spec", required=True, help="스펙 파일 절대경로")
+    p_run.add_argument("--spec", default=None,
+                       help="스펙 파일 절대경로 (--mission 과 배타)")
+    p_run.add_argument("--mission", default=None,
+                       help="인라인 미션 한 줄 — 스펙을 스크립트가 합성해 "
+                            "<report>-spec.md 에 남긴다 (--spec 과 배타). "
+                            "읽기 전용 역할 전용")
+    p_run.add_argument("--context", default=None,
+                       help="인라인 미션의 CONTEXT (시작점·제약). "
+                            "--mission 과 함께만 유효")
     p_run.add_argument("--report", required=True, help="리포트 절대경로")
     p_run.add_argument("--role", required=True, choices=sorted(REQUIRED_FIELDS))
     p_run.add_argument("--agent", default="codex", choices=sorted(INVOKERS))
@@ -484,12 +680,16 @@ def main() -> int:
     p_run.add_argument("--effort", default=None)
     p_run.add_argument("--timeout", type=int, default=None)
     p_run.add_argument("--repo", default=None, help="실행 cwd (기본: 현재)")
+    p_run.add_argument("--full-receipt", action="store_true",
+                       help="읽기 전용 역할도 리시트 전문을 stdout 에 출력")
     p_run.add_argument("--dry-run", action="store_true")
     p_run.set_defaults(func=cmd_run)
 
     p_wave = sub.add_parser("wave", help="N개 병렬 위임 (동시 기동 보장)")
     p_wave.add_argument("--manifest", required=True,
-                        help='JSON: {"jobs":[{spec,report,role,...}]}')
+                        help='JSON: {"jobs":[{report,role,spec|mission,...}]}')
+    p_wave.add_argument("--full-receipt", action="store_true",
+                        help="읽기 전용 역할도 리시트 전문을 stdout 에 출력")
     p_wave.add_argument("--dry-run", action="store_true")
     p_wave.set_defaults(func=cmd_wave)
 

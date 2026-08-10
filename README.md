@@ -67,6 +67,49 @@ pip install -U codenavigator
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
 
+### v3.46.0 — ext 디스패치 경제 교정: stdout 화물 분리 + 인라인 미션 모드
+
+v3.43.0 이래 rule 10은 "**EVERY** scout mission — no exceptions, **no size floor**"를
+규정해 왔다. 그런데 **경제에는 size floor가 있었다.** 인라인 `Grep` 한 번이 ext-scout보다
+싸면, 정책이 무엇을 쓰든 오케스트레이터는 싼 쪽을 고른다. 격차의 정체는 둘이었다.
+
+**(1) 리시트 화물이 stdout으로 샜다.** `cmd_run`이 리시트를 REPORT 파일과 stdout **양쪽**에
+내보냈고, 오케스트레이터는 Bash 호출자라 stdout 전량을 context에 실었다 — HARD LIMIT 2가
+말하는 "every byte you read is re-billed on every subsequent turn"이 그대로 적용된다.
+실측(`resmoke-scout-exitcodes`): 리시트 22줄 중 판단에 쓰이는 건 3~4줄이고, 나머지 18줄은
+**다음 스펙에 옮겨 적히려고 통과할 뿐인 화물**이다. explorer는 이 문제를 `<report>-facts.md`
+사이드 파일로 이미 풀었지만 scout에는 대응물이 없었다.
+
+**(2) 스펙 파일 작성 마찰.** `--spec`이 required라, scout 하나에 ①스펙 작문(오케스트레이터
+출력 토큰 — HL 1이 "제일 비싼 자원"이라 부르는 것) ②`Write` ③스크립트 경로 확인 ④`Bash`가
+들었다. 그런데 스펙 실물 13줄에서 미션 고유 정보는 `TASK`/`CONTEXT` 둘뿐이고, 나머지는 전부
+다른 곳의 중복이었다 — `CONSTRAINTS`는 프리앰블 반복, `TIMEOUT`은 `DEFAULTS`, `LEDGER: none`은
+ext 고정값, `REPORT`는 `--report` 인자, `RETURN`은 역할 계약.
+
+**stdout 화물 분리**: 읽기 전용 역할의 성공 리시트는 제어 필드만 stdout에 싣는다.
+`FOUND`/`RELATED`/`KEY FACTS`는 건수로 접고(`FOUND: 17 across 1 file`),
+`SEARCHED`/`COVERAGE`/`UNCERTAIN`/`CONFIDENCE`는 원문 유지. 22줄 → 5줄 + JSON.
+**coder는 접지 않는다** — 리시트 전부가 제어 필드이고 `VERIFY`·`SPEC: exceeded` 판정이
+호출측 몫이다. **실패도 접지 않는다** — 진단에는 화물까지 필요하고 실패는 드물다.
+형태를 못 알아보면 `None`을 돌려 전문으로 폴백한다: 요약보다 **정보 무손실이 우선**이다.
+REPORT 파일은 어느 경우에도 리시트 전문을 유지하므로 상세는 사라지지 않고 **암묵적 유입에서
+명시적 `Read`로** 바뀔 뿐이다. `--full-receipt`로 구동작 복원.
+
+**인라인 미션 모드**: `--mission "<한 줄>" [--context "<시작점>"]`이면 스크립트가 스펙을
+합성해 `<report>-spec.md`에 남긴다. 오케스트레이터는 `Write` 없이 **Bash 1콜** — 인라인 Grep과
+같은 콜 수다. `--spec`과는 배타이며 정확히 하나가 필수. `RETURN`은 `REQUIRED_FIELDS`가 아니라
+신설 `SPEC_RETURN`에서 온다: 전자는 스크립트가 강제하는 **부분집합**이라(scout의
+`RELATED`/`UNCERTAIN` 부재) 그대로 쓰면 계약이 조용히 축소된다. **coder는 인라인 미션 금지** —
+JUDGMENT-FREE 게이트의 TARGET FILES·축자 시그니처가 한 줄로 표현될 수 없고, TARGET FILES 없는
+합성 스펙은 porcelain 대조에서 전량 거짓 위반(exit 4)이 된다. explorer에 `--context`가 없으면
+stderr 경고 — 프리앰블의 시작점 게이트는 "구체적"의 기계 판정이 불가하므로 막지 않고 알린다.
+`wave` manifest도 job별로 `spec` / `mission` 어느 쪽이든 받고 혼재를 허용한다(하위 호환).
+
+**검증**: `tests/test_ext_dispatch.py` 39케이스 통과(기존 18 + 신규 21). 요약 로직은 저장소에
+실재하는 scout 리시트 5건으로 대조 — 화물 불릿 32건 전량 파싱, 최대 리시트가 22줄 → 5줄로
+접히고 같은 실행의 REPORT는 22줄 전문을 유지했다. 인라인 모드는 드라이런으로 합성 스펙 생성·
+JSON 경로 노출·배타 검증·coder 거부·explorer 경고를 확인했다.
+
 ### v3.45.0 — 뇌/손 분리: ext-explorer 신설 · ext-scribe 폐지 · JUDGMENT-FREE 게이트 · reviewer 티어링
 
 v3.43.0이 ext-first를 기본값으로 만들었지만, **정작 무엇을 내보내는지가 절약 목표와 반대로
@@ -952,6 +995,10 @@ ext-scout, 명명된 시작점에서 `path:line` 사실을 수집하는 모든 f
 스펙이 판단을 남기지 않는 구현(JUDGMENT-FREE 게이트, v3.45.0)은 ext-coder. 설계 판단, **모든**
 문서(ext-scribe는 v3.45.0에서 폐지), 그리고 ext 대응물이 없는 종합·`analyst`·`reviewer`는
 native 고정이다.
+**v3.46.0부터 디스패치는 2경로다** — 탐색·fact-harvest는 `--mission "<한 줄>"`로 스펙 파일 없이
+Bash 1콜(스크립트가 `<report>-spec.md`에 스펙을 합성), ext-coder와 한 줄로 안 담기는 미션만
+`--spec` 파일. 읽기 전용 역할의 stdout은 제어 필드 요약이고 `path:line` 목록은 REPORT에만
+남는다(`--full-receipt`로 해제).
 **v3.44.0부터 위험 도메인은 위임 기준이 아니다** — auth·결제·크립토 파일이라도 스펙이
 JUDGMENT-FREE 게이트를 통과하면 ext로 가고, 판단이 남은 변경만 native에 남는다(리뷰 의무
 rule 4는 그대로 유지, 위험 도메인은 opus reviewer 티어 고정). 상세는 rule 10과 v3.44.0 /
