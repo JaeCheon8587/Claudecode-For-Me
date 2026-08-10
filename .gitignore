@@ -4,6 +4,8 @@ __pycache__/
 .worktrees/
 .worktree/
 .process/
+# 오케스트레이션 런타임 산출물 (스펙·리포트·raw 덤프·렛저) — 로컬 전용
+.orchestration/
 
 # Local sandboxes (user-specific test corpora, may host their own git repo)
 samples/

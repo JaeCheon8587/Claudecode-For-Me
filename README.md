@@ -115,8 +115,9 @@ KeyError로 크래시하던 경로 — wave에서 job 하나가 나머지 결과
 
 **검증**: glm-5.2 실측 재스모크(wave 2-job) — 폴백 0/2, 리시트 유효 2/2, 스팟체크 **14/14
 라인 정확 일치**(기준선 gpt-5.5 스모크 5/5 이상), 워킹트리 대조 결과 범위 밖 쓰기 0건.
-`tests/test_ext_dispatch.py` 18케이스 통과. 실측·한계·미해결은
-`.orchestration/ledgers/20260808-ext-rebalance.md`.
+`tests/test_ext_dispatch.py` 18케이스 통과. 실측·한계·미해결은 개발 환경 로컬 렛저
+`.orchestration/ledgers/20260808-ext-rebalance.md`에 남겼다 — `.orchestration/`은
+런타임 산출물 디렉터리라 저장소에 추적하지 않으므로 클론에는 포함되지 않는다.
 
 ### v3.44.0 — risk domain을 위임 기준에서 제외: ext 적격성은 "판단 유무"로만 판정
 
