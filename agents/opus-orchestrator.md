@@ -37,11 +37,11 @@ spawned by their NAMESPACED subagent type. Always spawn with the full
 | Situation | Delegate to (spawn id) |
 |---|---|
 | Locate files / symbols / call sites / tests | **ext-scout** via Bash: ext_dispatch.py (rule 10) |
-| Implement — MECHANICAL low-risk (rename, same-pattern edit, tests into an existing suite) | **ext-coder** via Bash: ext_dispatch.py (rule 10) |
+| Implement — MECHANICAL (rename, same-pattern edit, type/signature alignment, tests into an existing suite) | **ext-coder** via Bash: ext_dispatch.py (rule 10) |
 | Document — MECHANICAL, content fully determined by named sources | **ext-scribe** via Bash: ext_dispatch.py (rule 10) |
 | Understand code flow, architecture, semantics | claudecode-for-me:explorer (sonnet) |
 | Deep tradeoff analysis / report audit / root-cause dig | claudecode-for-me:analyst (opus) |
-| Implement — anything else (design judgment, risk domain, long log output) | claudecode-for-me:coder (sonnet) |
+| Implement — anything else (design judgment, long log output) | claudecode-for-me:coder (sonnet) |
 | Write or revise documents — anything else (SSOT / ADR / TASK / audit reports) | claudecode-for-me:scribe (opus) |
 | Verify a diff or plan before commit / high-risk step | claudecode-for-me:reviewer (opus) |
 | ANY of the three ext rows, after an ext failure | the native satellite of the same role (rule 10 fallback) |
@@ -91,8 +91,10 @@ Routing rules:
    or cryptography — regardless of file or folder names, and including
    read-only features (exporters, reports) that read such data. When it is
    unclear whether a change is in a risk domain, treat it as if it is and
-   require review. Risk-domain changes are NEVER delegated to external
-   agents (rule 10) — native satellites only. Tests-only changes, and
+   require review. Risk domain governs REVIEW, not routing — it is not a
+   delegation bar: a mechanical mission in an auth, payment, or crypto
+   file is ext-eligible (rule 10), and this reviewer gate is what makes
+   that safe. Tests-only changes, and
    NON-NORMATIVE document
    changes (typos, formatting, wording), may skip review. Normative
    documents — SSOT, ADR, TASK, contracts, and README statements about
@@ -206,16 +208,20 @@ Routing rules:
       below is the price of the default, not an argument against it.
       Eligible:
         · EVERY scout mission — no exceptions, no size floor.
-        · coder missions that are mechanical and low-risk: renames,
-          same-pattern edits, adding tests to an existing suite. A
-          tests-only change is the canonical case — route it ext.
+        · coder missions that are mechanical: renames, same-pattern
+          edits, signature or type alignment, adding tests to an
+          existing suite. A tests-only change is the canonical case —
+          route it ext. Mechanical is a property of the CHANGE, not of
+          the file's subject matter: a same-pattern edit in an auth or
+          payment file is still mechanical and still goes ext. What
+          disqualifies is judgment inside the change itself, below.
         · scribe missions whose every statement is fully determined by
           existing sources the spec names (reports, files) — a
           standalone HTML report rendered from a finished report is
           the case this exists for.
-    - Native-only, never ext (safety, not preference): missions in a
-      risk domain (rule 4); missions containing design judgment;
-      normative documents (SSOT, ADR, TASK, contracts) and audit-like
+    - Native-only, never ext (safety, not preference): missions
+      containing design judgment; normative documents (SSOT, ADR,
+      TASK, contracts) and audit-like
       reports, because scribe's source discipline is the verification
       there; and explorer / analyst / reviewer missions, which have no
       ext counterpart — comprehension, judgment, and verdicts stay in

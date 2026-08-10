@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v3.43.0 · 커스텀 스킬 14종 + 슬래시 커맨드 18종 + 에이전트 16종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v3.44.0 · 커스텀 스킬 14종 + 슬래시 커맨드 18종 + 에이전트 16종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,7 +11,7 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `3.43.0` |
+| 버전 | `3.44.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
@@ -66,6 +66,37 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v3.44.0 — risk domain을 위임 기준에서 제외: ext 적격성은 "판단 유무"로만 판정
+
+v3.43.0으로 ext-first가 됐는데도 **전부 native로 흐르는 경로가 남아 있었다.** 실측: auth
+리팩터링 5개 웨이브(캐스트 수정, 시그니처 정합, 테스트 정합)가 전 웨이브 native coder로
+실행됐다 — 규칙 위반이 아니라 규칙대로였다. rule 4의 "Risk-domain changes are NEVER delegated
+to external agents"와 rule 10 native-only 목록 첫 항목 `missions in a risk domain`이,
+`LoginService.cs`에 있다는 사실 하나로 기계적 편집까지 전부 native로 되돌렸다. ext-first가
+잡으려던 드리프트를 카브아웃이 다른 문으로 되살린 셈이다.
+
+**금지의 논거 두 개가 다 무효였다.** ① correctness — rule 4는 이미 risk-domain non-test
+소스에 reviewer를 의무로 걸고, rule 8(b)는 스펙 작성 전 analyst 감사를 의무화한다. ext 금지는
+같은 위험에 대한 3중 방어의 세 번째였고, 리시트 불신 조항까지 세면 네 번째다. ② 코드 노출 —
+auth 코드가 `zai/glm-5.2`로 전송되는 문제. 이건 기술 판단이 아니라 방침이고, 이 저장소에서는
+허용으로 정리됐다.
+
+**기준을 주제(어느 파일이냐)에서 판단 유무(무엇을 바꾸냐)로 옮겼다.** rule 4의 ext 금지문을
+삭제하고 "risk domain은 REVIEW를 지배하지 routing을 지배하지 않는다"로 대체했고, rule 10
+native-only 목록에서 risk domain 항목을 제거했다. 적격성 문구의 `mechanical and low-risk`에서
+`low-risk`도 함께 뺐다 — 금지문만 지우고 이 단어를 남기면 "auth 파일이 low-risk인가"를 거쳐
+같은 결론에 다시 도달한다. 라우팅 표의 native coder 행에 있던 `risk domain`도 제거.
+
+**새 카브아웃은 만들지 않았다.** 토큰 검증 로직 재작성처럼 실제 판단이 든 변경은 기존
+`missions containing design judgment` 조항이 그대로 잡는다 — auth라서가 아니라 판단이라서.
+별도 "security semantics" 항목을 신설하면 방금 제거한 주제 기반 판정을 이름만 바꿔 되돌리게 된다.
+
+**유지된 것**: reviewer 의무(rule 4), analyst 감사 의무(rule 8b), 리시트 불신
+(`git diff --stat` 직접 확인 + raw grep 스팟체크), 자동·무언 native 폴백. ext 허용 범위가
+넓어질수록 이 게이트들이 실질 방어선이 되므로 전부 그대로 둔다.
+
+fable/opus 오케스트레이터 본문은 frontmatter를 제외하고 계속 완전 동일(diff 검증).
 
 ### v3.43.0 — ext-first 전환: 적격 미션은 무조건 ext, 실패 시 자동 native 폴백
 
@@ -864,10 +895,12 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 **외부 위임 3종(ext-scout / ext-coder / ext-scribe)은 이 표에 없다** — Agent 스폰이 아니라
 `scripts/ext_dispatch.py`를 통한 Bash 전송이기 때문이다(모델 `zai/glm-5.2` / effort max,
 v3.42.0). v3.43.0부터 **적격 미션의 기본값은 ext**이고 native 위성은 폴백이다: 모든 탐색 미션은
-ext-scout, 기계적·저위험 구현(rename·동일 패턴 편집·기존 스위트 테스트 추가)은 ext-coder,
-명명된 소스로 내용이 전부 결정되는 문서는 ext-scribe. 위험 도메인·설계 판단·규범 문서·감사
-리포트, 그리고 ext 대응물이 없는 `explorer`/`analyst`/`reviewer`는 native 고정이다. 상세는
-rule 10과 v3.43.0 체인지로그 참조.
+ext-scout, 기계적 구현(rename·동일 패턴 편집·타입/시그니처 정합·기존 스위트 테스트 추가)은
+ext-coder, 명명된 소스로 내용이 전부 결정되는 문서는 ext-scribe. 설계 판단·규범 문서·감사
+리포트, 그리고 ext 대응물이 없는 `explorer`/`analyst`/`reviewer`는 native 고정이다.
+**v3.44.0부터 위험 도메인은 위임 기준이 아니다** — auth·결제·크립토 파일이라도 변경이 기계적이면
+ext로 가고, 판단이 든 변경만 native에 남는다(리뷰 의무 rule 4는 그대로 유지). 상세는
+rule 10과 v3.44.0 체인지로그 참조.
 
 `coder`/`scribe` 분리 근거는 **코드에는 기계적 오라클(VERIFY)이 있고 산문에는 없다**는 비대칭이다.
 소유권은 파일 종류로 가르며(소스와 그 주석·docstring은 coder, 문서는 scribe), 코드+문서 동시
