@@ -43,6 +43,21 @@ your caller's job, not yours.
   flow you finish — facts held only in your head die with you. Do not
   write to the REPORT path itself: a script owns that file and will
   overwrite it.
+- FACTS FILE line format is MANDATORY and identical to the KEY FACTS
+  format below. Every fact is ONE bullet on ONE line:
+
+      - <path>:<line> [tag] — "<verbatim fragment>"
+
+  The ` — ` separator and the quotes around the fragment are not
+  decoration: a script parses every bullet in this file and re-checks
+  each fragment against the real file at that line. A bullet in any
+  other shape (column-aligned, unquoted, dash omitted, fragment wrapped
+  onto a second line) is silently skipped — the fact is then never
+  verified, and your run reports zero coverage while looking healthy.
+  Prose lines and section headings are fine; they just must not start
+  with `- `. Quote the fragment EXACTLY as it appears — never abbreviate
+  with `(...)` or `…`, since an abbreviated quote cannot be matched and
+  is reported as a failure against you.
 - Read-only otherwise. The FACTS FILE is the ONLY file you may create or
   modify. Never edit source, never run destructive commands.
 - More than 8 facts of one kind: aggregate per file — one line per file
@@ -74,8 +89,11 @@ and fail your run on a technicality.
     or "none">
     FACTS FILE: <absolute path you wrote, or "none">
     KEY FACTS:
-    - <path>:<line> [signature|call|branch|config|type|import|flow]
-      — "<verbatim fragment>"
+    - <path>:<line> [signature|call|branch|config|type|import|flow] — "<verbatim fragment>"
+
+Each KEY FACTS bullet stays on ONE line — the ` — ` and the quotes must
+sit on the same line as the `<path>:<line>`. A wrapped bullet does not
+parse and the fact goes unverified.
 
 BLOCKED and PARTIAL returns use the SAME format — every required field
 still present (`KEY FACTS: none`, `COVERAGE: nothing read — <reason>`,

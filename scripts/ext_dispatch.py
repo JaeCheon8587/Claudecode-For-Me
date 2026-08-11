@@ -35,6 +35,7 @@ Exit codes:
     4  SPEC 위반 (TARGET FILES 밖 변경 — script-verified)
     5  타임아웃
     6  에이전트 실행 실패 (rc != 0 + 리시트 마커 없음 — 쿼터/크레딧 소진 포함)
+    7  fact 미검증 (읽기 전용 역할의 path:line 주장이 파일과 불일치 — script-verified)
 """
 
 # Encoding bootstrap — FIRST executable code (Windows cp949 콘솔 회피)
@@ -60,6 +61,7 @@ EXIT_BAD_RECEIPT = 3
 EXIT_SPEC_VIOLATION = 4
 EXIT_TIMEOUT = 5
 EXIT_AGENT_ERROR = 6
+EXIT_FACTS_UNVERIFIED = 7
 
 RECEIPT_MARKER = "## RECEIPT"
 RECEIPT_MAX_LINES = 30
@@ -90,10 +92,12 @@ INLINE_MISSION_ROLES = frozenset({"scout", "explorer"})
 
 # stdout 요약에서 원문 그대로 싣는 제어 필드 / 건수로 접는 화물 필드.
 # coder 는 항목이 없다 = 항상 리시트 전문 출력 (VERIFY·SPEC 판정이 호출측 몫).
+# VERIFIED 는 스크립트가 주입하는 제어 필드다 — 요약 모드에서 접히면 검증
+# 사실이 stdout 에서 사라지므로 반드시 제어 쪽에 있어야 한다.
 CONTROL_FIELDS = {
-    "scout": ("SEARCHED", "UNCERTAIN", "CONFIDENCE"),
+    "scout": ("SEARCHED", "UNCERTAIN", "CONFIDENCE", "VERIFIED"),
     "explorer": ("STATUS", "COVERAGE", "CONFIDENCE", "UNCERTAIN",
-                 "FACTS FILE"),
+                 "FACTS FILE", "VERIFIED"),
 }
 CARGO_FIELDS = {
     "scout": ("FOUND", "RELATED"),
@@ -113,6 +117,23 @@ DEFAULT_MODEL = "zai/glm-5.2"
 # 작업 트리를 수정하는 역할 — 실행 전후 porcelain 대조 대상.
 # scout/explorer 는 읽기 전용이라 대조를 생략한다.
 WRITE_ROLES = frozenset({"coder"})
+
+# path:line 주장을 파일과 대조하는 역할 — WRITE_ROLES 의 읽기 전용 대응물.
+# coder 는 제외한다: 그쪽 검증은 porcelain 스코프 대조(exit 4)가 담당하고,
+# CHANGED 는 위치 주장이 아니라 변경 보고라 같은 방식으로 반증할 수 없다.
+VERIFY_ROLES = frozenset({"scout", "explorer"})
+
+# 인용이 실재하는데 라인 번호만 어긋난 경우를 찾는 탐색 창(±줄).
+# 실측 근거: explorer facts 90건 중 7건이 offset -2~+3 의 드리프트였고
+# 날조는 0건이었다. 지배적 실패 모드가 드리프트라 자동 교정이 성립한다.
+DRIFT_WINDOW = 5
+
+# 이보다 짧은 인용은 어느 줄에나 걸려 반증력이 없다 → unparsed 로 센다.
+MIN_EVIDENCE_CHARS = 4
+
+# fact 경로를 basename 으로 되찾을 때 훑지 않을 디렉터리.
+_SKIP_DIRS = {".git", "node_modules", "dist", "build", "coverage",
+              "__pycache__", ".venv", "venv", "bin", "obj"}
 
 # rc != 0 + 리시트 부재일 때만 스캔하는 원인 추정 시그널 (소문자 부분 매칭).
 QUOTA_SIGNALS = ("quota", "usage limit", "credit", "rate limit",
@@ -288,6 +309,363 @@ def _control_summary(role: str, receipt: str):
         else:
             out.append(_fold_cargo(label, lines))
     return "\n".join(out).strip() or None
+
+
+# ------------------------------------------------------------ fact 검사기
+
+# 검증용 파서. _CARGO_BULLET_RX 와 달리 evidence(rest)를 캡처하고, 교정을 위해
+# 라인번호의 위치(span)를 원문 기준으로 잡을 수 있도록 raw 줄에 매칭한다.
+# 태그는 선택 — scout 의 RELATED 줄에는 태그가 없다.
+# 프리앰블은 `- <path>:<line> [tag] — "<evidence>"` 하나를 규정하지만 실제 출력은
+# 실행마다 흔들린다(실측 스모크 3회). 계약을 지킨 형태만 파싱하면 커버리지가
+# 조용히 무너지므로, 모호하지 않은 변형은 흡수한다:
+#   · `:98-100` 라인 범위 — 없으면 하이픈이 구분자로 먹혀 뒤 숫자가 evidence 에 붙음
+#   · `:476/478/481` 묶음 — 첫 번째를 대표로 삼는다
+#   · `- :473 …` 경로 생략 — 앞 불릿의 경로를 상속한다(같은 목록 안에서 무모호)
+_FACT_LINE_RX = re.compile(
+    r"^\s*-\s+(?P<loc>.*?):(?P<line>\d+)(?:[-/,]\d+)*\s*(?:\[[a-z|]+\])?\s*"
+    r"[—–-]\s*(?P<rest>.*)$")
+
+# fact 를 주장하려 한 불릿("- <경로>:<번호> …")인데 계약 형식이 아닌 것을 세기
+# 위한 느슨한 패턴. 집계 불릿(`- src/a.py (12 hits) …`)과 서술 불릿(`- Note: …`)
+# 은 라인번호가 없어 여기 안 걸린다 — 그 둘은 형식 붕괴가 아니라 정상이다.
+_LOOSE_FACT_RX = re.compile(r"^\s*-\s+\S*?:\d+\b")
+
+# 인용이 소스의 줄바꿈을 넘어가는 경우가 있다 — 에이전트가 wrap 된 한 문장을
+# 한 줄로 이어 인용한다. 시작 줄부터 이만큼까지 이어붙여 대조한다.
+MAX_WRAP_SPAN = 3
+
+_basename_cache = {}
+_source_cache = {}
+
+
+def _evidence_candidates(rest: str):
+    """evidence 후보 목록 — 하나라도 매치하면 통과로 본다.
+
+    한 줄에 인용이 여러 개인 경우가 있어(explorer KEY FACTS 의
+    `"A" -> :300 "B"` 형태) "마지막 구분자까지" 규칙 하나로는 두 인용을
+    이어붙여 실패한다. 최단·최장·무구분자 셋을 만들어 관대하게 판정한다 —
+    날조는 어느 후보로도 매치되지 않으므로 관대함이 반증력을 깎지 않는다.
+
+    구분자는 첫 글자로 정한다 — 실행마다 다르다(실측 4회: 큰따옴표 / 백틱 /
+    작은따옴표). 첫 글자만 보므로 본문 안의 아포스트로피는 영향이 없다.
+    """
+    r = rest.strip()
+    out = []
+    if r and r[0] in "\"`'":
+        delim = r[0]
+        nxt = r.find(delim, 1)
+        last = r.rfind(delim)
+        if nxt > 0:
+            out.append(r[1:nxt])
+        if last > nxt:
+            out.append(r[1:last])
+    # 구분자가 아예 없으면 축자 인용이 아니라 서술이다("FOOTER_FIELDS injects
+    # ... control field"). 서술은 반증할 수 없으므로 후보를 만들지 않고
+    # unparsed 로 흘려보낸다 — 원문을 후보로 쓰면 거짓 실패가 된다(실측 스모크).
+    seen = []
+    for c in dict.fromkeys(out):
+        n = _normalize_evidence(c)
+        if n and n not in seen:
+            seen.append(n)
+    return seen
+
+
+def _normalize_evidence(s: str) -> str:
+    s = s.strip()
+    while s.startswith("..."):
+        s = s[3:]
+    while s.endswith("..."):
+        s = s[:-3]
+    # 에이전트가 내부 따옴표를 이스케이프할 때도, 안 할 때도 있다(실측).
+    return " ".join(s.replace('\\"', '"').split())
+
+
+def _resolve_fact_path(loc: str, repo: Path):
+    """fact 가 가리키는 파일을 찾는다. 반환: (path|None, "ok"|"absent"|"ambiguous").
+
+    explorer facts 본문은 저장소 루트에서 해석되지 않는 맨 파일명을 쓴다
+    (`ext_dispatch.py:283`, 실제 위치는 `scripts/ext_dispatch.py`) — 실측
+    90건 전부. basename 으로 되찾되 **유일 매치일 때만** 채택한다.
+
+    0건과 2건 이상을 구분하는 것이 중요하다: 0건은 그런 파일이 저장소에
+    없다는 뜻이라 반증된 주장(failed)이고, 2건 이상은 어느 것인지 모른다는
+    뜻이라 판정 불가(unparsed)다. 틀린 파일에 대조하면 거짓 실패가 된다.
+    """
+    p = Path(loc.strip().strip('"').strip("`"))
+    cand = p if p.is_absolute() else repo / p
+    try:
+        if cand.is_file():
+            return cand, "ok"
+    except OSError:
+        return None, "ambiguous"
+    key = (str(repo), p.name)
+    if key not in _basename_cache:
+        hits = []
+        try:
+            for h in repo.rglob(p.name):
+                if any(part in _SKIP_DIRS for part in h.parts):
+                    continue
+                if h.is_file():
+                    hits.append(h)
+                    if len(hits) > 1:
+                        break
+        except OSError:
+            hits = [None, None]  # 훑지 못했으면 판정 불가 쪽으로
+        _basename_cache[key] = (hits[0], "ok") if len(hits) == 1 else (
+            None, "absent" if not hits else "ambiguous")
+    return _basename_cache[key]
+
+
+def _source_lines(path: Path):
+    """파일 내용을 정규화해 캐시. facts 90건이 한 파일을 가리키므로 필수."""
+    key = str(path)
+    if key not in _source_cache:
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            _source_cache[key] = None
+            return None
+        lines = text.lstrip("﻿").splitlines()
+        _source_cache[key] = tuple(" ".join(ln.split()) for ln in lines)
+    return _source_cache[key]
+
+
+def _matches_at(lines: tuple, k: int, cands: list) -> bool:
+    """k 번째 줄에 인용이 있나. wrap 된 문장은 다음 줄까지 이어붙여 본다.
+
+    이어붙이기는 인용이 이 줄에서 **시작**할 때만 허용한다. 무조건 이어붙이면
+    실제로는 k+1 에 있는 인용이 k 에서도 통과해 드리프트 탐지가 죽는다.
+    """
+    if not 1 <= k <= len(lines):
+        return False
+    first = lines[k - 1]
+    if any(c in first for c in cands):
+        return True
+    if not first:
+        return False
+    starters = [c for c in cands if c.startswith(first)]
+    if not starters:
+        return False
+    joined = first
+    for off in range(1, MAX_WRAP_SPAN):
+        if k + off > len(lines):
+            break
+        joined = joined + " " + lines[k + off - 1]
+        if any(c in joined for c in starters):
+            return True
+    return False
+
+
+def _matches_near(lines: tuple, k: int, cands: list) -> bool:
+    """마지막 관문 — 공백을 무시하고 k 주변 창에서 인용을 찾는다.
+
+    에이전트는 물리적 줄이 아니라 **구문 단위**를 인용한다. wrap 을 넘어 한 줄로
+    재구성하면서 여는 괄호가 앞줄에서 딸려오거나 들여쓰기 공백이 사라진다(실측
+    스모크: `(None, "absent" ...)` 의 `(` 는 앞줄 끝에 있었다). 판정 대상은
+    그 텍스트가 거기 실재하는가이지 에이전트의 렌더링 방식이 아니다.
+
+    라인 번호 정밀도는 앞선 드리프트 탐색이 이미 책임진다 — 여기까지 온 건
+    창 안 어느 한 줄로도 떨어지지 않는 인용뿐이라 교정할 대상이 없다.
+    """
+    lo = max(1, k - 1)
+    hi = min(len(lines), k + MAX_WRAP_SPAN)
+    blob = "".join(lines[lo - 1:hi]).replace(" ", "")
+    return any(c.replace(" ", "") in blob for c in cands if c.strip())
+
+
+def _classify_fact(loc: str, lineno: int, rest: str, repo: Path):
+    """단일 fact 판정. 반환: (grade, detail, corrected_line|None)."""
+    cands = [c for c in _evidence_candidates(rest)
+             if len(c) >= MIN_EVIDENCE_CHARS]
+    if not cands:
+        return "unparsed", "no falsifiable verbatim quote", None
+    path, how = _resolve_fact_path(loc, repo)
+    if how == "absent":
+        return "failed", f"{loc}:{lineno} — no such file in repo", None
+    if path is None:
+        return "unparsed", "path not uniquely resolvable in repo", None
+    lines = _source_lines(path)
+    if lines is None:
+        return "unparsed", "file unreadable", None
+    if _matches_at(lines, lineno, cands):
+        return "verified", None, None
+    # 드리프트 탐색 — 창 안에서 유일할 때만 교정한다.
+    hits = [k for k in range(max(1, lineno - DRIFT_WINDOW),
+                             min(len(lines), lineno + DRIFT_WINDOW) + 1)
+            if k != lineno and _matches_at(lines, k, cands)]
+    if len(hits) == 1:
+        return "drifted", f"{loc}:{lineno} -> :{hits[0]}", hits[0]
+    if len(hits) > 1:
+        return "failed", (f"{loc}:{lineno} — evidence matches {len(hits)} lines "
+                          f"within +-{DRIFT_WINDOW}, ambiguous"), None
+    if _matches_near(lines, lineno, cands):
+        return "verified", None, None
+    if not 1 <= lineno <= len(lines):
+        return "failed", (f"{loc}:{lineno} — file has {len(lines)} lines"), None
+    actual = lines[lineno - 1]
+    return "failed", (f"{loc}:{lineno} — that line is "
+                      f"\"{actual[:60]}\""), None
+
+
+def _verify_fact_text(text: str, repo: Path):
+    """텍스트의 fact 불릿을 대조하고, 드리프트는 라인번호를 교정해 돌려준다.
+
+    반환: (교정된 text, stats)
+    """
+    stats = {"verified": 0, "drifted": [], "failed": [], "unparsed": 0,
+             "near": 0, "total": 0}
+    out = []
+    last_loc = None
+    for raw in text.splitlines():
+        if not raw.strip().startswith("- "):
+            out.append(raw)
+            continue
+        m = _FACT_LINE_RX.match(raw)
+        if not m:
+            # `path:line` 모양을 갖췄는데 계약 형식이 아니면 near — 집계 불릿이나
+            # 서술 불릿(둘 다 라인번호가 없다)과 구별해야 형식 붕괴를 짚을 수 있다.
+            if _LOOSE_FACT_RX.match(raw):
+                stats["near"] += 1
+            stats["unparsed"] += 1
+            stats["total"] += 1
+            out.append(raw)
+            continue
+        stats["total"] += 1
+        loc = m.group("loc").strip()
+        if not loc:  # `- :473 …` — 앞 불릿의 경로를 상속
+            loc = last_loc
+        if loc:
+            last_loc = loc
+        else:
+            stats["unparsed"] += 1
+            out.append(raw)
+            continue
+        grade, detail, fixed = _classify_fact(
+            loc, int(m.group("line")), m.group("rest"), repo)
+        if grade == "verified":
+            stats["verified"] += 1
+            out.append(raw)
+        elif grade == "drifted":
+            stats["drifted"].append(detail)
+            out.append(raw[:m.start("line")] + str(fixed)
+                       + raw[m.end("line"):])
+        elif grade == "failed":
+            stats["failed"].append(detail)
+            out.append(raw)
+        else:
+            stats["unparsed"] += 1
+            out.append(raw)
+    return "\n".join(out), stats
+
+
+def _facts_file_path(receipt: str, report: Path):
+    """explorer 의 FACTS FILE. 리시트 선언값 우선, 없으면 REPORT 에서 유도."""
+    declared = _parse_field_value(receipt, "FACTS FILE")
+    if declared:
+        return Path(declared.strip().strip('"').strip("`"))
+    return report.with_name(report.stem + "-facts.md")
+
+
+def _verify_facts(receipt: str, role: str, repo: Path, report: Path):
+    """리시트(+ explorer 의 facts 본문)를 대조·교정한다.
+
+    반환: (교정된 receipt, result dict). facts 본문은 제자리에서 다시 쓴다 —
+    하위 노드가 읽는 것이 그쪽이므로 교정이 반영돼야 의미가 있다.
+    """
+    receipt, r_stats = _verify_fact_text(receipt, repo)
+    result = {"receipt": r_stats, "facts": None, "facts_file": None,
+              "truncated": _TRUNC_MARK in receipt}
+    if role == "explorer":
+        fpath = _facts_file_path(receipt, report)
+        result["facts_file"] = str(fpath)
+        if fpath.is_file():
+            original = fpath.read_text(encoding="utf-8", errors="replace")
+            fixed, f_stats = _verify_fact_text(original, repo)
+            result["facts"] = f_stats
+            if f_stats["drifted"]:
+                fpath.write_text(fixed, encoding="utf-8")
+        else:
+            result["facts"] = "missing"
+    return receipt, result
+
+
+def _failed_facts(result: dict):
+    out = list(result["receipt"]["failed"])
+    facts = result.get("facts")
+    if isinstance(facts, dict):
+        out += facts["failed"]
+    return out
+
+
+def _format_collapse(stats) -> bool:
+    """fact 를 주장한 불릿이 있는데 단 하나도 대조되지 않음 = 계약 불일치.
+
+    집계 모드(`FOUND: 12 across 3 files`)나 서술 불릿만 있는 경우와 구별해야
+    한다. 그쪽은 검사할 대상이 없는 정상이고, 이쪽은 대상이 있는데 형식이
+    어긋나 전량 건너뛴 상태다 — 무증상으로 두면 미검증 실행이 건강한 실행과
+    구별되지 않는다(실측: explorer 1회차 59건 전량, exit 0).
+    """
+    return (isinstance(stats, dict) and stats.get("near", 0) > 0
+            and stats["total"] - stats["unparsed"] == 0)
+
+
+def _unverifiable(result: dict):
+    """검사가 성립하지 않은 대상의 설명. 없으면 None."""
+    hit = []
+    if _format_collapse(result["receipt"]):
+        hit.append(f"receipt {result['receipt']['near']} bullets")
+    if _format_collapse(result.get("facts")):
+        hit.append(f"facts file {result['facts']['near']} bullets")
+    return ", ".join(hit) or None
+
+
+def _append_verified_field(receipt: str, result: dict) -> str:
+    """리시트 말미에 VERIFIED 요약을 붙인다.
+
+    coder 의 _override_spec_field 와 같은 계열 — 스크립트가 검증한 사실을
+    에이전트 자기신고 옆에 나란히 둔다.
+    """
+    r = result["receipt"]
+    ok = r["verified"] + len(r["drifted"])
+    judgeable = r["total"] - r["unparsed"]
+    scope = " of visible facts (receipt truncated)" if result["truncated"] else ""
+    if _format_collapse(r):
+        head = (f"VERIFIED: NOTHING CHECKED — {r['near']} receipt fact bullets "
+                f"do not match the contract format, 0 checked")
+    elif judgeable == 0:
+        head = (f"VERIFIED: no checkable path:line facts "
+                f"({r['unparsed']} unparsed) — script-checked")
+    else:
+        head = (f"VERIFIED: {ok}/{judgeable} facts{scope} "
+                f"({len(r['drifted'])} drifted, {r['unparsed']} unparsed)"
+                f" — script-checked")
+    lines = [head]
+
+    facts = result.get("facts")
+    if facts == "missing":
+        lines.append(f"  ! FACTS FILE not found: {result['facts_file']}")
+    elif _format_collapse(facts):
+        lines.append(f"  ! facts file: NOTHING CHECKED — {facts['near']} fact "
+                     f"bullets do not match the contract format, 0 checked")
+    elif isinstance(facts, dict):
+        f_ok = facts["verified"] + len(facts["drifted"])
+        lines.append(
+            f"  facts file: {f_ok}/{facts['total'] - facts['unparsed']} "
+            f"({len(facts['drifted'])} drifted, {facts['unparsed']} unparsed)")
+
+    drifted = list(r["drifted"])
+    if isinstance(facts, dict):
+        drifted += facts["drifted"]
+    for d in drifted[:3]:
+        lines.append(f"  ~ {d}")
+    if len(drifted) > 3:
+        lines.append(f"  ~ (+{len(drifted) - 3} more line numbers corrected)")
+
+    for f in _failed_facts(result)[:5]:
+        lines.append(f"  ! {f}")
+
+    return receipt + "\n" + "\n".join(lines)
 
 
 def _detect_quota_signal(text: str):
@@ -563,6 +941,25 @@ def _execute_job(job: dict, dry_run: bool) -> dict:
                 exit_code = EXIT_SPEC_VIOLATION
     elif role in WRITE_ROLES and pre_snapshot is None:
         status = "ok (git unavailable — SPEC not script-verified)"
+
+    # 읽기 전용 역할의 대응물: 스코프 대신 사실을 대조한다. 드리프트는 여기서
+    # 교정되므로 하위 스펙이 맞는 라인 번호를 받는다.
+    if role in VERIFY_ROLES:
+        receipt, verdict = _verify_facts(receipt, role, repo, report_path)
+        receipt = _append_verified_field(receipt, verdict)
+        failed = _failed_facts(verdict)
+        unverifiable = _unverifiable(verdict)
+        if failed:
+            status = (f"facts-unverified: {len(failed)} of "
+                      f"{verdict['receipt']['total']}")
+            if unverifiable:
+                status += f" (+unverifiable: {unverifiable})"
+            exit_code = EXIT_FACTS_UNVERIFIED
+        elif unverifiable:
+            # 치명은 아니다 — 사실이 틀렸다는 증거가 아니라 대조가 성립하지
+            # 않았다는 뜻이고, 수확물 자체는 여전히 쓸 수 있다. 다만 검증된
+            # 것으로 취급하면 안 되므로 status 로 반드시 드러낸다.
+            status = f"facts-unverifiable: {unverifiable} unparseable"
 
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(

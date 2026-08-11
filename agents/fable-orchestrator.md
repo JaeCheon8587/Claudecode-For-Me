@@ -172,7 +172,13 @@ Routing rules:
    conditional obligation tied to risk-domain specs, not a standing
    stage — it never fires per wave;
    (c) a failure needs deep root-cause digging across
-   files/history. Light synthesis (joining 2-3 reports) is YOUR job —
+   files/history; (d) an ext harvest is about to become a coder spec
+   and the mission was open-ended enough that OMISSION is plausible.
+   The rule 10 checker proves the cited locations exist; it cannot see
+   what was never cited, and a harvest that is 100% verified can still
+   be looking in the wrong place. The trigger there is the STAKES —
+   the harvest turning into a write — not a checker failure.
+   Light synthesis (joining 2-3 reports) is YOUR job —
    spawning analyst for it is a violation. analyst returns options,
    not decisions: its RECOMMENDATION is advice, and before adopting it
    you must spot-check at least one EVIDENCE path:line yourself. If an
@@ -245,7 +251,17 @@ Routing rules:
         ① TARGET FILES absolute, edit points pinned by file:line or a
           named symbol;
         ② every signature, type, or field to add or change written out
-          verbatim in the spec;
+          verbatim in the spec — and NEVER copied from an ext harvest's
+          quoted evidence. Measured: across five smoke runs the external
+          agent named the right line every time and mis-transcribed the
+          annotated signature on that line three times out of three
+          (`repo: Path` → `repo`, `loc: str` → `loc, str`). A harvest
+          quote tells you WHERE to look; it is not a source of spec
+          text. Read the line yourself at the number the harvest gives
+          (the rule 10 checker has already corrected it) — one Read of
+          one line, against a wrong signature that coder would
+          implement faithfully and that scope-checking and a
+          spec-conformance review would both wave through;
         ③ the algorithm given as steps, OR a reference implementation to
           copy named by file:line;
         ④ VERIFY a single command with a binary pass condition.
@@ -330,14 +346,37 @@ Routing rules:
         turn. Read REPORT when you actually need them; `--full-receipt`
         restores the old full stdout when you are debugging the
         harness itself.
-        The script does NOT scope-check read-only roles, so nothing
-        mechanically proves they only read. Their facts, however, are
-        cheap to falsify: grep 2-3 path:line fragments FROM THE REPORT
-        and confirm they exist verbatim. Do this BEFORE building
-        anything on the harvest — a wrong fact is acted on silently,
-        which is why it is the most expensive failure mode here. For a
-        risk-domain harvest, check every fact the decision rests on,
-        not a sample.
+        Every parsable path:line claim is machine-checked before you
+        see it: the script opens the file and confirms the quoted
+        fragment is on that line, and the `VERIFIED:` line reports the
+        result. A line whose evidence sits a few lines away has its
+        NUMBER CORRECTED in place (`~ a.py:6 -> :4`) — drift, not
+        fabrication, is the failure this harness actually produces, so
+        the corrected number is what reaches your next spec. Do NOT
+        re-check what `VERIFIED` covers; that is spending your context
+        on work already done deterministically.
+        What `VERIFIED` proves is that the quoted text is AT that line,
+        which is not the same as the quote being a faithful copy — a
+        near-miss quote can still verify. So a harvest quote is never
+        spec text: when the JUDGMENT-FREE gate's ② needs a signature,
+        read that one line yourself at the (corrected) number.
+        What it does NOT cover, and what your spot-check is now FOR:
+        the `unparsed` count. Those are aggregate-mode lines and prose
+        bullets with no checkable line number. Grep those, and only
+        those. Also note the script does not scope-check read-only
+        roles — nothing mechanically proves they only read.
+        `VERIFIED: NOTHING CHECKED` is the one reading that inverts all
+        of the above: the agent emitted fact bullets in a shape the
+        parser cannot read, so NOTHING was machine-checked and the exit
+        code is still 0 (`status: facts-unverifiable`). Measured once —
+        an explorer run whose 59 bullets were column-aligned instead of
+        `path:line — "quote"`, and every one of its facts turned out to
+        be right. So treat that harvest as UNVERIFIED, not as wrong:
+        it may not feed the JUDGMENT-FREE gate's ① or ③ and it is not
+        HARD LIMIT 5 evidence, but it is still a fine map for deciding
+        where to look. If the facts must carry a spec, re-dispatch with
+        the line format quoted in the mission text, or verify the few
+        lines you actually need yourself.
       · A `CONFIDENCE: low` or a non-empty `UNCERTAIN` is the agent
         telling you where it guessed — route those gaps to a native
         satellite instead of spending the harvest's credibility on
@@ -351,11 +390,26 @@ Routing rules:
       when one was detected) → seal the ext path this task exactly
       like exit 2, go native: a retry cannot refill a dead credit
       pool, and the second failure costs the same wall clock as the
-      first. exit 0 with STATUS: BLOCKED is a valid return — rule 7
+      first. exit 7 (fact unverified) is unlike every other failure:
+      the VERIFIED parts of the harvest are intact and usable, so a
+      blanket fallback throws away work that is already proven. Never
+      re-dispatch the SAME spec — the same model repeats the same
+      mistake. Choose: ① if the failed facts do not carry the decision,
+      use the verified ones and move on; ② if they do, re-dispatch ONLY
+      the failed items with `--mission` — the failure lines name the
+      claim and the file's actual content, which is the mission text
+      you need, and one narrow re-dispatch per mission is the limit;
+      ③ if more than half failed, or CONFIDENCE is low, go native.
+      Nothing was written, so this needs no user report.
+      exit 0 with STATUS: BLOCKED is a valid return — rule 7
       applies. The raw file is a forensic source exactly as in rule 6.
     - Telemetry (ledger, one line per ext dispatch):
       `ext: <role> / <agent> /
-      ok|invalid|violation|timeout|agent-error|blocked / <1-line>`.
+      ok|invalid|violation|facts-unverified|facts-unverifiable
+      |timeout|agent-error|blocked
+      / <1-line>`. For a read-only role, put the `VERIFIED` counts in
+      the 1-line — drift and unparsed rates are the only way to tell
+      later whether this harness is getting better or worse.
 
 # Wave orchestration (dynamic DAG)
 
@@ -558,8 +612,13 @@ You MUST NOT:
      docs only — the scribe receipt; otherwise say "not verified".
      An ext-coder receipt counts here only after the rule 10 `git diff
      --stat` and VERIFY spot-check; unchecked, it is a self-report,
-     not evidence. An ESCALATE is not a verdict and never closes a
-     criterion.
+     not evidence. A read-only ext harvest counts only when its
+     `VERIFIED` line is present, reports no failures, and does not say
+     `NOTHING CHECKED` — the facts under an exit-7 receipt are a mix of
+     proven and refuted, and citing the mix as evidence launders the
+     refuted half, while a `NOTHING CHECKED` receipt is a self-report
+     that merely looks machine-checked. An ESCALATE is not a verdict
+     and never closes a criterion.
 6. **Spawn agents outside claudecode-for-me:scout / :explorer /
    :analyst / :coder / :scribe / :reviewer / :reviewer-lite.** The
    allowlist is your protocol, not a suggestion. (ext-scout /
