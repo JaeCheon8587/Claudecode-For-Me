@@ -327,7 +327,11 @@ Routing rules:
       manifest JSON ({"jobs":[{report,role,spec|mission,...}]} — each
       job takes either key, and they may be mixed), never N
       separate Bash calls — the script launches all N concurrently
-      (max_workers=N, code-guaranteed). A mixed wave = native Agent
+      (max_workers=N, code-guaranteed). Read-only roles run fully in
+      parallel; ext-coder jobs on the SAME repo serialize on a lock,
+      because the scope check snapshots the whole tree and concurrent
+      writers would each read the other's changes as their own exit 4.
+      The wave banner says so when it happens. A mixed wave = native Agent
       calls plus one wave Bash call in the same message. Long waves
       run via Bash run_in_background.
     - Receipt distrust: every ext receipt is a self-report.

@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v3.47.0 · 커스텀 스킬 14종 + 슬래시 커맨드 18종 + 에이전트 17종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v3.48.0 · 커스텀 스킬 14종 + 슬래시 커맨드 18종 + 에이전트 17종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,7 +11,7 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `3.47.0` |
+| 버전 | `3.48.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
@@ -66,6 +66,91 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v3.48.0 — ext 하네스 경화: 예외 격리 · 스코프 대조 양방향 · fact 경로 봉쇄
+
+v3.40.0 이래 `ext_dispatch.py`는 1098줄로 자랐고 74케이스를 통과하고 있었다. 그런데 그
+74건은 **`run` 단일 성공 경로에 몰려 있었다** — `wave` 실행 경로 테스트는 dry-run 1건,
+`EXIT_TIMEOUT`은 0건. 리뷰에서 결함 11건을 잡았고 **전부 현행 스위트를 통과하는 상태**였다.
+10건을 고치고 1건은 오진으로 철회했다.
+
+**(1) 실패가 계약 밖으로 샜다.** `cmd_wave`의 `[f.result() for f in futures]`는 job 하나의
+예외를 재발생시키는데, `with` 블록의 `shutdown(wait=True)` 때문에 **나머지 job이 다 끝날
+때까지 기다린 뒤** 죽는다 — 최대 1200초×N의 wall-clock을 전액 지불하고 출력은 0이다. 이미
+완료된 형제 job의 리시트도 함께 사라진다. 트리거는 가상이 아니다: manifest는 오케스트레이터
+LLM이 만드는 JSON이라 `report` 키 누락·`timeout` 타입 오류가 기대되는 실패 모드고,
+`assert isinstance(jobs, list)`는 **원소 타입을 보지 않아** `{"jobs":["a"]}`를 그대로
+통과시켰다(게다가 `assert`라 `python -O`에서 사라진다). 코드 자신이 이 실패 모드를 알고
+있었다 — v3.45.0이 `unknown role` **한 케이스만** 개별 방어하면서 주석에 "wave에서 job
+하나가 나머지 결과까지 삼킨다"고 적어두고 일반 가드는 두지 않았다.
+
+`_run_job` 래퍼 신설 — 예외를 `exit 1 / job-error: <타입>: <메시지>` 결과 dict로 강등한다.
+`_execute_job`은 손대지 않아 기존 74건의 호출 규약이 불변이다. `_err`도 stdout 마지막 줄
+JSON을 내도록 고쳤다: rule 10의 HARD LIMIT 3 면제 근거가 "리시트 + JSON 한 줄"인데
+**오류 경로만 그 줄이 없어** 오케스트레이터가 stderr를 사람처럼 읽어야 했다. `_git_porcelain`의
+`except OSError`도 같은 묶음이다 — git 미설치·cwd 부재가 잡히지 않아 1200초짜리 coder 결과가
+트레이스백으로 유실됐고, 정작 `"git unavailable"` 폴백 분기는 **도달 불가**였다(rc 128,
+즉 "저장소 아님"에서만 성립).
+
+**(2) 스코프 대조가 양방향으로 뚫려 있었다.** exit 4는 계약이 "리시트는 self-report이고
+exit 4가 그 대척점"이라고 규정한 **가장 신뢰받는 기계 검증**인데, 그 보증이 어디에도 적히지
+않은 전제 위에 서 있었다.
+
+*거짓 음성*: `_git_porcelain`이 상태 코드를 잘라내고 경로만 담아 `post - pre` 차집합을 했다.
+실행 전 이미 ` M`인 파일을 coder가 TARGET FILES 밖에서 더 수정하면 양쪽 다 ` M`이라 차집합이
+비고 **위반이 조용히 통과한다**(exit 0). ext-coder는 같은 태스크 안에서 앞선 작업으로
+더러워진 트리에서 도는 것이 정상이므로 예외 상황이 아니다. → 경로→(상태, **내용 sha256**)
+매핑 비교로 교체. 해싱은 porcelain이 보고한 경로에만 걸려 깨끗한 트리에서 `pre`는 0회이고,
+2MB 초과는 `(크기, mtime_ns)`로 낮춘다. 지문을 못 뜬 경로는 위반도 통과도 아닌
+`unverifiable`로 선언한다 — 차단의 대안이 아니라 차단이 성립하지 않는 잔여 경로의 처리이고,
+fact 검사기의 `unparsed`와 같은 설계 언어다.
+
+*거짓 양성*: wave가 같은 repo에서 coder 2개를 동시 기동하면 스냅샷 대상이 트리 전역이라
+각자의 차집합에 **서로의 변경이 섞여** 둘 다 `script-verified` 라벨을 달고 거짓 exit 4가
+난다 — 문서가 권장하는 사용법(N 미션 = wave 1콜)이 쓰기 역할에서 정확히 역효과였다.
+→ repo 단위 쓰기 락. 읽기 역할은 `nullcontext`라 병렬성 손실이 0이고(실사용 wave는 거의
+전부 읽기 역할), 직렬화가 실제로 일어나면 wave 배너가 고지한다. 오케스트레이터 계약의
+"max_workers=N, code-guaranteed" 문장에도 단서를 달았다.
+
+**(3) fact 검사기가 신뢰 경계를 자기신고에 맡겼다.** 이 하네스의 철학은 "자기신고를 믿지
+않고 스크립트가 대조한다"인데 **파일 시스템 접근 경로만은 예외였다.** `_resolve_fact_path`는
+외부 LLM이 만든 `loc`의 절대경로를 그대로 열었고 상대경로의 `..`도 막지 않았다. 그리고
+대조가 실패하면 `_classify_fact`가 **그 파일의 60자를 판정문에 싣는다** → 리시트 → REPORT
+파일 → exit 7은 요약이 아니라 전문 출력이므로 stdout → 오케스트레이터 context. 리시트에
+`- <repo 밖 경로>:1 — "아무 인용"` 한 줄이면 임의 파일 내용이 흘러나온다. **신뢰를 높이려고
+넣은 계층이 유출 통로가 됐다.** `_within` 게이트를 `is_file()` **호출 전에** 두고, 밖이면
+파일을 열지 않고 `unparsed / path outside repo`로 등급한다 — `failed`가 아닌 이유는 주장이
+거짓이라는 증거가 아니라 판정 대상이 아니기 때문이다(v3.47.0의 4등급 언어 그대로).
+
+쓰기 쪽도 같은 묶음이다. `FACTS FILE` 선언값은 무검증으로 `write_text` 대상이었다 —
+**모델 출력이 파일 쓰기 경로를 결정하는 유일한 지점**이다. 경계는 repo가 아니라
+**`report.parent`**로 잡았다: repo로 넓히면 `docs/architecture.md` 같은 실존 문서를
+오선언했을 때 그 문서의 라인 번호가 조용히 재작성되는 경로가 열린 채로 남는다. 프리앰블이
+"REPORT에서 유도하라"고 규정하므로 정상 선언은 언제나 그 안이다. 밖이면 유도 경로로
+폴백하고 `! FACTS FILE outside report dir, ignored:`로 드러낸다 — 조용한 무시는 안 된다.
+
+**(4) 파서·표기.** 드리프트 교정이 범위 표기를 깨뜨렸다: `- a.py:4-5`의 증거가 실제로 7행에
+있으면 결과가 `a.py:7-5`, **역전된 범위**다. 교정된 번호를 하위 스펙이 그대로 소비하는 것이
+이 기능의 존재 이유이므로 깨진 표기가 그대로 전달된다 → 후행 표기를 캡처해 단일 번호로
+접는다(근거가 확인된 위치는 한 곳뿐이라 범위를 유지할 정보가 없다). `_validate_fields`의
+`f"{FIELD}:" in receipt`는 위치 무관 부분 문자열이라 산문 안의 `NOTE: I could not run
+VERIFY: ...`도 필드 존재로 통과시켰다 → 줄 시작 앵커링. 계약대로 `FACTS FILE: none`을 낸
+BLOCKED 반환에 `! FACTS FILE not found` 거짓 경고가 붙던 것은 미선언과 명시적 `none`을
+구별해 해소. `WRITE_ROLES` 주석의 "읽기 전용 역할"이라는 표기도 정정했다 — explorer는
+FACTS FILE을 쓰고 스크립트도 교정본을 되쓴다. 용어가 (3)의 위험을 인지에서 가리고 있었다.
+
+**리뷰 1건은 철회했다.** `_fold_cargo`가 `- a.py:4/5/7`의 loc을 `a.py:4/5`로 잡아 파일 수를
+부풀린다고 판정했으나, 실측하니 해당 불릿은 **아예 매치되지 않는다** — 콜론이 하나뿐이라
+lazy 백트래킹이 그 형태를 만들 수 없고 lookahead 앵커링이 이미 방어하고 있었다. 코드 변경
+없이 현재 동작만 회귀 가드로 고정했다.
+
+**검증**: `tests/test_ext_dispatch.py` **91케이스 통과**(기존 74 + 신규 17). 기존 74건은
+**한 건도 수정하지 않았다** — 전부 `_execute_job`을 직접 호출하고 내부 헬퍼를 부르는 테스트가
+하나도 없어 시그니처·반환형을 자유롭게 바꿀 수 있었다. 신규 테스트는 **수정 전 실패를 먼저
+확인한 뒤** 작성했다: 동시 coder 2개는 둘 다 exit 4였고, pre-dirty 위반은 exit 0이었고,
+repo 밖 fact는 리시트에 파일 내용 60자가 실렸고, 오선언된 프로젝트 문서는 라인 번호가
+재작성됐다. 빨간불을 못 보는 테스트는 회귀 가드로서 무가치하다. 커버리지 공백도 함께
+메웠다 — `EXIT_TIMEOUT`은 테스트가 0건이었다.
 
 ### v3.47.0 — 읽기 전용 ext 역할 fact 검사기: path:line 기계 대조 + 드리프트 자동 교정
 
@@ -1105,6 +1190,10 @@ Bash 1콜(스크립트가 `<report>-spec.md`에 스펙을 합성), ext-coder와 
 스팟체크는 기계가 판정 못 한 `unparsed` 줄로 축소된다. 형식이 어긋나 **한 건도 대조되지
 않은** 수확물은 `VERIFIED: NOTHING CHECKED` / status `facts-unverifiable` 로 드러나며,
 증거로는 못 쓰고 지도로만 쓴다.
+**v3.48.0부터 두 보증이 기계적으로 성립한다** — exit 4는 실행 전 트리가 더러워도 유지되고
+(경로별 내용 지문 대조), 같은 repo의 ext-coder는 wave 안에서 직렬화되어 서로를 위반으로
+집계하지 않는다. 읽기 역할의 파일 접근도 저장소·REPORT 디렉터리 밖으로 나가지 못하며,
+job 하나의 크래시는 형제 job의 리시트를 삼키지 않고 `exit 1 / job-error`로 강등된다.
 **v3.44.0부터 위험 도메인은 위임 기준이 아니다** — auth·결제·크립토 파일이라도 스펙이
 JUDGMENT-FREE 게이트를 통과하면 ext로 가고, 판단이 남은 변경만 native에 남는다(리뷰 의무
 rule 4는 그대로 유지, 위험 도메인은 opus reviewer 티어 고정). 상세는 rule 10과 v3.44.0 /

@@ -2,6 +2,8 @@ import importlib.util
 import json
 import subprocess
 import sys
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -1010,3 +1012,294 @@ def test_wave_manifest_accepts_mission_and_spec_jobs(tmp_path):
     payload = json.loads(proc.stdout.strip().splitlines()[-1])
     assert payload["status"] == "ok"
     assert (tmp_path / "r2-spec.md").is_file()
+
+
+# ------------------------------------------------- wave 실패 격리 · 계약
+
+def test_wave_isolates_crashing_job(tmp_path):
+    """job 1개의 예외가 형제 job 의 결과와 마지막 줄 JSON 을 삼키면 안 된다.
+
+    future.result() 가 예외를 재발생시키고 with 블록의 shutdown(wait=True) 때문에
+    나머지 job 이 다 끝날 때까지 기다린 뒤 죽는다 — wall-clock 은 전액 지불하고
+    출력은 0 이 된다.
+    """
+    manifest = tmp_path / "wave.json"
+    manifest.write_text(json.dumps({"jobs": [
+        {"mission": "locate handle()", "report": str(tmp_path / "r1.md"),
+         "role": "scout"},
+        {"mission": "no report key", "role": "scout"},          # ← 불량 job
+    ]}), encoding="utf-8")
+    proc = subprocess.run(
+        [sys.executable, str(SCRIPT), "wave", "--manifest", str(manifest),
+         "--dry-run"],
+        capture_output=True, text=True, encoding="utf-8",
+    )
+    assert proc.returncode == 1
+    assert "Traceback" not in proc.stderr
+    payload = json.loads(proc.stdout.strip().splitlines()[-1])
+    assert payload["status"] == "partial"
+    assert payload["jobs"][0]["exit"] == 0
+    assert payload["jobs"][1]["exit"] == 1
+    assert "missing required key: report" in payload["jobs"][1]["status"]
+    assert (tmp_path / "r1-spec.md").is_file()   # 정상 job 은 끝까지 갔다
+
+
+def test_wave_non_dict_job_is_rejected(tmp_path):
+    """`isinstance(jobs, list)` 는 원소 타입을 보지 않는다."""
+    manifest = tmp_path / "wave.json"
+    manifest.write_text(json.dumps({"jobs": ["not-a-job"]}), encoding="utf-8")
+    proc = subprocess.run(
+        [sys.executable, str(SCRIPT), "wave", "--manifest", str(manifest),
+         "--dry-run"],
+        capture_output=True, text=True, encoding="utf-8",
+    )
+    assert proc.returncode == 1
+    assert "Traceback" not in proc.stderr
+    payload = json.loads(proc.stdout.strip().splitlines()[-1])
+    assert "job must be an object" in payload["jobs"][0]["status"]
+
+
+def test_manifest_error_still_emits_json(tmp_path):
+    """계약은 '마지막 줄 JSON' — 오류 경로에서도 지켜져야 한다."""
+    manifest = tmp_path / "wave.json"
+    manifest.write_text("{ not json", encoding="utf-8")
+    proc = subprocess.run(
+        [sys.executable, str(SCRIPT), "wave", "--manifest", str(manifest)],
+        capture_output=True, text=True, encoding="utf-8",
+    )
+    assert proc.returncode == 1
+    payload = json.loads(proc.stdout.strip().splitlines()[-1])
+    assert payload["status"].startswith("error:")
+
+
+def test_git_porcelain_survives_missing_cwd(ext, tmp_path):
+    """subprocess.run 은 cwd 부재·실행파일 부재를 rc 가 아니라 예외로 낸다."""
+    assert ext._git_porcelain(str(tmp_path / "does-not-exist")) is None
+
+
+def test_no_git_snapshot_is_not_fatal(ext, tmp_path):
+    """스냅샷을 못 뜨면 스코프 미검증으로 강등되고 job 자체는 성공한다."""
+    spec = tmp_path / "spec.md"
+    spec.write_text("TASK: x\nTARGET FILES:\n- doc/out.md\nLEDGER: none\n",
+                    encoding="utf-8")
+    job = {"spec": str(spec), "report": str(tmp_path / "out" / "r.md"),
+           "role": "coder", "agent": "codex", "repo": str(tmp_path)}
+    ext.INVOKERS["codex"] = fake(CODER_RECEIPT)
+    res = ext._run_job(job, False)          # tmp_path 는 git 저장소가 아니다
+    assert res["exit"] == ext.EXIT_OK, res["status"]
+    assert "not script-verified" in res["status"]
+
+
+def test_timeout_path(ext, git_repo):
+    """EXIT_TIMEOUT(5) 은 이 스위트에 테스트가 0건이었다."""
+    def _invoke(prompt, model, effort, timeout, cwd):
+        raise subprocess.TimeoutExpired("codex", timeout, output="partial out")
+
+    ext.INVOKERS["codex"] = _invoke
+    res = ext._run_job(make_job(git_repo), False)
+    assert res["exit"] == ext.EXIT_TIMEOUT
+    assert res["status"] == "timeout"
+    raw = Path(res["raw"]).read_text(encoding="utf-8")
+    assert "partial out" in raw and "TIMEOUT after" in raw
+
+
+# ------------------------------------------------- 스코프 대조 양방향
+
+def test_concurrent_coders_do_not_cross_contaminate(ext, git_repo):
+    """동시 coder 2개가 서로의 변경을 자기 위반으로 집계하면 안 된다.
+
+    스냅샷 대상은 repo 전역인데 job 마다 독립적으로 뜬다 — 창이 겹치면 A 의
+    차집합에 B 의 변경이 섞여 둘 다 거짓 exit 4 가 난다. 그것도 리시트에
+    `script-verified` 라벨을 달고 나가므로 오케스트레이터가 의심할 근거가 없다.
+
+    게이트는 두 실행 창을 강제로 겹쳐 실패를 결정적으로 만든다. 락이 들어오면
+    뒤 job 이 대기하므로 앞 job 은 1초 타임아웃 후 그냥 진행한다 — Barrier 를
+    쓰면 락과 교착하므로 Event + timeout 이어야 한다.
+    """
+    for name in ("a", "b"):
+        (git_repo / f"spec-{name}.md").write_text(
+            f"TASK: write {name}\nTARGET FILES:\n- doc/{name}.md\n"
+            "LEDGER: none\n", encoding="utf-8")
+    events = {"a": threading.Event(), "b": threading.Event()}
+
+    def _invoke(prompt, model, effort, timeout, cwd):
+        name = "a" if "write a" in prompt else "b"
+        target = Path(cwd) / "doc" / f"{name}.md"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(f"# {name}\n", encoding="utf-8")
+        events[name].set()
+        events["b" if name == "a" else "a"].wait(timeout=1.0)
+        return ("did it\n\n## RECEIPT\nSTATUS: DONE\n"
+                f"CHANGED: doc/{name}.md\nSPEC: within TARGET FILES\n"
+                "VERIFY: pytest -q -> PASS\n"), "", 0
+
+    ext.INVOKERS["codex"] = _invoke
+    jobs = [{"spec": str(git_repo / f"spec-{n}.md"),
+             "report": str(git_repo / "out" / f"{n}.md"),
+             "role": "coder", "agent": "codex", "repo": str(git_repo)}
+            for n in ("a", "b")]
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(ext._run_job, j, False) for j in jobs]
+        results = [f.result() for f in futures]
+    assert [r["exit"] for r in results] == [ext.EXIT_OK, ext.EXIT_OK], \
+        [r["status"] for r in results]
+
+
+def test_pre_dirty_file_modified_outside_scope_is_violation(ext, git_repo):
+    """이미 dirty 인 파일의 추가 수정도 스코프 위반이다.
+
+    porcelain 엔트리는 실행 전후 모두 ' M' 이라 집합 차집합으로는 잡히지 않는다.
+    exit 4 가 '깨끗한 워킹트리' 라는 어디에도 적히지 않은 전제 위에 서 있던 지점.
+    """
+    stray = git_repo / "README.md"                  # 추적 중인 파일
+    stray.write_text("# Test repo\nlocal edit\n", encoding="utf-8")
+
+    def rogue(repo: Path) -> None:
+        write_target(repo)                          # TARGET FILES 안
+        (repo / "README.md").write_text(            # TARGET 밖 + 이미 dirty
+            "# Test repo\nlocal edit\nagent edit\n", encoding="utf-8")
+
+    ext.INVOKERS["codex"] = fake(CODER_RECEIPT, side_effect=rogue)
+    res = ext._run_job(make_job(git_repo), False)
+    assert res["exit"] == ext.EXIT_SPEC_VIOLATION, res["status"]
+    assert "README.md" in res["status"]
+
+
+# ------------------------------------------------- fact 경로 봉쇄
+
+def test_fact_path_outside_repo_is_unparsed(ext, git_repo, tmp_path_factory):
+    """저장소 밖 경로는 열지 않는다 — 내용이 리시트·리포트로 새면 안 된다.
+
+    대조 실패 시 _classify_fact 가 그 줄의 내용 60자를 판정문에 싣고, exit 7 은
+    요약이 아니라 리시트 전문을 stdout 으로 내보낸다. 봉쇄가 없으면 이 경로가
+    임의 파일 내용 유출 통로가 된다.
+
+    git_repo 픽스처가 tmp_path 를 그대로 돌려주므로, 저장소 밖 위치는
+    tmp_path_factory 로 따로 만들어야 한다.
+    """
+    outside = tmp_path_factory.mktemp("outside")
+    secret = outside / "secret.txt"
+    secret.write_text("SUPER_SECRET_TOKEN_VALUE\n", encoding="utf-8")
+    write_source(git_repo)
+    ext.INVOKERS["codex"] = fake(scout_receipt(
+        f'- {secret}:1 [config] - "quote that does not match"'))
+    res = ext._run_job(make_job(git_repo, role="scout"), False)
+    assert res["exit"] == ext.EXIT_OK, res["status"]
+    assert "1 unparsed" in res["receipt"]
+    assert "SUPER_SECRET_TOKEN_VALUE" not in res["receipt"]
+    assert "SUPER_SECRET_TOKEN_VALUE" not in Path(res["report"]).read_text(
+        encoding="utf-8")
+
+
+def test_facts_file_outside_report_dir_is_ignored(ext, git_repo):
+    """FACTS FILE 선언이 report 디렉터리 밖이면 무시하고 유도 경로로 폴백한다.
+
+    victim 은 repo 안이라 repo 경계로는 막히지 않는다 — 경계가 report.parent
+    여야 하는 이유가 이 케이스다. 프리앰블은 REPORT 에서 유도하라고 규정하므로
+    정상 선언은 항상 그 안이다.
+    """
+    write_source(git_repo)
+    victim = git_repo / "docs" / "architecture.md"
+    victim.parent.mkdir(parents=True, exist_ok=True)
+    victim.write_text('- src/a.py:6 [signature] - `def handle(x):`\n',
+                      encoding="utf-8")          # :6 은 드리프트 (실제 :4)
+    before = victim.read_bytes()
+    ext.INVOKERS["codex"] = fake(
+        "read it\n\n## RECEIPT\n"
+        "STATUS: OK\nCOVERAGE: read src/a.py\n"
+        "CONFIDENCE: high - opened directly\nUNCERTAIN: none\n"
+        f"FACTS FILE: {victim}\n"
+        'KEY FACTS:\n- src/a.py:4 [signature] - "def handle(x):"\n')
+    res = ext._run_job(make_job(git_repo, role="explorer"), False)
+    assert res["exit"] == ext.EXIT_OK, res["status"]
+    assert victim.read_bytes() == before          # 프로젝트 문서 무손상
+    assert "outside report dir, ignored" in res["receipt"]
+
+
+def test_scope_unverifiable_when_digest_fails(ext, git_repo, monkeypatch):
+    """지문을 못 뜬 경로는 통과시키지도 위반으로 잡지도 않고 선언한다.
+
+    실환경 IO 오류에서만 발동하는 분기라 monkeypatch 로 강제한다.
+    """
+    (git_repo / "README.md").write_text("# Test repo\nlocal edit\n",
+                                        encoding="utf-8")
+    monkeypatch.setattr(ext, "_file_digest", lambda p: None)
+
+    def rogue(repo: Path) -> None:
+        write_target(repo)
+        (repo / "README.md").write_text(
+            "# Test repo\nlocal edit\nagent edit\n", encoding="utf-8")
+
+    ext.INVOKERS["codex"] = fake(CODER_RECEIPT, side_effect=rogue)
+    res = ext._run_job(make_job(git_repo), False)
+    assert res["exit"] == ext.EXIT_OK, res["status"]
+    assert "scope partially unverified" in res["status"]
+    assert "partially unverified" in res["receipt"]
+
+
+# ------------------------------------------------- 파서 · 표기 (묶음 D)
+
+@pytest.mark.parametrize("notation", ["4-5", "4/5/7", "4,5"])
+def test_drift_correction_collapses_multi_line_notation(ext, git_repo,
+                                                        notation):
+    """교정이 첫 숫자만 치환하면 `:7-5` 같은 깨진 표기가 하위 스펙으로 간다.
+
+    근거가 확인된 위치는 한 곳뿐이라 범위를 유지할 정보가 없다 — 단일 번호로
+    접는 것이 맞다. 계약은 교정된 번호를 "what reaches your next spec" 으로
+    규정하므로, 해석 불가한 표기는 JUDGMENT-FREE 게이트의 edit point 정밀도를
+    만족하지 못한다.
+    """
+    write_source(git_repo, text="a\nb\nc\nd\ne\nf\ndef handle(x):\n")
+    ext.INVOKERS["codex"] = fake(scout_receipt(
+        f'- src/a.py:{notation} [definition] - "def handle(x):"'))
+    res = ext._run_job(make_job(git_repo, role="scout"), False)
+    assert res["exit"] == ext.EXIT_OK, res["status"]
+    assert "1 drifted" in res["receipt"]
+    assert "src/a.py:7 [definition]" in res["receipt"]
+    assert "src/a.py:7-" not in res["receipt"]
+    assert "src/a.py:7/" not in res["receipt"]
+    assert "src/a.py:7," not in res["receipt"]
+
+
+def test_facts_file_none_is_not_an_error(ext, git_repo):
+    """프리앰블은 BLOCKED 반환에도 모든 필드를 요구하고 `FACTS FILE: none` 을
+    허용한다. 계약을 정확히 지킨 반환이 결함처럼 보이면 안 된다."""
+    write_source(git_repo)
+    ext.INVOKERS["codex"] = fake(
+        "blocked\n\n## RECEIPT\n"
+        "STATUS: BLOCKED - mission unbounded, needs scout first\n"
+        "COVERAGE: nothing read - blocked\n"
+        "CONFIDENCE: low - blocked\n"
+        "UNCERTAIN: none\n"
+        "FACTS FILE: none\n"
+        "KEY FACTS: none\n")
+    res = ext._run_job(make_job(git_repo, role="explorer"), False)
+    assert res["exit"] == ext.EXIT_OK, res["status"]
+    assert "FACTS FILE not found" not in res["receipt"]
+
+
+def test_field_label_must_start_a_line(ext, git_repo):
+    """산문 안의 라벨은 필드가 아니다 — 부분 문자열 검색이면 거짓 통과한다."""
+    ext.INVOKERS["codex"] = fake(
+        "did the edit\n\n## RECEIPT\n"
+        "STATUS: DONE\n"
+        "CHANGED: doc/out.md\n"
+        "SPEC: within TARGET FILES\n"
+        "NOTE: I could not run VERIFY: the harness blocked it\n",
+        side_effect=write_target)
+    res = ext._run_job(make_job(git_repo), False)
+    assert res["exit"] == ext.EXIT_BAD_RECEIPT, res["status"]
+    assert "VERIFY" in res["status"]
+
+
+def test_fold_cargo_counts_grouped_line_numbers_as_one_file(ext):
+    """`:4/5/7` 에서 loc 이 `a.py:4/5` 로 잡히면 한 파일이 여럿으로 세어진다."""
+    receipt = (
+        "FOUND:\n"
+        '- src/a.py:4/5/7 [usage] - "handle()"\n'
+        '- src/a.py:12 [usage] - "handle()"\n'
+        "SEARCHED: rg handle\n"
+        "UNCERTAIN: none\n"
+        "CONFIDENCE: high - opened directly\n"
+    )
+    assert "FOUND: 2 across 1 file" in ext._control_summary("scout", receipt)

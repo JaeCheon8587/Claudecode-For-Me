@@ -46,6 +46,8 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 import argparse
+import contextlib
+import hashlib
 import json
 import re
 import shutil
@@ -114,11 +116,15 @@ DEFAULTS = {
 # 살아있는 풀은 z-ai 계열 — 여기가 ext 경로의 기본값이어야 한다.
 DEFAULT_MODEL = "zai/glm-5.2"
 
-# 작업 트리를 수정하는 역할 — 실행 전후 porcelain 대조 대상.
-# scout/explorer 는 읽기 전용이라 대조를 생략한다.
+# 소스를 수정하는 역할 — 실행 전후 porcelain 대조 대상.
+# scout/explorer 는 소스를 고치지 않아 대조를 생략한다. "읽기 전용"은 아니다:
+# explorer 는 FACTS FILE 을 쓰고(계약이 허용하는 유일한 쓰기) 스크립트도 그
+# 파일에 교정본을 되쓴다. 그래서 그 경로는 report 디렉터리로 봉쇄되고
+# (_facts_file_path), fact 의 path:line 은 저장소로 봉쇄된다(_resolve_fact_path)
+# — 스코프 대조를 안 타는 역할에 남는 유일한 기계적 방어다.
 WRITE_ROLES = frozenset({"coder"})
 
-# path:line 주장을 파일과 대조하는 역할 — WRITE_ROLES 의 읽기 전용 대응물.
+# path:line 주장을 파일과 대조하는 역할 — WRITE_ROLES 의 비쓰기 대응물.
 # coder 는 제외한다: 그쪽 검증은 porcelain 스코프 대조(exit 4)가 담당하고,
 # CHANGED 는 위치 주장이 아니라 변경 보고라 같은 방식으로 반증할 수 없다.
 VERIFY_ROLES = frozenset({"scout", "explorer"})
@@ -143,9 +149,38 @@ PREAMBLE_DIR = Path(__file__).resolve().parent / "ext_preambles"
 
 _print_lock = threading.Lock()
 
+_repo_locks = {}
+_repo_locks_guard = threading.Lock()
+
+
+def _repo_write_lock(repo) -> threading.Lock:
+    """repo 단위 쓰기 락.
+
+    wave 는 job 마다 독립적으로 pre/post 스냅샷을 뜨는데 스냅샷 대상은 repo
+    전역이다. 동시 실행되는 coder A·B 는 서로의 변경을 자기 차집합에서 보게 되어
+    둘 다 거짓 exit 4 가 난다 — 그것도 리시트에 `script-verified` 라벨을 달고
+    나가므로 호출측이 의심할 근거가 없다.
+
+    읽기 전용 역할은 이 락을 타지 않으므로, 실사용 wave(거의 전부 읽기 역할)의
+    병렬성 손실은 없다.
+    """
+    key = str(Path(repo).resolve()).casefold()
+    with _repo_locks_guard:
+        return _repo_locks.setdefault(key, threading.Lock())
+
 
 def _err(msg: str, code: int) -> None:
+    """치명 오류. stdout 마지막 줄 JSON 계약을 지키고 종료한다.
+
+    호출측은 stdout 마지막 줄을 JSON 으로 파싱한다. 오류 경로만 그 줄이 없으면
+    오케스트레이터가 stderr 를 사람처럼 해석해야 하고, 그 읽기가 이 시스템에서
+    가장 비싼 자원(main context)을 먹는다.
+    """
     print(f"[ext] ERROR: {msg}", file=sys.stderr)
+    print(json.dumps({"status": f"error: {msg}", "exit": code,
+                      "role": None, "agent": None, "spec": None,
+                      "report": None, "raw": None,
+                      "reason": "dispatch error"}, ensure_ascii=False))
     sys.exit(code)
 
 
@@ -236,9 +271,15 @@ def _extract_receipt(raw: str):
 
 
 def _validate_fields(receipt: str, role: str):
-    missing = [f for f in REQUIRED_FIELDS[role]
-               if f"{f}:" not in receipt]
-    return missing
+    """요구 필드 중 리시트에 없는 것. 라벨은 줄 머리에서만 인정한다.
+
+    위치 무관 부분 문자열 검색이면 산문 안의 `VERIFY:` 도 필드로 오인해
+    (`NOTE: I could not run VERIFY: ...`) 필드가 실제로는 없는 리시트가
+    구조 검증을 통과한다.
+    """
+    labels = {ln.strip().upper().split(":", 1)[0].strip()
+              for ln in receipt.splitlines() if ":" in ln}
+    return [f for f in REQUIRED_FIELDS[role] if f.upper() not in labels]
 
 
 # 화물 불릿에서 파일 수를 세기 위한 최소 파서. 라인번호 뒤에 태그·구분자가
@@ -322,9 +363,12 @@ def _control_summary(role: str, receipt: str):
 #   · `:98-100` 라인 범위 — 없으면 하이픈이 구분자로 먹혀 뒤 숫자가 evidence 에 붙음
 #   · `:476/478/481` 묶음 — 첫 번째를 대표로 삼는다
 #   · `- :473 …` 경로 생략 — 앞 불릿의 경로를 상속한다(같은 목록 안에서 무모호)
+#   · 후행 표기(extra)를 캡처하는 이유: 드리프트 교정이 첫 숫자만 치환하면
+#     `:4-5` 가 `:7-5` 로 남아 역전된 범위가 하위 스펙으로 간다. 근거가 확인된
+#     위치는 한 곳뿐이라 범위를 유지할 정보가 없으므로 단일 번호로 접는다.
 _FACT_LINE_RX = re.compile(
-    r"^\s*-\s+(?P<loc>.*?):(?P<line>\d+)(?:[-/,]\d+)*\s*(?:\[[a-z|]+\])?\s*"
-    r"[—–-]\s*(?P<rest>.*)$")
+    r"^\s*-\s+(?P<loc>.*?):(?P<line>\d+)(?P<extra>(?:[-/,]\d+)*)\s*"
+    r"(?:\[[a-z|]+\])?\s*[—–-]\s*(?P<rest>.*)$")
 
 # fact 를 주장하려 한 불릿("- <경로>:<번호> …")인데 계약 형식이 아닌 것을 세기
 # 위한 느슨한 패턴. 집계 불릿(`- src/a.py (12 hits) …`)과 서술 불릿(`- Note: …`)
@@ -337,6 +381,15 @@ MAX_WRAP_SPAN = 3
 
 _basename_cache = {}
 _source_cache = {}
+
+
+def _within(cand: Path, root: Path) -> bool:
+    """cand 가 root 하위인가. `..` 과 심볼릭 링크까지 resolve 후 판정한다."""
+    try:
+        cand.resolve().relative_to(root.resolve())
+        return True
+    except (ValueError, OSError):
+        return False
 
 
 def _evidence_candidates(rest: str):
@@ -394,6 +447,12 @@ def _resolve_fact_path(loc: str, repo: Path):
     """
     p = Path(loc.strip().strip('"').strip("`"))
     cand = p if p.is_absolute() else repo / p
+    # 저장소 밖은 열지 않는다. loc 은 외부 LLM 이 만든 텍스트이고, 대조가 실패하면
+    # _classify_fact 가 그 줄의 내용 60자를 판정문에 실어 리시트 → 리포트 파일 →
+    # (exit 7 이라 요약이 아닌 전문) stdout → 오케스트레이터 context 로 내보낸다.
+    # 봉쇄가 없으면 이 경로가 임의 파일 내용 유출 통로가 된다.
+    if not _within(cand, repo):
+        return None, "outside"
     try:
         if cand.is_file():
             return cand, "ok"
@@ -481,6 +540,10 @@ def _classify_fact(loc: str, lineno: int, rest: str, repo: Path):
     if not cands:
         return "unparsed", "no falsifiable verbatim quote", None
     path, how = _resolve_fact_path(loc, repo)
+    if how == "outside":
+        # 저장소 밖 = 이 검사기의 판정 대상이 아니다. 주장이 거짓이라는 증거가
+        # 아니므로 failed 가 아니라 unparsed 다 — absent(반증됨)와 구별한다.
+        return "unparsed", "path outside repo", None
     if how == "absent":
         return "failed", f"{loc}:{lineno} — no such file in repo", None
     if path is None:
@@ -548,8 +611,9 @@ def _verify_fact_text(text: str, repo: Path):
             out.append(raw)
         elif grade == "drifted":
             stats["drifted"].append(detail)
+            # 후행 표기까지 함께 치환한다 — 첫 숫자만 바꾸면 `:7-5` 가 남는다.
             out.append(raw[:m.start("line")] + str(fixed)
-                       + raw[m.end("line"):])
+                       + raw[m.end("extra"):])
         elif grade == "failed":
             stats["failed"].append(detail)
             out.append(raw)
@@ -560,11 +624,31 @@ def _verify_fact_text(text: str, repo: Path):
 
 
 def _facts_file_path(receipt: str, report: Path):
-    """explorer 의 FACTS FILE. 리시트 선언값 우선, 없으면 REPORT 에서 유도."""
-    declared = _parse_field_value(receipt, "FACTS FILE")
-    if declared:
-        return Path(declared.strip().strip('"').strip("`"))
-    return report.with_name(report.stem + "-facts.md")
+    """explorer 의 FACTS FILE 경로. 반환: (path, inside).
+
+    inside=False 는 선언값이 report 디렉터리 밖이라 무시하고 유도 경로로
+    폴백했다는 뜻이다. 선언값은 외부 LLM 이 만든 텍스트인데 _verify_facts 가
+    그 경로에 write_text 를 한다 — 모델 자기신고가 파일 쓰기 경로를 결정하는
+    유일한 지점이었다.
+
+    경계가 repo 가 아니라 report.parent 인 이유: 프리앰블이 REPORT 에서
+    유도하라고 규정하므로(ext_preambles/explorer.md 의 Read discipline 절)
+    정상 선언은 항상 그 안이다. repo 로 넓히면 모델이 오선언한 프로젝트 문서를
+    스크립트가 되쓰는 경로가 그대로 열린다.
+    """
+    raw = _field_raw(receipt, "FACTS FILE")
+    if raw is not None and raw.lower() == "none":
+        # 명시적 "none" = 본문 없음 선언. BLOCKED/PARTIAL 계약이 허용하는
+        # 정상 값이므로 유도 경로를 뒤져 "not found" 를 내면 거짓 경고가 된다.
+        return None, True
+    derived = report.with_name(report.stem + "-facts.md")
+    if not raw:
+        return derived, True
+    p = Path(raw.strip().strip('"').strip("`"))
+    cand = p if p.is_absolute() else report.parent / p
+    if _within(cand, report.parent):
+        return cand, True
+    return derived, False
 
 
 def _verify_facts(receipt: str, role: str, repo: Path, report: Path):
@@ -575,18 +659,33 @@ def _verify_facts(receipt: str, role: str, repo: Path, report: Path):
     """
     receipt, r_stats = _verify_fact_text(receipt, repo)
     result = {"receipt": r_stats, "facts": None, "facts_file": None,
-              "truncated": _TRUNC_MARK in receipt}
+              "facts_outside": None, "truncated": _TRUNC_MARK in receipt}
     if role == "explorer":
-        fpath = _facts_file_path(receipt, report)
+        fpath, inside = _facts_file_path(receipt, report)
+        if fpath is None:
+            return receipt, result  # FACTS FILE: none — 검사할 본문이 없다
         result["facts_file"] = str(fpath)
-        if fpath.is_file():
-            original = fpath.read_text(encoding="utf-8", errors="replace")
-            fixed, f_stats = _verify_fact_text(original, repo)
-            result["facts"] = f_stats
-            if f_stats["drifted"]:
-                fpath.write_text(fixed, encoding="utf-8")
-        else:
+        if not inside:
+            result["facts_outside"] = _parse_field_value(receipt, "FACTS FILE")
+        try:
+            exists = fpath.is_file()
+        except OSError:
+            exists = False
+        if not exists:
             result["facts"] = "missing"
+            return receipt, result
+        try:
+            original = fpath.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            result["facts"] = "missing"
+            return receipt, result
+        fixed, f_stats = _verify_fact_text(original, repo)
+        result["facts"] = f_stats
+        if f_stats["drifted"]:
+            try:
+                fpath.write_text(fixed, encoding="utf-8")
+            except OSError:
+                pass  # 교정 실패는 치명 아님 — 리시트 쪽 번호는 이미 교정됐다
     return receipt, result
 
 
@@ -643,6 +742,10 @@ def _append_verified_field(receipt: str, result: dict) -> str:
     lines = [head]
 
     facts = result.get("facts")
+    if result.get("facts_outside"):
+        # 조용한 무시는 하지 않는다 — 선언이 왜 반영되지 않았는지 드러내야 한다.
+        lines.append(f"  ! FACTS FILE outside report dir, ignored: "
+                     f"{result['facts_outside']}")
     if facts == "missing":
         lines.append(f"  ! FACTS FILE not found: {result['facts_file']}")
     elif _format_collapse(facts):
@@ -677,29 +780,61 @@ def _detect_quota_signal(text: str):
     return None
 
 
+_FINGERPRINT_MAX = 2 * 1024 * 1024  # 초과 시 내용 해시 대신 (크기, mtime)
+
+
+def _file_digest(path: Path):
+    """dirty 파일의 내용 지문. 읽을 수 없으면 None → 판정 불가로 흘린다.
+
+    porcelain 상태 문자열만으로는 '이미 M 인 파일이 또 수정된' 경우를 구별할 수
+    없다 — 양쪽 다 ' M' 이라 집합 차집합에서 통째로 누락되고, 스코프 위반이
+    조용히 통과한다. exit 4 가 담보한다고 선언한 성질에 뚫려 있던 구멍이다.
+    """
+    try:
+        if not path.is_file():
+            return ("absent",)  # 삭제(' D')·디렉터리 — 양쪽에서 안정적
+        st = path.stat()
+        if st.st_size > _FINGERPRINT_MAX:
+            return ("big", st.st_size, st.st_mtime_ns)
+        return ("sha", hashlib.sha256(path.read_bytes()).hexdigest())
+    except OSError:
+        return None
+
+
 def _git_porcelain(repo: str):
-    # core.quotepath=false: 비ASCII(한글) 경로가 8진 이스케이프로 인용되면
-    # TARGET FILES 대조가 항상 어긋나 거짓 위반(exit 4)을 만든다.
-    # -uall: 새 디렉터리 전체가 untracked 면 porcelain 기본값은 파일이 아니라
-    # 디렉터리("doc/")로 접어 보고한다 — TARGET FILES("doc/out.md")와 절대
-    # 매칭되지 않아, 새 디렉터리에 산출물을 만드는 정상 미션이 전부 거짓
-    # 위반(exit 4)이 된다.
-    proc = subprocess.run(
-        ["git", "-c", "core.quotepath=false", "status", "--porcelain",
-         "-uall"],
-        capture_output=True, text=True,
-        encoding="utf-8", errors="replace", cwd=repo,
-    )
+    """작업 트리 상태 = {상대경로: (porcelain 상태, 내용 지문)}. None = 대조 생략.
+
+    core.quotepath=false: 비ASCII(한글) 경로가 8진 이스케이프로 인용되면
+    TARGET FILES 대조가 항상 어긋나 거짓 위반(exit 4)을 만든다.
+    -uall: 새 디렉터리 전체가 untracked 면 porcelain 기본값은 파일이 아니라
+    디렉터리("doc/")로 접어 보고한다 — TARGET FILES("doc/out.md")와 절대
+    매칭되지 않아, 새 디렉터리에 산출물을 만드는 정상 미션이 전부 거짓
+    위반(exit 4)이 된다.
+    """
+    # subprocess.run 은 실행파일 부재·cwd 부재를 rc 가 아니라 예외로 낸다.
+    # 가드가 없으면 git 미설치 환경에서 트레이스백으로 죽고, 아래 호출측의
+    # "no git snapshot" 폴백은 rc != 0(저장소 아님)에서만 도달했다.
+    try:
+        proc = subprocess.run(
+            ["git", "-c", "core.quotepath=false", "status", "--porcelain",
+             "-uall"],
+            capture_output=True, text=True,
+            encoding="utf-8", errors="replace", cwd=repo,
+        )
+    except OSError:
+        return None  # git 미설치 · cwd 부재 → 대조 생략 (JSON 에 명시)
     if proc.returncode != 0:
         return None  # git repo 아님 → 대조 생략 (JSON 에 명시)
-    entries = set()
+    root = Path(repo)
+    state = {}
     for line in proc.stdout.splitlines():
         if len(line) > 3:
+            status = line[:2]
             path = line[3:].strip().strip('"')
             if " -> " in path:  # rename: 신경로 채택
                 path = path.split(" -> ", 1)[1].strip().strip('"')
-            entries.add(path)
-    return entries
+            state[path] = (status, _file_digest(root / path))
+    return state
 
 
 def _norm(path: str, repo: Path) -> str:
@@ -748,31 +883,56 @@ def _parse_target_files(spec_text: str):
     return [t for t in targets if t]
 
 
-def _parse_field_value(spec_text: str, field: str):
-    """스펙에서 단일 라인 필드 값 추출 (예: LEDGER)."""
-    for line in spec_text.splitlines():
+def _field_raw(text: str, field: str):
+    """필드의 원시값. "none" 을 접지 않는다.
+
+    미선언(None)과 명시적 "none" 을 구별해야 하는 곳에서 쓴다 — 프리앰블은
+    BLOCKED 반환에도 모든 필드를 요구하며 `FACTS FILE: none` 을 허용하므로,
+    둘을 같은 값으로 접으면 계약을 지킨 반환이 결함처럼 보인다.
+    """
+    for line in text.splitlines():
         stripped = line.strip()
         if stripped.upper().startswith(field.upper() + ":"):
-            value = stripped[len(field) + 1:].strip()
-            return value if value and value.lower() != "none" else None
+            return stripped[len(field) + 1:].strip()
     return None
 
 
-def _spec_violations(spec_text: str, pre: set, post: set,
+def _parse_field_value(spec_text: str, field: str):
+    """스펙에서 단일 라인 필드 값 추출 (예: LEDGER). "none" 은 None 으로 접는다."""
+    value = _field_raw(spec_text, field)
+    return value if value and value.lower() != "none" else None
+
+
+def _spec_violations(spec_text: str, pre: dict, post: dict,
                      repo: Path, exempt: list):
-    """실행 전후 porcelain 차집합 중 TARGET FILES 밖 경로 반환."""
-    new_changes = post - pre
+    """실행 전후 트리 상태 차이 중 TARGET FILES 밖 경로.
+
+    반환: (violations, unverifiable)
+      violations   — 스코프 밖에서 실제로 바뀐 경로 (exit 4)
+      unverifiable — 지문을 못 떠 판정할 수 없었던 경로 (치명 아님, 선언 대상)
+
+    집합 차집합이 아니라 상태 비교인 이유: porcelain 은 이미 ' M' 인 파일이 또
+    수정돼도 같은 엔트리를 낸다. 차집합이면 그 변경이 통째로 누락된다.
+    pre ∪ post 를 도는 이유: pre 에만 있는 경로(에이전트가 커밋·되돌림)도 변경이다.
+    """
     targets = {_norm(t, repo) for t in _parse_target_files(spec_text)}
     exempt_norm = {_norm(str(e), repo) for e in exempt}
     violations = []
-    for path in sorted(new_changes):
+    unverifiable = []
+    for path in sorted(set(pre) | set(post)):
         n = _norm(path, repo)
         if n in targets or n in exempt_norm:
             continue
         if any(n.startswith(t.rstrip("/") + "/") for t in targets):
             continue  # 디렉터리 타겟 허용
-        violations.append(path)
-    return violations
+        before, after = pre.get(path), post.get(path)
+        if before is None or after is None or before[0] != after[0]:
+            violations.append(path)  # 신규 · 소멸 · 상태 전이 = 확정 변경
+        elif before[1] is None or after[1] is None:
+            unverifiable.append(path)  # 상태 동일 + 지문 부재 = 판정 불가
+        elif before[1] != after[1]:
+            violations.append(path)  # 상태 동일 + 내용 변경 = 확정 변경
+    return violations, unverifiable
 
 
 def _override_spec_field(receipt: str, violations: list) -> str:
@@ -870,105 +1030,164 @@ def _execute_job(job: dict, dry_run: bool) -> dict:
         result.update(status="dry-run", exit=EXIT_OK)
         return result
 
-    pre_snapshot = _git_porcelain(str(repo)) if role in WRITE_ROLES else None
+    # 쓰기 역할만 repo 락을 탄다. 락 구간은 pre 스냅샷부터 REPORT 쓰기까지 —
+    # 리포트도 repo 안에 떨어질 수 있어서, 스코프 검사에서 락을 놓으면 이 job 의
+    # 리포트가 다음 job 의 pre 이후에 생겨 그쪽 위반으로 잡힌다.
+    # 읽기 역할은 nullcontext 라 오버헤드가 없다.
+    lock = (_repo_write_lock(repo) if role in WRITE_ROLES
+            else contextlib.nullcontext())
+    with lock:
+        pre_snapshot = (_git_porcelain(str(repo))
+                        if role in WRITE_ROLES else None)
 
-    try:
-        out, err, rc = INVOKERS[agent](prompt, model, effort, timeout,
-                                       str(repo))
-    except FileNotFoundError:
-        result.update(status="no-codex", exit=EXIT_NO_AGENT)
-        return result
-    except subprocess.TimeoutExpired as exc:
-        partial = ""
-        if exc.stdout:
-            partial = exc.stdout if isinstance(exc.stdout, str) \
-                else exc.stdout.decode("utf-8", "replace")
-        raw_path.parent.mkdir(parents=True, exist_ok=True)
-        raw_path.write_text(
-            partial + f"\n[ext] TIMEOUT after {timeout}s\n", encoding="utf-8")
-        result.update(status="timeout", exit=EXIT_TIMEOUT)
-        return result
-
-    raw_path.parent.mkdir(parents=True, exist_ok=True)
-    raw = out
-    if err:
-        raw += "\n--- STDERR (raw only, excluded from receipt window) ---\n" \
-               + err
-    raw_path.write_text(raw + f"\n[ext] agent exit code: {rc}\n",
-                        encoding="utf-8")
-
-    # 리시트는 stdout 에서만 추출 — stderr 가 뒤에 붙으면 추출 창이 오염됨
-    receipt = _extract_receipt(out)
-    if receipt is None:
-        if rc != 0:
-            # CLI 는 돌았지만 비정상 종료 + 리시트 부재 = 에이전트 실행 실패
-            # (쿼터 소진·인증 실패·크래시). 리시트 불량(3)으로 분류하면
-            # 오케스트레이터가 죽은 크레딧 풀에 재시도 1회를 낭비한다.
-            signal = _detect_quota_signal(out + "\n" + err)
-            if signal:
-                result["reason"] = f"quota-signal: {signal}"
-            result.update(
-                status=f"agent-error: exit {rc}"
-                       + (f" ({signal})" if signal else ""),
-                exit=EXIT_AGENT_ERROR)
+        try:
+            out, err, rc = INVOKERS[agent](prompt, model, effort, timeout,
+                                           str(repo))
+        except FileNotFoundError:
+            result.update(status="no-codex", exit=EXIT_NO_AGENT)
             return result
-        result.update(status="invalid: RECEIPT marker missing",
-                      exit=EXIT_BAD_RECEIPT)
-        return result
-    missing = _validate_fields(receipt, role)
-    if missing:
-        result.update(
-            status=f"invalid: fields missing {','.join(missing)}",
-            exit=EXIT_BAD_RECEIPT, receipt=receipt)
-        return result
+        except subprocess.TimeoutExpired as exc:
+            partial = ""
+            if exc.stdout:
+                partial = exc.stdout if isinstance(exc.stdout, str) \
+                    else exc.stdout.decode("utf-8", "replace")
+            raw_path.parent.mkdir(parents=True, exist_ok=True)
+            raw_path.write_text(
+                partial + f"\n[ext] TIMEOUT after {timeout}s\n",
+                encoding="utf-8")
+            result.update(status="timeout", exit=EXIT_TIMEOUT)
+            return result
 
-    exit_code = EXIT_OK
-    status = "ok"
-    if role in WRITE_ROLES and pre_snapshot is not None:
-        post_snapshot = _git_porcelain(str(repo))
-        if post_snapshot is not None:
-            spec_text = spec_path.read_text(encoding="utf-8")
-            exempt = [report_path, raw_path, spec_path]
-            ledger = _parse_field_value(spec_text, "LEDGER")
-            if ledger:  # 스펙이 LEDGER 를 지시했다면 그 기록은 위반이 아님
-                exempt.append(Path(ledger))
-            violations = _spec_violations(
-                spec_text, pre_snapshot, post_snapshot, repo,
-                exempt=exempt)
-            if violations:
-                receipt = _override_spec_field(receipt, violations)
-                status = f"violation: {', '.join(violations)}"
-                exit_code = EXIT_SPEC_VIOLATION
-    elif role in WRITE_ROLES and pre_snapshot is None:
-        status = "ok (git unavailable — SPEC not script-verified)"
+        raw_path.parent.mkdir(parents=True, exist_ok=True)
+        raw = out
+        if err:
+            raw += ("\n--- STDERR (raw only, excluded from receipt window) "
+                    "---\n") + err
+        raw_path.write_text(raw + f"\n[ext] agent exit code: {rc}\n",
+                            encoding="utf-8")
 
-    # 읽기 전용 역할의 대응물: 스코프 대신 사실을 대조한다. 드리프트는 여기서
-    # 교정되므로 하위 스펙이 맞는 라인 번호를 받는다.
-    if role in VERIFY_ROLES:
-        receipt, verdict = _verify_facts(receipt, role, repo, report_path)
-        receipt = _append_verified_field(receipt, verdict)
-        failed = _failed_facts(verdict)
-        unverifiable = _unverifiable(verdict)
-        if failed:
-            status = (f"facts-unverified: {len(failed)} of "
-                      f"{verdict['receipt']['total']}")
-            if unverifiable:
-                status += f" (+unverifiable: {unverifiable})"
-            exit_code = EXIT_FACTS_UNVERIFIED
-        elif unverifiable:
-            # 치명은 아니다 — 사실이 틀렸다는 증거가 아니라 대조가 성립하지
-            # 않았다는 뜻이고, 수확물 자체는 여전히 쓸 수 있다. 다만 검증된
-            # 것으로 취급하면 안 되므로 status 로 반드시 드러낸다.
-            status = f"facts-unverifiable: {unverifiable} unparseable"
+        # 리시트는 stdout 에서만 추출 — stderr 가 뒤에 붙으면 추출 창이 오염됨
+        receipt = _extract_receipt(out)
+        if receipt is None:
+            if rc != 0:
+                # CLI 는 돌았지만 비정상 종료 + 리시트 부재 = 에이전트 실행 실패
+                # (쿼터 소진·인증 실패·크래시). 리시트 불량(3)으로 분류하면
+                # 오케스트레이터가 죽은 크레딧 풀에 재시도 1회를 낭비한다.
+                signal = _detect_quota_signal(out + "\n" + err)
+                if signal:
+                    result["reason"] = f"quota-signal: {signal}"
+                result.update(
+                    status=f"agent-error: exit {rc}"
+                           + (f" ({signal})" if signal else ""),
+                    exit=EXIT_AGENT_ERROR)
+                return result
+            result.update(status="invalid: RECEIPT marker missing",
+                          exit=EXIT_BAD_RECEIPT)
+            return result
+        missing = _validate_fields(receipt, role)
+        if missing:
+            result.update(
+                status=f"invalid: fields missing {','.join(missing)}",
+                exit=EXIT_BAD_RECEIPT, receipt=receipt)
+            return result
 
-    report_path.parent.mkdir(parents=True, exist_ok=True)
-    report_path.write_text(
-        f"# ext {role} receipt ({agent})\n\nspec: {spec_path}\n"
-        f"raw: {raw_path}\n\n{RECEIPT_MARKER}\n{receipt}\n",
-        encoding="utf-8")
+        exit_code = EXIT_OK
+        status = "ok"
+        if role in WRITE_ROLES and pre_snapshot is not None:
+            post_snapshot = _git_porcelain(str(repo))
+            if post_snapshot is not None:
+                spec_text = spec_path.read_text(encoding="utf-8")
+                exempt = [report_path, raw_path, spec_path]
+                ledger = _parse_field_value(spec_text, "LEDGER")
+                if ledger:  # 스펙이 LEDGER 를 지시했다면 그 기록은 위반이 아님
+                    exempt.append(Path(ledger))
+                violations, unscoped = _spec_violations(
+                    spec_text, pre_snapshot, post_snapshot, repo,
+                    exempt=exempt)
+                if violations:
+                    receipt = _override_spec_field(receipt, violations)
+                    status = f"violation: {', '.join(violations)}"
+                    exit_code = EXIT_SPEC_VIOLATION
+                elif unscoped:
+                    # 지문을 못 떠 판정이 성립하지 않은 경로. 위반의 증거가
+                    # 아니므로 치명은 아니지만, 검증된 것으로 취급되면 안 되므로
+                    # 드러낸다 — facts-unverifiable 과 같은 계열이다.
+                    receipt += ("\nSPEC: partially unverified (script: no "
+                                f"digest for {', '.join(unscoped)})")
+                    status = (f"ok (scope partially unverified: "
+                              f"{len(unscoped)} paths)")
+        elif role in WRITE_ROLES and pre_snapshot is None:
+            status = "ok (no git snapshot — SPEC not script-verified)"
+
+        # 읽기 전용 역할의 대응물: 스코프 대신 사실을 대조한다. 드리프트는 여기서
+        # 교정되므로 하위 스펙이 맞는 라인 번호를 받는다.
+        if role in VERIFY_ROLES:
+            receipt, verdict = _verify_facts(receipt, role, repo, report_path)
+            receipt = _append_verified_field(receipt, verdict)
+            failed = _failed_facts(verdict)
+            unverifiable = _unverifiable(verdict)
+            if failed:
+                status = (f"facts-unverified: {len(failed)} of "
+                          f"{verdict['receipt']['total']}")
+                if unverifiable:
+                    status += f" (+unverifiable: {unverifiable})"
+                exit_code = EXIT_FACTS_UNVERIFIED
+            elif unverifiable:
+                # 치명은 아니다 — 사실이 틀렸다는 증거가 아니라 대조가 성립하지
+                # 않았다는 뜻이고, 수확물 자체는 여전히 쓸 수 있다. 다만 검증된
+                # 것으로 취급하면 안 되므로 status 로 반드시 드러낸다.
+                status = f"facts-unverifiable: {unverifiable} unparseable"
+
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(
+            f"# ext {role} receipt ({agent})\n\nspec: {spec_path}\n"
+            f"raw: {raw_path}\n\n{RECEIPT_MARKER}\n{receipt}\n",
+            encoding="utf-8")
 
     result.update(status=status, exit=exit_code, receipt=receipt)
     return result
+
+
+def _job_error(job, exc) -> dict:
+    """예외·불량 job 을 결과 dict 로 강등한다.
+
+    wave 는 job 하나의 예외로 형제 job 의 결과와 마지막 줄 JSON 을 통째로 잃는다:
+    future.result() 가 예외를 재발생시키고, with 블록의 shutdown(wait=True) 때문에
+    나머지 job 이 다 끝날 때까지 기다린 뒤에 죽는다 — wall-clock 은 전액 지불하고
+    출력은 0 이다. 호출측 계약은 "리시트 + JSON 한 줄"이므로 예외도 그 형태로
+    환원해야 호출측의 exit code 사다리에 얹힌다.
+    """
+    j = job if isinstance(job, dict) else {}
+    report = j.get("report")
+    return {"status": f"job-error: {type(exc).__name__}: {exc}",
+            "exit": EXIT_ERR,
+            "role": j.get("role"),
+            "agent": j.get("agent", "codex"),
+            "spec": j.get("spec"),
+            # report 가 dict 등 이상 타입일 수 있다 — str() 은 안전하지만
+            # Path() 는 아니므로 raw 는 계산하지 않는다.
+            "report": str(report) if report is not None else None,
+            "raw": None,
+            "receipt": None,
+            "reason": "job crashed"}
+
+
+def _run_job(job, dry_run: bool) -> dict:
+    """_execute_job 의 예외 경계. run/wave 의 유일한 진입점이다.
+
+    manifest 는 오케스트레이터가 생성하는 JSON 이라 키 누락·타입 오류는 가상의
+    위험이 아니라 기대되는 실패 모드다.
+    """
+    if not isinstance(job, dict):
+        return _job_error(None, TypeError(
+            f"job must be an object, got {type(job).__name__}"))
+    for key in ("role", "report"):
+        if not job.get(key):
+            return _job_error(job, KeyError(f"job missing required key: {key}"))
+    try:
+        return _execute_job(job, dry_run)
+    except Exception as exc:            # noqa: BLE001 — 광범위 포착이 목적이다
+        return _job_error(job, exc)
 
 
 # ---------------------------------------------------------------- commands
@@ -1009,7 +1228,7 @@ def cmd_run(args) -> int:
         job["effort"] = args.effort
     if args.timeout:
         job["timeout"] = args.timeout
-    res = _execute_job(job, args.dry_run)
+    res = _run_job(job, args.dry_run)
     _print_receipt(res, args.full_receipt)
     summary = {k: res[k] for k in
                ("status", "exit", "role", "agent", "spec", "report", "raw",
@@ -1022,19 +1241,31 @@ def cmd_wave(args) -> int:
     manifest_path = Path(args.manifest)
     if not manifest_path.is_file():
         _err(f"manifest not found: {manifest_path}", EXIT_ERR)
+    # assert 는 쓰지 않는다 — python -O 에서 제거되어 빈 jobs 가
+    # ThreadPoolExecutor(max_workers=0) 의 ValueError 로 흘러간다.
+    # 최상위가 dict 가 아니면 manifest["jobs"] 는 TypeError 인데 그것은
+    # 아래 except 절이 잡지 않아 traceback 으로 샌다 — isinstance 로 막는다.
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        jobs = manifest["jobs"]
-        assert isinstance(jobs, list) and jobs
-    except (json.JSONDecodeError, KeyError, AssertionError):
-        _err("manifest must be JSON with non-empty 'jobs' list", EXIT_ERR)
+    except (OSError, json.JSONDecodeError) as exc:
+        _err(f"manifest unreadable: {exc}", EXIT_ERR)
+    jobs = manifest.get("jobs") if isinstance(manifest, dict) else None
+    if not isinstance(jobs, list) or not jobs:
+        _err("manifest must be JSON with a non-empty 'jobs' list", EXIT_ERR)
+    # 원소 타입 검사는 여기서 하지 않는다 — _run_job 이 job 단위로 반려해야
+    # 불량 job 이 섞여도 정상 job 의 결과가 살아남는다.
 
     n = len(jobs)
+    writes = sum(1 for j in jobs
+                 if isinstance(j, dict) and j.get("role") in WRITE_ROLES)
     print(f"[ext] wave: launching {n} jobs concurrently "
           f"(max_workers={n}, no queueing)")
+    if writes > 1:
+        print(f"[ext]   note: {writes} write-role jobs serialize on a repo "
+              f"lock so each scope check sees only its own changes")
     # N개 동시 기동 보장: max_workers = job 수. 하네스 병렬성에 무의존.
     with ThreadPoolExecutor(max_workers=n) as pool:
-        futures = [pool.submit(_execute_job, job, args.dry_run)
+        futures = [pool.submit(_run_job, job, args.dry_run)
                    for job in jobs]
         results = [f.result() for f in futures]  # 제출 순서 = 출력 순서
 
