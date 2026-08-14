@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v3.48.0 · 커스텀 스킬 14종 + 슬래시 커맨드 18종 + 에이전트 17종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v3.49.0 · 커스텀 스킬 14종 + 슬래시 커맨드 18종 + 에이전트 17종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,7 +11,7 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `3.48.0` |
+| 버전 | `3.49.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
@@ -66,6 +66,37 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v3.49.0 — native explorer를 opus/medium으로: 읽기가 나간 자리에 남은 것은 종합이다
+
+`explorer`가 `sonnet / high`였다. 그 값은 v3.38.0에 정해졌는데, **당시 explorer는
+수집과 종합을 한 미션에서 다 하는 에이전트였다.** v3.45.0이 뇌/손을 가르면서 읽기를
+ext-explorer로 내보냈고, native explorer의 기본 모드는 **facts 공급 → 종합만**으로
+바뀌었다. 그런데 모델·effort는 재조정되지 않아, 값이 더 이상 존재하지 않는 작업 형태에
+맞춰져 있었다 — v3.45.0이 ext 적격 조건에서 지적한 것과 **같은 종류의 지연**이다.
+
+**`opus / medium`으로 옮겼다.** 이 저장소의 분할선은 티어가 아니라 **노동/판단**이고
+(v3.45.0), 종합은 판단이다. `ANSWER`/`MAP`/`RISKS`가 native에 남은 이유가 정확히
+그것인데 — ext-explorer 계약에서 이 세 필드를 제거한 근거다 — 정작 그 판단을 수행하는
+에이전트가 싼 티어에 있었다. effort를 내린 것은 반대 방향의 정정이 아니라 같은 정정의
+다른 절반이다: `high`는 읽기 부담을 감당하려던 값이고, facts가 공급되면 그 부담이 없다.
+
+**reviewer 티어링과 방향이 반대로 보이지만 기준은 하나다.** v3.45.0은 opus reviewer를
+`reviewer-lite`(sonnet)로 내렸고 이번엔 explorer를 opus로 올렸다. 두 판정의 기준은
+같다 — **판단이 남아 있느냐**(v3.44.0이 라우팅에 세운 것과 같은 기준). 모든 hunk가
+스펙에 받아쓰기된 diff의 검토에는 판단이 남지 않아 내렸고, facts 더미에서 의미를
+만드는 일에는 판단만 남아 올렸다. 티어를 균일하게 낮추는 것이 목표였던 적은 없다.
+
+**주의 — 폴백 경로는 이 가정 밖이다.** facts 미공급 모드(ext 수확 실패 시의 폴백)는
+여전히 수집+종합을 다 하고, 거기서는 `medium`이 실질 하향이다. 모델 상향이 상쇄한다고
+보지만 **실측 전까지는 가정**이다. 폴백은 정의상 드물게 도는 경로라 표본이 늦게
+쌓이므로, `death:` 라인과 렛저 retro에서 explorer PARTIAL/BLOCKED 비율을 따로 본다.
+악화가 관측되면 되돌릴 대상은 모델이 아니라 effort다.
+
+`claude-opus-5`는 `low`~`max` 전 단계를 지원하므로 `medium`이 capability 게이트를
+통과한다(v3.38.0의 근거 그대로). `maxTurns: 16`과 BUDGET 기본값 12콜은 불변 —
+사망선은 컨텍스트이지 effort가 아니다. 라우팅 표의 `explorer (sonnet)` 표기도
+양쪽 오케스트레이터에서 정정했다(fable/opus 본문 동일 유지).
 
 ### v3.48.0 — ext 하네스 경화: 예외 격리 · 스코프 대조 양방향 · fact 경로 봉쇄
 
@@ -1166,7 +1197,7 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `fable-orchestrator` | fable / high | 메인 오케스트레이터. 판단·결정만 하고 컨텍스트를 먹는 작업은 전부 위성에 위임 |
 | `opus-orchestrator` | opus / max | 위와 **본문 동일**(sha256 일치), frontmatter 4줄만 상이한 병렬 변종 |
 | `scout` | sonnet / low | 파일·심볼·호출부·테스트 위치 탐색. read-only. 위치만 반환하고 의견 금지. **v3.43.0부터 ext-scout 실패 시의 폴백 경로** — 탐색 미션의 기본값은 ext다 |
-| `explorer` | sonnet / high | 코드 흐름·아키텍처·의미 파악. 상세는 리포트 파일로, 리턴은 압축 맵. **v3.45.0부터 입력 모드 2개** — ext-explorer facts 공급 시 종합만, 미공급 시 수집+종합(폴백 경로) |
+| `explorer` | opus / medium | 코드 흐름·아키텍처·의미 파악. 상세는 리포트 파일로, 리턴은 압축 맵. **v3.45.0부터 입력 모드 2개** — ext-explorer facts 공급 시 종합만, 미공급 시 수집+종합(폴백 경로). **v3.49.0부터 opus** — 읽기가 ext로 나간 뒤 남은 일이 종합(판단)이기 때문 |
 | `analyst` | opus / xhigh | 온디맨드 판단. 트레이드오프 분석·리포트 적대 감사·root-cause 추적. 옵션만 반환하고 결정 금지 |
 | `coder` | sonnet / max | **코드** 구현. 소스 편집·신규 코드·테스트. `VERIFY` 리시트 반환 |
 | `scribe` | opus / high | **문서** 작성. 규범적 주장마다 근거 필수(`SOURCES`/`UNSOURCED`/`CONFLICTS`) |
@@ -1636,7 +1667,7 @@ Claudecode-For-Me/
 │   ├── fable-orchestrator.md    # Fable 메인 오케스트레이터
 │   ├── opus-orchestrator.md     # Opus 변종 (본문 동일, frontmatter 4줄만 상이)
 │   ├── scout.md                 # Sonnet 위치 탐색 (read-only)
-│   ├── explorer.md              # Sonnet 코드 흐름·구조 파악 (read-only)
+│   ├── explorer.md              # Opus 코드 흐름·구조 파악 (read-only)
 │   ├── analyst.md               # Opus 온디맨드 판단 (read-only)
 │   ├── coder.md                 # Sonnet 코드 구현 + VERIFY
 │   ├── scribe.md                # Opus 문서 작성 + 근거 추적

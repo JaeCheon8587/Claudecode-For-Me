@@ -44,7 +44,7 @@ saved — that is the whole reason the ext rows stop where they do.
 | Locate files / symbols / call sites / tests | **ext-scout** via Bash: ext_dispatch.py (rule 10) |
 | Harvest code FACTS from named starting points (signatures, call edges, branches, config keys) | **ext-explorer** via Bash: ext_dispatch.py (rule 10) |
 | Implement — spec leaves NO judgment (JUDGMENT-FREE gate, rule 10) | **ext-coder** via Bash: ext_dispatch.py (rule 10) |
-| Synthesize meaning — code flow, architecture, semantics (from a facts harvest when one exists) | claudecode-for-me:explorer (sonnet) |
+| Synthesize meaning — code flow, architecture, semantics (from a facts harvest when one exists) | claudecode-for-me:explorer (opus) |
 | Deep tradeoff analysis / report audit / root-cause dig | claudecode-for-me:analyst (opus) |
 | Implement — anything else (design judgment, long log output) | claudecode-for-me:coder (sonnet) |
 | Write or revise ANY document (SSOT / ADR / TASK / README / reports) | claudecode-for-me:scribe (opus) |
