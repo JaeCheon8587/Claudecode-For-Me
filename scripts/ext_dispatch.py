@@ -7,12 +7,12 @@
 
 판단(재시도·폴백·수용·폐기)은 전부 호출한 오케스트레이터의 몫이다.
 
-역할은 전부 "노동" 계약이다 — 위치(scout) / 사실(explorer) / 타이핑(coder).
+역할은 전부 "노동" 계약이다 — 위치(scout) / 타이핑(coder). 읽고 이해하기,
 종합·판정·문서 저작은 외부로 내리지 않는다: 판단을 외부에 맡기면 그 검증이
 다시 내부 모델의 읽기를 요구해 절약이 상쇄된다.
 
 Subcommands:
-    run   --role scout|explorer|coder --report <ABS>
+    run   --role scout|coder --report <ABS>
           (--spec <ABS> | --mission "<한 줄>" [--context "<시작점>"])  단일 위임
     wave  --manifest <ABS json> [--dry-run]                        N개 병렬 보장
 
@@ -70,9 +70,6 @@ RECEIPT_MAX_LINES = 30
 
 REQUIRED_FIELDS = {
     "scout": ("FOUND", "SEARCHED", "CONFIDENCE"),
-    # explorer 는 native explorer 의 "노동" 필드만 물려받은 축소 계약이다.
-    # 판단 필드(ANSWER/MAP/RISKS)는 요구하지 않는다 — 프리앰블이 금지한다.
-    "explorer": ("KEY FACTS", "COVERAGE", "CONFIDENCE"),
     "coder": ("STATUS", "CHANGED", "SPEC", "VERIFY"),
 }
 
@@ -81,15 +78,13 @@ REQUIRED_FIELDS = {
 # 이라 scout 의 RELATED/UNCERTAIN 이 빠져 계약이 조용히 축소된다.
 SPEC_RETURN = {
     "scout": ("FOUND", "RELATED", "SEARCHED", "UNCERTAIN", "CONFIDENCE"),
-    "explorer": ("STATUS", "COVERAGE", "CONFIDENCE", "UNCERTAIN",
-                 "FACTS FILE", "KEY FACTS"),
     "coder": ("STATUS", "CHANGED", "SPEC", "VERIFY", "RISKS"),
 }
 
 # 인라인 미션(--mission)이 허용되는 역할. coder 는 제외한다 — 적격 판정 때문이
 # 아니라(rule 10 은 모든 coder 미션을 ext 기본값으로 둔다) 기계적 이유다:
 # TARGET FILES 없는 합성 스펙은 porcelain 대조에서 전량 거짓 위반(exit 4)이 된다.
-INLINE_MISSION_ROLES = frozenset({"scout", "explorer"})
+INLINE_MISSION_ROLES = frozenset({"scout"})
 
 # stdout 요약에서 원문 그대로 싣는 제어 필드 / 건수로 접는 화물 필드.
 # coder 는 항목이 없다 = 항상 리시트 전문 출력 (VERIFY·SPEC 판정이 호출측 몫).
@@ -97,17 +92,13 @@ INLINE_MISSION_ROLES = frozenset({"scout", "explorer"})
 # 사실이 stdout 에서 사라지므로 반드시 제어 쪽에 있어야 한다.
 CONTROL_FIELDS = {
     "scout": ("SEARCHED", "UNCERTAIN", "CONFIDENCE", "VERIFIED"),
-    "explorer": ("STATUS", "COVERAGE", "CONFIDENCE", "UNCERTAIN",
-                 "FACTS FILE", "VERIFIED"),
 }
 CARGO_FIELDS = {
     "scout": ("FOUND", "RELATED"),
-    "explorer": ("KEY FACTS",),
 }
 
 DEFAULTS = {
     "scout": {"timeout": 300, "effort": "max"},
-    "explorer": {"timeout": 600, "effort": "max"},
     "coder": {"timeout": 1200, "effort": "max"},
 }
 # gpt-5.5 는 릴레이의 openai 크레딧 풀 소진으로 항상 즉사한다
@@ -116,20 +107,19 @@ DEFAULTS = {
 DEFAULT_MODEL = "zai/glm-5.2"
 
 # 소스를 수정하는 역할 — 실행 전후 porcelain 대조 대상.
-# scout/explorer 는 소스를 고치지 않아 대조를 생략한다. "읽기 전용"은 아니다:
-# explorer 는 FACTS FILE 을 쓰고(계약이 허용하는 유일한 쓰기) 스크립트도 그
-# 파일에 교정본을 되쓴다. 그래서 그 경로는 report 디렉터리로 봉쇄되고
-# (_facts_file_path), fact 의 path:line 은 저장소로 봉쇄된다(_resolve_fact_path)
-# — 스코프 대조를 안 타는 역할에 남는 유일한 기계적 방어다.
+# scout 은 아무것도 쓰지 않아 대조를 생략한다. 다만 스코프 대조를 안 타므로
+# "읽기만 했다"를 기계가 증명하지는 못한다 — 그 자리를 메우는 것이
+# VERIFY_ROLES 의 fact 대조이고, fact 의 path:line 은 저장소로 봉쇄된다
+# (_resolve_fact_path).
 WRITE_ROLES = frozenset({"coder"})
 
 # path:line 주장을 파일과 대조하는 역할 — WRITE_ROLES 의 비쓰기 대응물.
 # coder 는 제외한다: 그쪽 검증은 porcelain 스코프 대조(exit 4)가 담당하고,
 # CHANGED 는 위치 주장이 아니라 변경 보고라 같은 방식으로 반증할 수 없다.
-VERIFY_ROLES = frozenset({"scout", "explorer"})
+VERIFY_ROLES = frozenset({"scout"})
 
 # 인용이 실재하는데 라인 번호만 어긋난 경우를 찾는 탐색 창(±줄).
-# 실측 근거: explorer facts 90건 중 7건이 offset -2~+3 의 드리프트였고
+# 실측 근거: ext 수확 fact 90건 중 7건이 offset -2~+3 의 드리프트였고
 # 날조는 0건이었다. 지배적 실패 모드가 드리프트라 자동 교정이 성립한다.
 DRIFT_WINDOW = 5
 
@@ -394,7 +384,7 @@ def _within(cand: Path, root: Path) -> bool:
 def _evidence_candidates(rest: str):
     """evidence 후보 목록 — 하나라도 매치하면 통과로 본다.
 
-    한 줄에 인용이 여러 개인 경우가 있어(explorer KEY FACTS 의
+    한 줄에 인용이 여러 개인 경우가 있어(수확 불릿의
     `"A" -> :300 "B"` 형태) "마지막 구분자까지" 규칙 하나로는 두 인용을
     이어붙여 실패한다. 최단·최장·무구분자 셋을 만들어 관대하게 판정한다 —
     날조는 어느 후보로도 매치되지 않으므로 관대함이 반증력을 깎지 않는다.
@@ -436,7 +426,7 @@ def _normalize_evidence(s: str) -> str:
 def _resolve_fact_path(loc: str, repo: Path):
     """fact 가 가리키는 파일을 찾는다. 반환: (path|None, "ok"|"absent"|"ambiguous").
 
-    explorer facts 본문은 저장소 루트에서 해석되지 않는 맨 파일명을 쓴다
+    ext 수확물은 저장소 루트에서 해석되지 않는 맨 파일명을 쓴다
     (`ext_dispatch.py:283`, 실제 위치는 `scripts/ext_dispatch.py`) — 실측
     90건 전부. basename 으로 되찾되 **유일 매치일 때만** 채택한다.
 
@@ -622,78 +612,22 @@ def _verify_fact_text(text: str, repo: Path):
     return "\n".join(out), stats
 
 
-def _facts_file_path(receipt: str, report: Path):
-    """explorer 의 FACTS FILE 경로. 반환: (path, inside).
+def _verify_facts(receipt: str, repo: Path):
+    """리시트의 path:line 주장을 파일과 대조·교정한다.
 
-    inside=False 는 선언값이 report 디렉터리 밖이라 무시하고 유도 경로로
-    폴백했다는 뜻이다. 선언값은 외부 LLM 이 만든 텍스트인데 _verify_facts 가
-    그 경로에 write_text 를 한다 — 모델 자기신고가 파일 쓰기 경로를 결정하는
-    유일한 지점이었다.
+    반환: (교정된 receipt, result dict).
 
-    경계가 repo 가 아니라 report.parent 인 이유: 프리앰블이 REPORT 에서
-    유도하라고 규정하므로(ext_preambles/explorer.md 의 Read discipline 절)
-    정상 선언은 항상 그 안이다. repo 로 넓히면 모델이 오선언한 프로젝트 문서를
-    스크립트가 되쓰는 경로가 그대로 열린다.
-    """
-    raw = _field_raw(receipt, "FACTS FILE")
-    if raw is not None and raw.lower() == "none":
-        # 명시적 "none" = 본문 없음 선언. BLOCKED/PARTIAL 계약이 허용하는
-        # 정상 값이므로 유도 경로를 뒤져 "not found" 를 내면 거짓 경고가 된다.
-        return None, True
-    derived = report.with_name(report.stem + "-facts.md")
-    if not raw:
-        return derived, True
-    p = Path(raw.strip().strip('"').strip("`"))
-    cand = p if p.is_absolute() else report.parent / p
-    if _within(cand, report.parent):
-        return cand, True
-    return derived, False
-
-
-def _verify_facts(receipt: str, role: str, repo: Path, report: Path):
-    """리시트(+ explorer 의 facts 본문)를 대조·교정한다.
-
-    반환: (교정된 receipt, result dict). facts 본문은 제자리에서 다시 쓴다 —
-    하위 노드가 읽는 것이 그쪽이므로 교정이 반영돼야 의미가 있다.
+    v3.51.0 이전에는 explorer 의 별도 facts 본문(FACTS FILE)도 함께 검사하고
+    드리프트를 그 파일에 되썼다. ext-explorer 폐지와 함께 그 경로가 사라졌고,
+    모델 자기신고가 파일 쓰기 경로를 결정하던 유일한 지점도 같이 없어졌다.
     """
     receipt, r_stats = _verify_fact_text(receipt, repo)
-    result = {"receipt": r_stats, "facts": None, "facts_file": None,
-              "facts_outside": None, "truncated": _TRUNC_MARK in receipt}
-    if role == "explorer":
-        fpath, inside = _facts_file_path(receipt, report)
-        if fpath is None:
-            return receipt, result  # FACTS FILE: none — 검사할 본문이 없다
-        result["facts_file"] = str(fpath)
-        if not inside:
-            result["facts_outside"] = _parse_field_value(receipt, "FACTS FILE")
-        try:
-            exists = fpath.is_file()
-        except OSError:
-            exists = False
-        if not exists:
-            result["facts"] = "missing"
-            return receipt, result
-        try:
-            original = fpath.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            result["facts"] = "missing"
-            return receipt, result
-        fixed, f_stats = _verify_fact_text(original, repo)
-        result["facts"] = f_stats
-        if f_stats["drifted"]:
-            try:
-                fpath.write_text(fixed, encoding="utf-8")
-            except OSError:
-                pass  # 교정 실패는 치명 아님 — 리시트 쪽 번호는 이미 교정됐다
-    return receipt, result
+    return receipt, {"receipt": r_stats,
+                     "truncated": _TRUNC_MARK in receipt}
 
 
 def _failed_facts(result: dict):
-    out = list(result["receipt"]["failed"])
-    facts = result.get("facts")
-    if isinstance(facts, dict):
-        out += facts["failed"]
-    return out
+    return list(result["receipt"]["failed"])
 
 
 def _format_collapse(stats) -> bool:
@@ -702,7 +636,7 @@ def _format_collapse(stats) -> bool:
     집계 모드(`FOUND: 12 across 3 files`)나 서술 불릿만 있는 경우와 구별해야
     한다. 그쪽은 검사할 대상이 없는 정상이고, 이쪽은 대상이 있는데 형식이
     어긋나 전량 건너뛴 상태다 — 무증상으로 두면 미검증 실행이 건강한 실행과
-    구별되지 않는다(실측: explorer 1회차 59건 전량, exit 0).
+    구별되지 않는다(실측: ext 수확 1회차 59건 전량, exit 0).
     """
     return (isinstance(stats, dict) and stats.get("near", 0) > 0
             and stats["total"] - stats["unparsed"] == 0)
@@ -710,12 +644,9 @@ def _format_collapse(stats) -> bool:
 
 def _unverifiable(result: dict):
     """검사가 성립하지 않은 대상의 설명. 없으면 None."""
-    hit = []
     if _format_collapse(result["receipt"]):
-        hit.append(f"receipt {result['receipt']['near']} bullets")
-    if _format_collapse(result.get("facts")):
-        hit.append(f"facts file {result['facts']['near']} bullets")
-    return ", ".join(hit) or None
+        return f"receipt {result['receipt']['near']} bullets"
+    return None
 
 
 def _append_verified_field(receipt: str, result: dict) -> str:
@@ -740,25 +671,7 @@ def _append_verified_field(receipt: str, result: dict) -> str:
                 f" — script-checked")
     lines = [head]
 
-    facts = result.get("facts")
-    if result.get("facts_outside"):
-        # 조용한 무시는 하지 않는다 — 선언이 왜 반영되지 않았는지 드러내야 한다.
-        lines.append(f"  ! FACTS FILE outside report dir, ignored: "
-                     f"{result['facts_outside']}")
-    if facts == "missing":
-        lines.append(f"  ! FACTS FILE not found: {result['facts_file']}")
-    elif _format_collapse(facts):
-        lines.append(f"  ! facts file: NOTHING CHECKED — {facts['near']} fact "
-                     f"bullets do not match the contract format, 0 checked")
-    elif isinstance(facts, dict):
-        f_ok = facts["verified"] + len(facts["drifted"])
-        lines.append(
-            f"  facts file: {f_ok}/{facts['total'] - facts['unparsed']} "
-            f"({len(facts['drifted'])} drifted, {facts['unparsed']} unparsed)")
-
     drifted = list(r["drifted"])
-    if isinstance(facts, dict):
-        drifted += facts["drifted"]
     for d in drifted[:3]:
         lines.append(f"  ~ {d}")
     if len(drifted) > 3:
@@ -886,7 +799,7 @@ def _field_raw(text: str, field: str):
     """필드의 원시값. "none" 을 접지 않는다.
 
     미선언(None)과 명시적 "none" 을 구별해야 하는 곳에서 쓴다 — 프리앰블은
-    BLOCKED 반환에도 모든 필드를 요구하며 `FACTS FILE: none` 을 허용하므로,
+    BLOCKED/PARTIAL 반환에도 모든 필드를 요구하고 값으로 "none" 을 허용하므로,
     둘을 같은 값으로 접으면 계약을 지킨 반환이 결함처럼 보인다.
     """
     for line in text.splitlines():
@@ -1001,13 +914,6 @@ def _execute_job(job: dict, dry_run: bool) -> dict:
         spec_path.write_text(
             _synth_spec(role, mission, context, report_path, timeout),
             encoding="utf-8")
-        if role == "explorer" and not (context or "").strip():
-            # 프리앰블은 구체적 시작점이 없으면 BLOCKED 로 반송한다. "구체적"은
-            # 기계 판정이 불가하므로 경고만 낸다 (stderr — 리시트 추출 창 밖).
-            with _print_lock:
-                print("[ext] WARNING: explorer mission without context — the "
-                      "preamble requires concrete starting points and will "
-                      "return STATUS: BLOCKED without them.", file=sys.stderr)
     elif not spec_path.is_file():
         result["status"] = f"spec not found: {spec_path}"
         return result
@@ -1121,7 +1027,7 @@ def _execute_job(job: dict, dry_run: bool) -> dict:
         # 읽기 전용 역할의 대응물: 스코프 대신 사실을 대조한다. 드리프트는 여기서
         # 교정되므로 하위 스펙이 맞는 라인 번호를 받는다.
         if role in VERIFY_ROLES:
-            receipt, verdict = _verify_facts(receipt, role, repo, report_path)
+            receipt, verdict = _verify_facts(receipt, repo)
             receipt = _append_verified_field(receipt, verdict)
             failed = _failed_facts(verdict)
             unverifiable = _unverifiable(verdict)

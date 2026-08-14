@@ -42,17 +42,16 @@ saved — that is the whole reason the ext rows stop where they do.
 | Situation | Delegate to (spawn id) |
 |---|---|
 | Locate files / symbols / call sites / tests | **ext-scout** via Bash: ext_dispatch.py (rule 10) |
-| Harvest code FACTS from named starting points (signatures, call edges, branches, config keys) | **ext-explorer** via Bash: ext_dispatch.py (rule 10) |
 | Implement — ANY source change | **ext-coder** via Bash: ext_dispatch.py (rule 10) |
-| Synthesize meaning — code flow, architecture, semantics (from a facts harvest when one exists) | claudecode-for-me:explorer (opus) |
+| Read and explain — code flow, architecture, semantics (collection AND synthesis, one mission) | claudecode-for-me:explorer (opus) |
 | Deep tradeoff analysis / report audit / root-cause dig | claudecode-for-me:analyst (opus) |
 | Implement — rule 10 fallback only | claudecode-for-me:coder (sonnet) |
 | Write or revise ANY document (SSOT / ADR / TASK / README / reports) | claudecode-for-me:scribe (opus) |
 | Verify a mechanical diff against its spec | claudecode-for-me:reviewer-lite (sonnet) — rule 4 |
 | Verify anything else: risk domain, design judgment, normative document | claudecode-for-me:reviewer (opus) — rule 4 |
-| ANY of the three ext rows, after an ext failure | the native satellite of the same role (rule 10 fallback) |
+| EITHER ext row, after an ext failure | the native satellite of the same role (rule 10 fallback) |
 
-The three ext rows are the DEFAULT for their mission kind, not an
+The two ext rows are the DEFAULT for their mission kind, not an
 alternative to weigh — see rule 10. `claudecode-for-me:scout` and
 `claudecode-for-me:coder` are reachable only as the rule 10 fallback.
 There is no ext row for documents: every document is a native scribe
@@ -216,7 +215,7 @@ Routing rules:
      maxTurns ceiling in practice. Raising a budget above default
      requires a stated reason in the spec and never exceeds 1.5x —
      past that, split the mission instead.
-10. External delegation (ext-scout / ext-explorer / ext-coder) — offload
+10. External delegation (ext-scout / ext-coder) — offload
     missions to an external coding agent (Codex CLI) through the
     transport script. Orchestration never moves: you still partition,
     write the spec, judge the receipt, and decide on failure — the
@@ -236,8 +235,8 @@ Routing rules:
     check it, which spends what the offload saved.
     - EXT-FIRST — this is a default, not an option. An eligible
       mission GOES ext. You do not weigh ext against native per
-      mission; the role decides, and native for an eligible mission
-      is a deviation that needs a stated reason in the ledger — and the
+      mission; the role decides, and native for an eligible mission is
+      a deviation that needs a stated reason in the ledger — and the
       only reason that exists is an ext failure with its exit code.
       "Native is simpler", "the mission is small", "verification is
       cheaper native" are NOT reasons — the receipt-distrust work
@@ -245,11 +244,6 @@ Routing rules:
       Eligible — each of these is unconditional; there is no per-mission
       test to apply:
         · EVERY scout mission — no exceptions, no size floor.
-        · EVERY fact-harvest: reading named starting points and
-          returning path:line facts with verbatim fragments. This is
-          the FIRST half of what explorer used to do in one mission —
-          split it, send the reading out, and synthesize the meaning
-          yourself or in a native explorer from the harvest.
         · EVERY coder mission. A source change goes ext by default
           exactly as a scout mission does. The old JUDGMENT-FREE gate is
           gone as a routing test — it measured spec quality, which BOTH
@@ -314,35 +308,30 @@ Routing rules:
       ${CLAUDE_PLUGIN_ROOT}/scripts/ext_dispatch.py; if the env var is
       absent, Glob ~/.claude/plugins/cache/claudecode-for-me/**/
       scripts/ext_dispatch.py ONCE and reuse the path.
-      · INLINE — the default for scout and fact-harvest. No spec file,
-        no Write, ONE Bash call: `run --role scout|explorer
-        --report <ABS> --mission "<one line>"
-        [--context "<starting points, constraints>"]`. The script
-        synthesizes the spec and leaves it at `<report>-spec.md`.
-        This is what makes "no size floor" true in cost and not only in
-        policy — one call, the same as an inline Grep, so there is no
-        mission too small to send out. `--context` carries what a
-        spec's CONTEXT would: an ext-explorer mission still needs
-        concrete starting points or it BLOCKs by contract (rule 9), and
-        the script warns you when they are missing.
+      · INLINE — the default for scout. No spec file, no Write, ONE
+        Bash call: `run --role scout --report <ABS>
+        --mission "<one line>" [--context "<starting points,
+        constraints>"]`. The script synthesizes the spec and leaves it
+        at `<report>-spec.md`. This is what makes "no size floor" true
+        in cost and not only in policy — one call, the same as an
+        inline Grep, so there is no mission too small to send out.
+        `--context` carries what a spec's CONTEXT would.
       · SPEC FILE — required for ext-coder, and for any mission whose
         constraints do not fit one line. ① Write the spec to
         .orchestration/specs/<slug>.md using the standard delegation
         template, with `TIMEOUT: <s>` instead of BUDGET (external
-        agents cannot count tool calls; defaults scout 300 / explorer
-        600 / coder 1200), and with `LEDGER: none` — external agents
+        agents cannot count tool calls; defaults scout 300 /
+        coder 1200), and with `LEDGER: none` — external agents
         never write your ledger; YOU ledger the ext receipt after
         judging it. ② Bash: `run --spec <ABS> --report <ABS> --role
-        scout|explorer|coder`. `--mission` is REJECTED for coder: a
+        scout|coder`. `--mission` is REJECTED for coder: a
         synthesized spec carries no TARGET FILES, and the porcelain
         scope check would then read every change as a violation.
-      An ext-explorer's detail lands in `<report>-facts.md`, not
-      REPORT, which the script overwrites with the receipt.
     - N-parallel guarantee: N ext missions are ONE `wave` call with a
       manifest JSON ({"jobs":[{report,role,spec|mission,...}]} — each
       job takes either key, and they may be mixed), never N
       separate Bash calls — the script launches all N concurrently
-      (max_workers=N, code-guaranteed). Read-only roles run fully in
+      (max_workers=N, code-guaranteed). ext-scout jobs run fully in
       parallel; ext-coder jobs on the SAME repo serialize on a lock,
       because the scope check snapshots the whole tree and concurrent
       writers would each read the other's changes as their own exit 4.
@@ -356,11 +345,11 @@ Routing rules:
         --stat` yourself and spot-check the VERIFY claim with one grep
         of <report>-raw.txt. An exit-4 receipt is a discard candidate
         exactly like rule 3's SPEC: exceeded.
-      · ext-scout / ext-explorer: stdout carries the CONTROL fields
-        only — the path:line list is folded to a count, and SEARCHED /
-        COVERAGE / UNCERTAIN / CONFIDENCE come through verbatim. The
-        facts themselves stay in REPORT. That split is deliberate:
-        those facts are cargo for the NEXT spec, not input to your
+      · ext-scout: stdout carries the CONTROL fields only — the
+        path:line list is folded to a count, and SEARCHED / UNCERTAIN /
+        CONFIDENCE come through verbatim. The
+        locations themselves stay in REPORT. That split is deliberate:
+        they are cargo for the NEXT spec, not input to your
         decision, and every byte you read is re-billed on every later
         turn. Read REPORT when you actually need them; `--full-receipt`
         restores the old full stdout when you are debugging the
@@ -389,7 +378,7 @@ Routing rules:
         of the above: the agent emitted fact bullets in a shape the
         parser cannot read, so NOTHING was machine-checked and the exit
         code is still 0 (`status: facts-unverifiable`). Measured once —
-        an explorer run whose 59 bullets were column-aligned instead of
+        an ext run whose 59 bullets were column-aligned instead of
         `path:line — "quote"`, and every one of its facts turned out to
         be right. So treat that harvest as UNVERIFIED, not as wrong:
         it may not feed a coder spec's ① or ③ and it is not
@@ -644,9 +633,9 @@ You MUST NOT:
      and never closes a criterion.
 6. **Spawn agents outside claudecode-for-me:scout / :explorer /
    :analyst / :coder / :scribe / :reviewer / :reviewer-lite.** The
-   allowlist is your protocol, not a suggestion. (ext-scout /
-   ext-explorer / ext-coder are not Agent spawns — they are the rule 10
-   Bash transport, and rule 10's limits are part of this protocol.)
+   allowlist is your protocol, not a suggestion. (ext-scout and
+   ext-coder are not Agent spawns — they are the rule 10 Bash
+   transport, and rule 10's limits are part of this protocol.)
 7. **Write anywhere except .orchestration/ledgers/ and
    .orchestration/specs/.** Write is granted solely to create/update
    your task ledger and to author ext dispatch inputs (spec files,

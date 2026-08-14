@@ -21,19 +21,6 @@ CODER_RECEIPT = (
     "VERIFY: pytest -q -> PASS 3 passed\n"
 )
 
-EXPLORER_RECEIPT = (
-    "read the code\n\n"
-    "## RECEIPT\n"
-    "STATUS: OK\n"
-    "COVERAGE: read doc/out.md fully, skipped tests/\n"
-    "CONFIDENCE: high - every fact quoted from an opened file\n"
-    "UNCERTAIN: none\n"
-    "FACTS FILE: out/report-facts.md\n"
-    "KEY FACTS:\n"
-    '- doc/out.md:1 [signature] - "# rendered"\n'
-)
-
-
 SCOUT_RECEIPT = (
     "looked around\n\n"
     "## RECEIPT\n"
@@ -175,10 +162,14 @@ def write_scout_sources(repo: Path) -> None:
 # ---------------------------------------------------------------- role registry
 
 def test_registered_roles_are_labour_only(ext):
-    """외부 위임은 '노동' 역할만 — 판단·저작 역할은 등록되지 않는다."""
-    assert set(ext.REQUIRED_FIELDS) == {"scout", "explorer", "coder"}
-    assert set(ext.DEFAULTS) == {"scout", "explorer", "coder"}
+    """외부 위임은 '노동' 역할만 — 판단·저작 역할은 등록되지 않는다.
+
+    v3.51.0 부터 둘뿐이다: 위치(scout) / 타이핑(coder). 읽고 이해하기는
+    native explorer 로 되돌아갔다."""
+    assert set(ext.REQUIRED_FIELDS) == {"scout", "coder"}
+    assert set(ext.DEFAULTS) == {"scout", "coder"}
     assert ext.WRITE_ROLES == frozenset({"coder"})
+    assert ext.VERIFY_ROLES == frozenset({"scout"})
 
 
 def test_removed_scribe_role_is_rejected(ext, git_repo):
@@ -227,49 +218,21 @@ def test_coder_receipt_missing_verify_field(ext, git_repo):
     assert "VERIFY" in res["status"]
 
 
-# ---------------------------------------------------------------- explorer role
+def test_scout_is_not_scope_checked(ext, git_repo):
+    """비쓰기 역할은 porcelain 대조를 타지 않는다 (WRITE_ROLES 제외).
 
-def test_explorer_valid_receipt(ext, git_repo):
-    write_target(git_repo)   # EXPLORER_RECEIPT 가 인용한 doc/out.md:1
-    ext.INVOKERS["codex"] = fake(EXPLORER_RECEIPT)
-    res = ext._execute_job(make_job(git_repo, role="explorer"), False)
-    assert res["exit"] == ext.EXIT_OK, res["status"]
-    assert "KEY FACTS:" in res["receipt"]
-
-
-def test_explorer_multiword_field_is_validated(ext, git_repo):
-    """'KEY FACTS' 는 공백 포함 라벨 — 부분 문자열 검증이 이를 놓치면 안 된다."""
-    receipt = EXPLORER_RECEIPT.replace("KEY FACTS:\n", "FACTS:\n")
-    ext.INVOKERS["codex"] = fake(receipt)
-    res = ext._execute_job(make_job(git_repo, role="explorer"), False)
-    assert res["exit"] == ext.EXIT_BAD_RECEIPT
-    assert "KEY FACTS" in res["status"]
-
-
-def test_explorer_receipt_missing_confidence(ext, git_repo):
-    receipt = EXPLORER_RECEIPT.replace(
-        "CONFIDENCE: high - every fact quoted from an opened file\n", "")
-    ext.INVOKERS["codex"] = fake(receipt)
-    res = ext._execute_job(make_job(git_repo, role="explorer"), False)
-    assert res["exit"] == ext.EXIT_BAD_RECEIPT
-    assert "CONFIDENCE" in res["status"]
-
-
-def test_explorer_is_not_scope_checked(ext, git_repo):
-    """읽기 전용 역할은 porcelain 대조를 타지 않는다 (WRITE_ROLES 제외).
-
-    알려진 공백: 계약상 read-only 일 뿐 기계적 강제는 없다. scout 도 동일.
-    강제하려면 targets=∅ + facts side file 면제로 대조를 돌려야 하는데,
-    외부 CLI 가 repo 에 임시 파일을 남기면 전량 거짓 exit 4 가 되므로
-    실측 없이는 켜지 않는다.
+    알려진 공백: 계약상 read-only 일 뿐 기계적 강제는 없다. 강제하려면
+    targets=∅ 로 대조를 돌려야 하는데, 외부 CLI 가 repo 에 임시 파일을
+    남기면 전량 거짓 exit 4 가 되므로 실측 없이는 켜지 않는다. 그 자리를
+    메우는 것이 VERIFY_ROLES 의 fact 대조다.
     """
     def rogue(repo: Path) -> None:
         (repo / "rogue.md").write_text("should have been read-only\n",
                                        encoding="utf-8")
 
-    write_target(git_repo)   # EXPLORER_RECEIPT 가 인용한 doc/out.md:1
-    ext.INVOKERS["codex"] = fake(EXPLORER_RECEIPT, side_effect=rogue)
-    res = ext._execute_job(make_job(git_repo, role="explorer"), False)
+    write_scout_sources(git_repo)   # SCOUT_RECEIPT 가 인용한 위치
+    ext.INVOKERS["codex"] = fake(SCOUT_RECEIPT, side_effect=rogue)
+    res = ext._execute_job(make_job(git_repo, role="scout"), False)
     assert res["exit"] == ext.EXIT_OK, res["status"]
 
 
@@ -277,7 +240,7 @@ def test_explorer_is_not_scope_checked(ext, git_repo):
 
 def _long_facts(n: int) -> str:
     return "".join(
-        f'- src/big.py:{i + 1} [signature] - "def f{i}():"\n' for i in range(n))
+        f'- src/big.py:{i + 1} [definition] - "def f{i}():"\n' for i in range(n))
 
 
 def write_big_source(repo: Path, n: int = 40) -> None:
@@ -286,36 +249,43 @@ def write_big_source(repo: Path, n: int = 40) -> None:
         "".join(f"def f{i}():\n" for i in range(n)), encoding="utf-8")
 
 
-def test_short_fields_first_survive_truncation(ext, git_repo):
-    """프리앰블이 규정한 필드 순서(짧은 필드 먼저, KEY FACTS 마지막)면
-    40줄짜리 사실 목록도 30줄 절단을 통과한다."""
+def test_aggregated_list_survives_truncation(ext, git_repo):
+    """프리앰블의 집계 규칙(>8 hits → 파일당 한 줄, 리시트 <=18줄)을 지키면
+    30줄 절단선에 닿지 않는다 — scout 이 절단을 피하는 정상 경로."""
     receipt = (
-        "read a lot\n\n"
+        "looked around\n\n"
         "## RECEIPT\n"
-        "STATUS: OK\n"
-        "COVERAGE: read 40 files\n"
+        "FOUND: 40 usages across 1 file\n"
+        '- src/big.py (40) [definition] - "def f0():"\n'
+        "SEARCHED: rg 'def f' across src/\n"
+        "UNCERTAIN: none\n"
         "CONFIDENCE: medium - aggregated per file\n"
-        "KEY FACTS:\n" + _long_facts(40)
     )
     write_big_source(git_repo)
     ext.INVOKERS["codex"] = fake(receipt)
-    res = ext._execute_job(make_job(git_repo, role="explorer"), False)
+    res = ext._execute_job(make_job(git_repo, role="scout"), False)
     assert res["exit"] == ext.EXIT_OK, res["status"]
-    assert "truncated" in res["receipt"]
+    assert "truncated" not in res["receipt"]
 
 
 def test_confidence_after_long_list_is_cut_and_fails(ext, git_repo):
-    """역순(가변 목록 먼저)이면 CONFIDENCE 가 절단선 밖으로 밀려 거짓 exit 3.
-    프리앰블의 '필드 순서는 load-bearing' 경고를 고정하는 회귀 가드."""
+    """가변 목록이 절단선을 넘으면 뒤따르는 CONFIDENCE 가 잘려 거짓 exit 3.
+
+    scout 계약은 FOUND(가변)가 먼저이고 CONFIDENCE 가 마지막이라 이 순서에
+    구조적으로 노출돼 있다 — 프리앰블의 집계 규칙과 18줄 상한이 유일한
+    방어선이고, 그것을 어긴 리시트가 어떻게 실패하는지 고정하는 가드다.
+    절단은 필드 검증보다 FIRST 로 일어난다.
+    """
     receipt = (
-        "read a lot\n\n"
+        "looked around\n\n"
         "## RECEIPT\n"
-        "COVERAGE: read 40 files\n"
-        "KEY FACTS:\n" + _long_facts(40) +
-        "CONFIDENCE: medium - aggregated per file\n"
+        "FOUND:\n" + _long_facts(40) +
+        "SEARCHED: rg 'def f' across src/\n"
+        "CONFIDENCE: medium - one line per hit, no aggregation\n"
     )
+    write_big_source(git_repo)
     ext.INVOKERS["codex"] = fake(receipt)
-    res = ext._execute_job(make_job(git_repo, role="explorer"), False)
+    res = ext._execute_job(make_job(git_repo, role="scout"), False)
     assert res["exit"] == ext.EXIT_BAD_RECEIPT
     assert "CONFIDENCE" in res["status"]
 
@@ -356,32 +326,42 @@ def test_valid_receipt_wins_over_nonzero_rc(ext, git_repo):
 
 # ---------------------------------------------------------------- CLI surface
 
-def test_cli_accepts_explorer_role_and_loads_preamble(tmp_path):
+def test_cli_accepts_scout_role_and_loads_preamble(tmp_path):
     spec = tmp_path / "spec.md"
     spec.write_text("TASK: x\nCONTEXT: src/a.py:1\n", encoding="utf-8")
     proc = subprocess.run(
         [sys.executable, str(SCRIPT), "run", "--spec", str(spec),
-         "--report", str(tmp_path / "report.md"), "--role", "explorer",
+         "--report", str(tmp_path / "report.md"), "--role", "scout",
          "--dry-run"],
         capture_output=True, text=True, encoding="utf-8",
     )
     assert proc.returncode == 0, proc.stderr
-    assert "role=explorer" in proc.stdout
-    assert "timeout=600s" in proc.stdout
-    assert json.loads(proc.stdout.strip().splitlines()[-1])["role"] == "explorer"
+    assert "role=scout" in proc.stdout
+    assert "timeout=300s" in proc.stdout
+    assert json.loads(proc.stdout.strip().splitlines()[-1])["role"] == "scout"
 
 
-def test_cli_rejects_removed_scribe_role(tmp_path):
+@pytest.mark.parametrize("role", ["scribe", "explorer"])
+def test_cli_rejects_removed_roles(tmp_path, role):
+    """폐지된 역할은 argparse 단계에서 막힌다 — scribe(v3.45.0),
+    explorer(v3.51.0). 프리앰블 파일도 함께 지웠으므로 이중 방어다."""
     spec = tmp_path / "spec.md"
     spec.write_text("TASK: x\n", encoding="utf-8")
     proc = subprocess.run(
         [sys.executable, str(SCRIPT), "run", "--spec", str(spec),
-         "--report", str(tmp_path / "report.md"), "--role", "scribe",
+         "--report", str(tmp_path / "report.md"), "--role", role,
          "--dry-run"],
         capture_output=True, text=True, encoding="utf-8",
     )
     assert proc.returncode != 0
     assert "invalid choice" in proc.stderr
+    assert "Traceback" not in proc.stderr
+
+
+def test_removed_role_preamble_is_gone(ext):
+    """계약 파일도 함께 제거됐는지 — argparse 를 우회해도 _load_prompt 가 막는다."""
+    assert not (ROOT / "scripts" / "ext_preambles" / "explorer.md").exists()
+    assert not (ROOT / "scripts" / "ext_preambles" / "scribe.md").exists()
 
 
 # ------------------------------------------------- stdout 화물 분리 (요약)
@@ -395,14 +375,6 @@ def test_scout_summary_folds_cargo_into_counts(ext):
     assert "SEARCHED: rg handle across src/" in out
     assert "CONFIDENCE: high - both sites opened" in out
     assert "UNCERTAIN: none" in out
-
-
-def test_explorer_summary_folds_key_facts(ext):
-    out = ext._control_summary("explorer", receipt_body(EXPLORER_RECEIPT))
-    assert "doc/out.md:1" not in out
-    assert "KEY FACTS: 1 across 1 file" in out
-    assert "FACTS FILE: out/report-facts.md" in out
-    assert "STATUS: OK" in out
 
 
 def test_coder_is_never_summarized(ext):
@@ -495,7 +467,7 @@ def test_inline_mission_return_uses_full_contract(ext, git_repo):
 
 def test_inline_mission_includes_context_when_given(ext, git_repo):
     res = ext._execute_job(
-        make_mission_job(git_repo, role="explorer", context="src/a.py:10"),
+        make_mission_job(git_repo, role="scout", context="src/a.py:10"),
         True)
     assert "CONTEXT: src/a.py:10" in Path(res["spec"]).read_text(
         encoding="utf-8")
@@ -562,18 +534,6 @@ def test_cli_rejects_neither_spec_nor_mission(tmp_path):
     assert "exactly one of --spec / --mission" in proc.stderr
 
 
-def test_cli_explorer_inline_mission_without_context_warns(tmp_path):
-    """프리앰블의 시작점 게이트는 기계 판정 불가 — 경고만 내고 실행은 막지 않는다."""
-    proc = subprocess.run(
-        [sys.executable, str(SCRIPT), "run", "--role", "explorer",
-         "--report", str(tmp_path / "report.md"), "--mission", "map job core",
-         "--dry-run"],
-        capture_output=True, text=True, encoding="utf-8",
-    )
-    assert proc.returncode == 0, proc.stderr
-    assert "WARNING" in proc.stderr and "BLOCKED" in proc.stderr
-
-
 # ------------------------------------------------- fact 검사기 (4등급)
 
 def test_facts_verified_pass(ext, git_repo):
@@ -633,7 +593,7 @@ def test_nonexistent_file_is_exit_7(ext, git_repo):
 def test_ambiguous_drift_is_not_guessed(ext, git_repo):
     """창 안 여러 줄이 매치되면 교정하지 않는다 — 잘못된 교정이 미교정보다 나쁘다.
 
-    실측 근거: explorer facts 의 `str(repo))` 가 ±2 양쪽에 걸려, 가까운 쪽을
+    실측 근거: ext 수확물의 `str(repo))` 가 ±2 양쪽에 걸려, 가까운 쪽을
     고르는 방식이었다면 틀린 줄로 교정될 뻔했다.
     """
     write_source(git_repo, text="a\nreturn x\nb\nreturn x\nc\n")
@@ -672,7 +632,7 @@ def test_short_evidence_is_unparsed_not_failed(ext, git_repo):
 # ---------------------------------- 파서 회귀 (각각 없으면 전량 오탐하던 것)
 
 def test_bare_filename_resolves_by_unique_basename(ext, git_repo):
-    """explorer facts 는 `ext_dispatch.py:283` 처럼 루트에서 해석 안 되는
+    """ext 수확물은 `ext_dispatch.py:283` 처럼 루트에서 해석 안 되는
     맨 파일명을 쓴다 (실측 90/90). 이 처리가 없으면 정상 수확물이 전량 실패."""
     write_source(git_repo)
     ext.INVOKERS["codex"] = fake(scout_receipt(
@@ -694,7 +654,7 @@ def test_duplicate_basename_is_unparsed_not_failed(ext, git_repo):
 
 @pytest.mark.parametrize("quoted", [
     '"def handle(x):"',      # 리시트 기본
-    "`def handle(x):`",      # explorer facts 본문
+    "`def handle(x):`",      # ext 수확 본문
     "'def handle(x):'",      # 실측 스모크 4회차
 ])
 def test_all_observed_delimiters_are_accepted(ext, git_repo, quoted):
@@ -721,7 +681,7 @@ def test_indented_receipt_is_parsed(ext, git_repo):
 
 
 def test_multiple_quotes_on_one_line(ext, git_repo):
-    """explorer KEY FACTS 는 한 줄에 인용이 여러 개다 — "마지막 따옴표까지"
+    """ext 수확 불릿은 한 줄에 인용이 여러 개다 — "마지막 따옴표까지"
     규칙 하나면 두 인용을 이어붙여 실패한다 (실측 10/10 오탐)."""
     write_source(git_repo)
     ext.INVOKERS["codex"] = fake(scout_receipt(
@@ -839,46 +799,10 @@ def test_non_fact_bullets_are_unparsed(ext, git_repo):
     assert "1 unparsed" in res["receipt"]
 
 
-# ---------------------------------- explorer facts 본문 · 기타
-
-def test_explorer_facts_file_is_checked(ext, git_repo):
-    """리시트 샘플은 거짓 안심을 준다 — 실측에서 리시트 10/10 인데 본문은 7/90
-    오류였다. 하위 노드가 읽는 것은 본문 쪽이다."""
-    write_source(git_repo)
-    facts = git_repo / "out" / "report-facts.md"
-    facts.parent.mkdir(parents=True, exist_ok=True)
-    facts.write_text('- src/a.py:6 [signature] - `def handle(x):`\n',
-                     encoding="utf-8")
-    ext.INVOKERS["codex"] = fake(
-        "read it\n\n## RECEIPT\n"
-        "STATUS: OK\nCOVERAGE: read src/a.py\n"
-        "CONFIDENCE: high - opened directly\nUNCERTAIN: none\n"
-        f"FACTS FILE: {facts}\n"
-        'KEY FACTS:\n- src/a.py:4 [signature] - "def handle(x):"\n')
-    res = ext._execute_job(make_job(git_repo, role="explorer"), False)
-    assert res["exit"] == ext.EXIT_OK, res["status"]
-    assert "facts file: 1/1" in res["receipt"]
-    # 본문의 드리프트도 제자리에서 교정된다
-    assert "src/a.py:4" in facts.read_text(encoding="utf-8")
-
-
-def test_missing_facts_file_is_reported_not_fatal(ext, git_repo):
-    write_source(git_repo)
-    ext.INVOKERS["codex"] = fake(
-        "read it\n\n## RECEIPT\n"
-        "STATUS: OK\nCOVERAGE: read src/a.py\n"
-        "CONFIDENCE: high - opened directly\nUNCERTAIN: none\n"
-        "FACTS FILE: /nowhere/absent-facts.md\n"
-        'KEY FACTS:\n- src/a.py:4 [signature] - "def handle(x):"\n')
-    res = ext._execute_job(make_job(git_repo, role="explorer"), False)
-    assert res["exit"] == ext.EXIT_OK, res["status"]
-    assert "FACTS FILE not found" in res["receipt"]
-
-
-# ---------------------------------- 형식 붕괴 (실측: explorer 1회차 59/59 미검사)
+# ---------------------------------- 형식 붕괴 (실측: ext 수확 1회차 59/59 미검사)
 
 def test_contract_mismatch_bullets_are_flagged_not_silent(ext, git_repo):
-    """대시·인용부호 없는 컬럼 정렬 형식 — 실 explorer 가 낸 형식이다.
+    """대시·인용부호 없는 컬럼 정렬 형식 — 실제 ext 실행이 낸 형식이다.
 
     파싱이 전량 실패하면 검사기는 아무것도 대조하지 못하는데, 예전에는 exit 0
     에 조용한 요약만 남아 건강한 실행과 구별되지 않았다.
@@ -925,31 +849,6 @@ def test_partial_parse_is_not_a_format_collapse(ext, git_repo):
     assert "1 unparsed" in res["receipt"]
 
 
-def test_facts_file_format_collapse_is_flagged(ext, git_repo):
-    """리시트는 멀쩡한데 본문만 형식이 어긋난 경우 — 실측 explorer 1회차 그대로.
-
-    하위 노드가 읽는 것은 본문 쪽이라 리시트만 보면 거짓 안심이 된다.
-    """
-    write_source(git_repo)
-    facts = git_repo / "out" / "report-facts.md"
-    facts.parent.mkdir(parents=True, exist_ok=True)
-    facts.write_text("- src/a.py:4  [signature]  def handle(x):\n"
-                     "- src/a.py:6  [usage]      return x + 1\n",
-                     encoding="utf-8")
-    ext.INVOKERS["codex"] = fake(
-        "read it\n\n## RECEIPT\n"
-        "STATUS: OK\nCOVERAGE: read src/a.py\n"
-        "CONFIDENCE: high - opened directly\nUNCERTAIN: none\n"
-        f"FACTS FILE: {facts}\n"
-        'KEY FACTS:\n- src/a.py:4 [signature] - "def handle(x):"\n')
-    res = ext._execute_job(make_job(git_repo, role="explorer"), False)
-    assert res["exit"] == ext.EXIT_OK, res["status"]
-    assert "VERIFIED: 1/1 facts" in res["receipt"]        # 리시트는 통과
-    assert "facts file: NOTHING CHECKED" in res["receipt"]
-    assert "facts-unverifiable" in res["status"]
-    assert "facts file 2 bullets" in res["status"]
-
-
 def test_format_collapse_never_masks_a_real_failure(ext, git_repo):
     """실패가 있으면 exit 7 이 우선이고, 붕괴 사실은 status 에 덧붙는다."""
     write_source(git_repo)
@@ -961,15 +860,13 @@ def test_format_collapse_never_masks_a_real_failure(ext, git_repo):
     assert res["status"].startswith("facts-unverified:")
 
 
-def test_explorer_preamble_declares_facts_file_line_format(ext):
-    """본문 형식 미지정이 실측 붕괴의 근본 원인이었다 — 계약에 박혀 있어야 한다."""
-    text = (ROOT / "scripts" / "ext_preambles" / "explorer.md").read_text(
+def test_scout_preamble_declares_fact_line_format(ext):
+    """형식 미지정이 실측 붕괴(59/59 미검사)의 근본 원인이었다 — 남은 수확
+    역할의 계약에 박혀 있어야 한다."""
+    text = (ROOT / "scripts" / "ext_preambles" / "scout.md").read_text(
         encoding="utf-8")
-    assert "FACTS FILE line format is MANDATORY" in text
-    assert '- <path>:<line> [tag] — "<verbatim fragment>"' in text
-    # KEY FACTS 예시가 한 줄이어야 한다 — 줄바꿈되면 계약 준수가 실패를 만든다
-    assert ('- <path>:<line> [signature|call|branch|config|type|import|flow] '
-            '— "<verbatim fragment>"') in text
+    assert '- <path>:<line> [definition|usage|test|config|doc] — "<evidence>"' \
+        in text
 
 
 def test_coder_is_not_fact_checked(ext, git_repo):
@@ -999,7 +896,7 @@ def test_wave_manifest_accepts_mission_and_spec_jobs(tmp_path):
     manifest = tmp_path / "wave.json"
     manifest.write_text(json.dumps({"jobs": [
         {"spec": str(spec), "report": str(tmp_path / "r1.md"),
-         "role": "explorer"},
+         "role": "coder"},
         {"mission": "locate handle()", "report": str(tmp_path / "r2.md"),
          "role": "scout"},
     ]}), encoding="utf-8")
@@ -1191,29 +1088,27 @@ def test_fact_path_outside_repo_is_unparsed(ext, git_repo, tmp_path_factory):
         encoding="utf-8")
 
 
-def test_facts_file_outside_report_dir_is_ignored(ext, git_repo):
-    """FACTS FILE 선언이 report 디렉터리 밖이면 무시하고 유도 경로로 폴백한다.
+def test_no_role_writes_a_model_declared_path(ext, git_repo):
+    """모델 자기신고가 파일 쓰기 경로를 정하는 지점이 남아 있으면 안 된다.
 
-    victim 은 repo 안이라 repo 경계로는 막히지 않는다 — 경계가 report.parent
-    여야 하는 이유가 이 케이스다. 프리앰블은 REPORT 에서 유도하라고 규정하므로
-    정상 선언은 항상 그 안이다.
+    v3.51.0 이전에는 explorer 의 `FACTS FILE` 선언값이 그 지점이었고, 드리프트
+    교정본을 그 경로에 되썼다 — report 디렉터리로 봉쇄했지만 봉쇄가 필요했다는
+    것 자체가 위험의 존재를 뜻한다. ext-explorer 폐지로 경로가 사라졌으므로,
+    되살아나지 않도록 고정한다.
     """
+    assert not hasattr(ext, "_facts_file_path")
     write_source(git_repo)
     victim = git_repo / "docs" / "architecture.md"
     victim.parent.mkdir(parents=True, exist_ok=True)
     victim.write_text('- src/a.py:6 [signature] - `def handle(x):`\n',
                       encoding="utf-8")          # :6 은 드리프트 (실제 :4)
     before = victim.read_bytes()
-    ext.INVOKERS["codex"] = fake(
-        "read it\n\n## RECEIPT\n"
-        "STATUS: OK\nCOVERAGE: read src/a.py\n"
-        "CONFIDENCE: high - opened directly\nUNCERTAIN: none\n"
-        f"FACTS FILE: {victim}\n"
-        'KEY FACTS:\n- src/a.py:4 [signature] - "def handle(x):"\n')
-    res = ext._run_job(make_job(git_repo, role="explorer"), False)
+    ext.INVOKERS["codex"] = fake(scout_receipt(
+        f'- src/a.py:6 [definition] - "def handle(x):"',
+        f'- {victim}:1 [doc] - "def handle(x):"'))
+    res = ext._run_job(make_job(git_repo, role="scout"), False)
     assert res["exit"] == ext.EXIT_OK, res["status"]
-    assert victim.read_bytes() == before          # 프로젝트 문서 무손상
-    assert "outside report dir, ignored" in res["receipt"]
+    assert victim.read_bytes() == before          # 어떤 경로로도 되쓰지 않는다
 
 
 def test_scope_unverifiable_when_digest_fails(ext, git_repo, monkeypatch):
@@ -1261,21 +1156,20 @@ def test_drift_correction_collapses_multi_line_notation(ext, git_repo,
     assert "src/a.py:7," not in res["receipt"]
 
 
-def test_facts_file_none_is_not_an_error(ext, git_repo):
-    """프리앰블은 BLOCKED 반환에도 모든 필드를 요구하고 `FACTS FILE: none` 을
+def test_blocked_receipt_with_none_values_is_not_an_error(ext, git_repo):
+    """프리앰블은 BLOCKED 반환에도 모든 필드를 요구하고 값으로 "none" 을
     허용한다. 계약을 정확히 지킨 반환이 결함처럼 보이면 안 된다."""
     write_source(git_repo)
     ext.INVOKERS["codex"] = fake(
         "blocked\n\n## RECEIPT\n"
-        "STATUS: BLOCKED - mission unbounded, needs scout first\n"
-        "COVERAGE: nothing read - blocked\n"
-        "CONFIDENCE: low - blocked\n"
+        "FOUND: none\n"
+        "SEARCHED: rg handle across src/ - nothing matched\n"
         "UNCERTAIN: none\n"
-        "FACTS FILE: none\n"
-        "KEY FACTS: none\n")
-    res = ext._run_job(make_job(git_repo, role="explorer"), False)
+        "CONFIDENCE: low - zero hits\n")
+    res = ext._run_job(make_job(git_repo, role="scout"), False)
     assert res["exit"] == ext.EXIT_OK, res["status"]
-    assert "FACTS FILE not found" not in res["receipt"]
+    assert "NOTHING CHECKED" not in res["receipt"]
+    assert "no checkable path:line facts" in res["receipt"]
 
 
 def test_field_label_must_start_a_line(ext, git_repo):

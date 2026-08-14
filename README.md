@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v3.50.0 · 커스텀 스킬 14종 + 슬래시 커맨드 18종 + 에이전트 17종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v3.51.0 · 커스텀 스킬 14종 + 슬래시 커맨드 18종 + 에이전트 17종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,7 +11,7 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `3.50.0` |
+| 버전 | `3.51.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
@@ -66,6 +66,53 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v3.51.0 — ext 경계를 scout + coder 둘로 확정: ext-explorer 폐지, 읽기는 native로 복귀
+
+v3.50.0으로 ext 경로에 **위치·읽기·타이핑** 셋이 나가 있었다. 이 버전은 그것을 **둘**로
+줄인다 — 외부에 나가는 것은 **위치(scout)와 타이핑(coder)뿐**이고, **읽고 이해하기는
+native로 되돌아온다.** 계약 판단이지 결함 대응이 아니다: v3.45.0의 뇌/손 분할선은
+"수집은 노동, 종합은 판단"이었는데, 실제로는 **무엇을 읽을지 고르는 것부터가 판단**이라
+분할선이 미션 한가운데를 지나갔다.
+
+**v3.49.0을 함께 되돌린다 — 이게 이 버전에서 놓치기 쉬운 부분이다.** v3.49.0은 explorer를
+`sonnet / high` → `opus / medium`으로 옮기며 근거를 "읽기가 ext로 나갔으니 남은 일은
+종합뿐"이라 적었고, 미검증 가정도 스스로 명시해 뒀다 — *"facts 미공급 모드는 여전히
+수집+종합을 다 하고, 거기서는 medium이 실질 하향이다."* ext-explorer가 사라지면 그 모드가
+**유일한 모드**가 되므로 전제가 없어진다. **effort를 `high`로 복원**했다. 모델은 `opus`
+유지 — 종합이 판단이라는 v3.49.0의 근거는 그대로이고, 수집까지 겸하므로 오히려 강해진다.
+`agents/explorer.md`의 "입력 모드 2개" 절도 단일 모드로 접었다.
+
+**제거 범위**: 라우팅 표의 ext-explorer 행, rule 10의 fact-harvest 적격 항목,
+`ext_preambles/explorer.md`(107줄), 스크립트의 역할 상수 5종(`REQUIRED_FIELDS` /
+`SPEC_RETURN` / `CONTROL_FIELDS` / `CARGO_FIELDS` / `DEFAULTS`), `INLINE_MISSION_ROLES`와
+`VERIFY_ROLES`에서 explorer, 인라인 미션의 시작점 경고, 그리고 `_facts_file_path`와
+`_verify_facts`의 FACTS FILE 분기 전체. `--role explorer`는 argparse choices가
+`REQUIRED_FIELDS` 키에서 오므로 **자동으로 거부**된다(traceback 없이 `invalid choice`).
+
+**부수 효과 — 이쪽이 실질적으로 크다.** v3.48.0 묶음 C가 `FACTS FILE` 선언값을
+report 디렉터리로 봉쇄했는데, 봉쇄가 필요했다는 것 자체가 위험의 존재를 뜻했다:
+**모델 자기신고가 파일 쓰기 경로를 결정하는 유일한 지점**이었고, 스크립트가 드리프트
+교정본을 그 경로에 되썼다. 역할과 함께 그 경로가 통째로 사라져, 이제 이 하네스에는
+모델 출력이 쓰기 대상을 정하는 지점이 **없다**. 회귀 가드로 고정했다
+(`test_no_role_writes_a_model_declared_path` — `_facts_file_path` 부재까지 단언).
+
+**테스트 91 → 85.** 삭제 8건(explorer 리시트 스키마 3 · 요약 1 · 시작점 경고 1 ·
+FACTS FILE 본문 3), 추가 2건(프리앰블 파일 부재 확인 · 폐지 역할 argparse 거부를
+scribe/explorer 파라미터라이즈로). **이관 6건은 삭제하지 않았다** — 절단·필드순서·
+`--context` 합성·스코프 미대조·경로 봉쇄·`none` 값 처리는 explorer를 매개로 검증하던
+**범용 기계**라, 지웠으면 커버리지가 조용히 사라진다. scout 경로 참조 수로 게이트를
+걸었고 **70 → 80으로 증가**했다.
+
+**이관 중 발견**: 절단 가드를 scout으로 옮기다가 **scout 계약이 explorer와 반대 순서**임을
+확인했다 — `FOUND`(가변 목록)가 먼저이고 `CONFIDENCE`가 마지막이라, 30줄 절단선을 넘으면
+필수 필드가 잘려 거짓 exit 3이 난다. 프리앰블의 집계 규칙(>8 hits → 파일당 한 줄)과
+18줄 상한이 **유일한 방어선**이다. explorer용으로 쓰였던 가드가 이제 실재하는 위험을
+가리킨다(`test_confidence_after_long_list_is_cut_and_fails`).
+
+**검증**: `tests/test_ext_dispatch.py` **85 passed**. 계약 무결성은 `ext-explorer` /
+`FACTS FILE` / `_facts_file_path` 전수 grep(폐지 사유를 설명하는 주석 외 0건), fable/opus
+오케스트레이터 본문 바이트 동일성 diff, `--role explorer` 실제 거부 확인으로 확인했다.
 
 ### v3.50.0 — coder 적격 판정 폐지: 게이트가 재던 것은 목적지가 아니라 스펙 품질이었다
 
@@ -1268,23 +1315,23 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `fable-orchestrator` | fable / high | 메인 오케스트레이터. 판단·결정만 하고 컨텍스트를 먹는 작업은 전부 위성에 위임 |
 | `opus-orchestrator` | opus / max | 위와 **본문 동일**(sha256 일치), frontmatter 4줄만 상이한 병렬 변종 |
 | `scout` | sonnet / low | 파일·심볼·호출부·테스트 위치 탐색. read-only. 위치만 반환하고 의견 금지. **v3.43.0부터 ext-scout 실패 시의 폴백 경로** — 탐색 미션의 기본값은 ext다 |
-| `explorer` | opus / medium | 코드 흐름·아키텍처·의미 파악. 상세는 리포트 파일로, 리턴은 압축 맵. **v3.45.0부터 입력 모드 2개** — ext-explorer facts 공급 시 종합만, 미공급 시 수집+종합(폴백 경로). **v3.49.0부터 opus** — 읽기가 ext로 나간 뒤 남은 일이 종합(판단)이기 때문 |
+| `explorer` | opus / high | 코드 흐름·아키텍처·의미 파악. 상세는 리포트 파일로, 리턴은 압축 맵. **v3.51.0부터 수집+종합 단일 모드** — ext-explorer 폐지로 읽기가 되돌아왔고, effort도 `high`로 복원(v3.49.0의 `medium`은 ext 수확을 전제한 값이었다). 모델은 opus 유지 — 종합이 판단이라는 근거는 그대로다 |
 | `analyst` | opus / xhigh | 온디맨드 판단. 트레이드오프 분석·리포트 적대 감사·root-cause 추적. 옵션만 반환하고 결정 금지 |
 | `coder` | sonnet / max | **코드** 구현. 소스 편집·신규 코드·테스트. `VERIFY` 리시트 반환 |
 | `scribe` | opus / high | **문서** 작성. 규범적 주장마다 근거 필수(`SOURCES`/`UNSOURCED`/`CONFLICTS`) |
 | `reviewer` | opus / high | fresh-context 검증자. 커밋·고위험 단계 전 diff/계획 판정 + 규범 문서의 인용 소스 대조. read-only, 조언 아닌 판정 |
 | `reviewer-lite` | sonnet / high | **v3.45.0 신설**. 모든 hunk가 스펙에 받아쓰기된 diff 전용 — 스펙 대조·VERIFY raw 확인·호출부 점검. 티어 밖(위험 도메인·설계 판단·규범 문서)을 발견하면 `VERDICT: ESCALATE`로 opus reviewer에 이관 |
 
-**외부 위임 3종(ext-scout / ext-explorer / ext-coder)은 이 표에 없다** — Agent 스폰이 아니라
+**외부 위임 2종(ext-scout / ext-coder)은 이 표에 없다** — Agent 스폰이 아니라
 `scripts/ext_dispatch.py`를 통한 Bash 전송이기 때문이다(모델 `zai/glm-5.2` / effort max,
-v3.42.0). v3.43.0부터 **적격 미션의 기본값은 ext**이고 native 위성은 폴백이다: 모든 탐색 미션은
-ext-scout, 명명된 시작점에서 `path:line` 사실을 수집하는 모든 fact-harvest는 ext-explorer,
-**모든 소스 변경은 ext-coder**(v3.50.0 — JUDGMENT-FREE 게이트 폐지). 설계 판단, **모든**
-문서(ext-scribe는 v3.45.0에서 폐지), 그리고 ext 대응물이 없는 종합·`analyst`·`reviewer`는
-native 고정이다.
-**v3.46.0부터 디스패치는 2경로다** — 탐색·fact-harvest는 `--mission "<한 줄>"`로 스펙 파일 없이
-Bash 1콜(스크립트가 `<report>-spec.md`에 스펙을 합성), ext-coder와 한 줄로 안 담기는 미션만
-`--spec` 파일. 읽기 전용 역할의 stdout은 제어 필드 요약이고 `path:line` 목록은 REPORT에만
+v3.42.0). v3.43.0부터 **기본값은 ext**이고 native 위성은 폴백이다: 모든 탐색 미션은
+ext-scout, **모든 소스 변경은 ext-coder**(v3.50.0 — JUDGMENT-FREE 게이트 폐지).
+**읽고 이해하기**(v3.51.0에서 ext-explorer 폐지), 설계 판단, **모든** 문서(ext-scribe는
+v3.45.0에서 폐지), `analyst`·`reviewer`는 native 고정이다 — **ext 경계는 위치와 타이핑
+둘뿐이다.**
+**v3.46.0부터 디스패치는 2경로다** — 탐색은 `--mission "<한 줄>"`로 스펙 파일 없이
+Bash 1콜(스크립트가 `<report>-spec.md`에 스펙을 합성), ext-coder만 `--spec` 파일.
+ext-scout의 stdout은 제어 필드 요약이고 `path:line` 목록은 REPORT에만
 남는다(`--full-receipt`로 해제).
 **v3.47.0부터 읽기 전용 역할도 기계 검증을 탄다** — 스크립트가 인용된 `path:line`을 파일과
 대조해 `VERIFIED:` 줄로 보고하고, 라인 드리프트는 자동 교정하며, 반증된 주장이 있으면
@@ -1294,8 +1341,10 @@ Bash 1콜(스크립트가 `<report>-spec.md`에 스펙을 합성), ext-coder와 
 증거로는 못 쓰고 지도로만 쓴다.
 **v3.48.0부터 두 보증이 기계적으로 성립한다** — exit 4는 실행 전 트리가 더러워도 유지되고
 (경로별 내용 지문 대조), 같은 repo의 ext-coder는 wave 안에서 직렬화되어 서로를 위반으로
-집계하지 않는다. 읽기 역할의 파일 접근도 저장소·REPORT 디렉터리 밖으로 나가지 못하며,
+집계하지 않는다. fact의 파일 접근도 저장소 밖으로 나가지 못하며,
 job 하나의 크래시는 형제 job의 리시트를 삼키지 않고 `exit 1 / job-error`로 강등된다.
+**v3.51.0부터 모델 출력이 파일 쓰기 경로를 정하는 지점이 없다** — ext-explorer의
+`FACTS FILE` 선언값이 유일한 그 지점이었고, 역할과 함께 사라졌다.
 **v3.44.0부터 위험 도메인은 위임 기준이 아니다** — auth·결제·크립토 파일이라도 다른 변경과
 똑같이 ext로 간다(리뷰 의무 rule 4는 그대로 유지, 위험 도메인은 opus reviewer 티어 고정).
 **v3.50.0부터 coder에 적격 판정이 없다** — 게이트가 재던 것은 스펙 품질인데 그건 native
