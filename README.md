@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v3.52.0 · 커스텀 스킬 14종 + 슬래시 커맨드 18종 + 에이전트 17종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v3.53.0 · 커스텀 스킬 14종 + 슬래시 커맨드 18종 + 에이전트 17종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,7 +11,7 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `3.52.0` |
+| 버전 | `3.53.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
@@ -66,6 +66,43 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v3.53.0 — ext 기본 모델 glm-5.2로 원복(effort xhigh는 유지)
+
+v3.52.0의 **절반만 되돌린다**. `scripts/ext_dispatch.py`의 상수 하나(`DEFAULT_MODEL`)가
+전부이고, scout·coder의 `xhigh`는 그대로 둔다.
+
+| 항목 | v3.52.0 | v3.53.0 |
+|---|---|---|
+| 모델 | `zai/glm-5.3` | **`zai/glm-5.2`** (v3.42.0 값으로 복귀) |
+| scout effort | `xhigh` | `xhigh` (유지) |
+| coder effort | `xhigh` | `xhigh` (유지) |
+| 타임아웃 | scout 300s / coder 1200s | 불변 |
+
+**결함 대응이 아니라 운영 선택이다 — 이 구분을 문서가 흐리면 안 된다.** glm-5.3이
+고장 나서 내린 게 아니다. 원복 직전(2026-08-15) 실제 ext-scout 디스패치로 다시 확인했고
+살아 있었다: raw 배너에 `model: zai/glm-5.3` / `reasoning effort: xhigh`가 되찍히고
+`exit 0`, `VERIFIED 2/2 facts (0 drifted, 0 unparsed)`. 그러니 이 원복을 근거로
+*"glm-5.3은 못 쓴다"*를 읽어내면 안 된다. 기본값을 어느 쪽에 둘지의 선택이다.
+
+**effort를 같이 되돌리지 않는 이유.** v3.52.0은 `max` → `xhigh` 하향의 근거를
+"모델이 바뀌었으니 `max` 지원을 전제한 v3.42.0의 근거도 갱신 대상"으로 적었다. 모델이
+돌아왔으니 그 근거는 소멸한다 — 하지만 `xhigh` 자체가 무효가 되는 것은 아니다.
+**glm-5.2 + xhigh 조합을 실측했다**: 같은 미션으로 기본값 디스패치, raw 배너
+`model: zai/glm-5.2` / `reasoning effort: xhigh`, `exit 0`,
+`VERIFIED 2/2 facts (0 drifted, 0 unparsed)`. 미지원 레벨이면 codex가 세션 시작 전에
+거부하므로 이 배너가 수용의 증거다. `max` 복귀는 별도 근거가 생길 때 별도 버전에서 한다.
+
+**v3.52.0의 "미해결 관측"은 해소됐다 — 다만 원인은 모델도 하네스도 아니다.** v3.52.0이
+남긴 `windows sandbox: helper_unknown_error: apply deny-read ACLs`(ext-scout이 파일을
+한 건도 못 연 그 실패)는 이번 스모크에서 **재현되지 않았다**. 차이는 codex 버전이다 —
+그때 `0.147.0`, 지금 **`0.144.4`**이고 배너의 sandbox가 `danger-full-access`로 뜬다.
+즉 codex 0.147.0의 Windows 샌드박스 헬퍼 회귀였고, 하네스 쪽 대응은 필요 없었다.
+**0.147.0으로 다시 올릴 때 되살아날 수 있는 환경 리스크**로 남겨 둔다.
+
+**회귀 없음**: `tests/test_ext_dispatch.py` **85 passed**. 테스트는 모델·effort 값을
+고정하지 않고 invoker 시그니처만 검증한다 — 기본값 교체가 테스트를 지나간다는 뜻이므로,
+이 값의 실증은 위 배너 스모크가 유일한 근거다.
 
 ### v3.52.0 — ext 경로 모델 갱신(glm-5.2 → glm-5.3) + effort max → xhigh
 
@@ -1363,8 +1400,8 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `reviewer-lite` | sonnet / high | **v3.45.0 신설**. 모든 hunk가 스펙에 받아쓰기된 diff 전용 — 스펙 대조·VERIFY raw 확인·호출부 점검. 티어 밖(위험 도메인·설계 판단·규범 문서)을 발견하면 `VERDICT: ESCALATE`로 opus reviewer에 이관 |
 
 **외부 위임 2종(ext-scout / ext-coder)은 이 표에 없다** — Agent 스폰이 아니라
-`scripts/ext_dispatch.py`를 통한 Bash 전송이기 때문이다(모델 `zai/glm-5.3` / effort xhigh,
-v3.52.0). v3.43.0부터 **기본값은 ext**이고 native 위성은 폴백이다: 모든 탐색 미션은
+`scripts/ext_dispatch.py`를 통한 Bash 전송이기 때문이다(모델 `zai/glm-5.2` / effort xhigh,
+v3.53.0). v3.43.0부터 **기본값은 ext**이고 native 위성은 폴백이다: 모든 탐색 미션은
 ext-scout, **모든 소스 변경은 ext-coder**(v3.50.0 — JUDGMENT-FREE 게이트 폐지).
 **읽고 이해하기**(v3.51.0에서 ext-explorer 폐지), 설계 판단, **모든** 문서(ext-scribe는
 v3.45.0에서 폐지), `analyst`·`reviewer`는 native 고정이다 — **ext 경계는 위치와 타이핑

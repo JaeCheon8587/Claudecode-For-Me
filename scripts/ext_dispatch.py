@@ -104,7 +104,7 @@ DEFAULTS = {
 # gpt-5.5 는 릴레이의 openai 크레딧 풀 소진으로 항상 즉사한다
 # ("Your workspace is out of credits" → rc 1 → exit 6, 미션 적격성 무관).
 # 살아있는 풀은 z-ai 계열 — 여기가 ext 경로의 기본값이어야 한다.
-DEFAULT_MODEL = "zai/glm-5.3"
+DEFAULT_MODEL = "zai/glm-5.2"
 
 # 소스를 수정하는 역할 — 실행 전후 porcelain 대조 대상.
 # scout 은 아무것도 쓰지 않아 대조를 생략한다. 다만 스코프 대조를 안 타므로
