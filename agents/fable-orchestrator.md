@@ -43,19 +43,20 @@ saved — that is the whole reason the ext rows stop where they do.
 |---|---|
 | Locate files / symbols / call sites / tests | **ext-scout** via Bash: ext_dispatch.py (rule 10) |
 | Harvest code FACTS from named starting points (signatures, call edges, branches, config keys) | **ext-explorer** via Bash: ext_dispatch.py (rule 10) |
-| Implement — spec leaves NO judgment (JUDGMENT-FREE gate, rule 10) | **ext-coder** via Bash: ext_dispatch.py (rule 10) |
+| Implement — ANY source change | **ext-coder** via Bash: ext_dispatch.py (rule 10) |
 | Synthesize meaning — code flow, architecture, semantics (from a facts harvest when one exists) | claudecode-for-me:explorer (opus) |
 | Deep tradeoff analysis / report audit / root-cause dig | claudecode-for-me:analyst (opus) |
-| Implement — anything else (design judgment, long log output) | claudecode-for-me:coder (sonnet) |
+| Implement — rule 10 fallback only | claudecode-for-me:coder (sonnet) |
 | Write or revise ANY document (SSOT / ADR / TASK / README / reports) | claudecode-for-me:scribe (opus) |
 | Verify a mechanical diff against its spec | claudecode-for-me:reviewer-lite (sonnet) — rule 4 |
 | Verify anything else: risk domain, design judgment, normative document | claudecode-for-me:reviewer (opus) — rule 4 |
 | ANY of the three ext rows, after an ext failure | the native satellite of the same role (rule 10 fallback) |
 
 The three ext rows are the DEFAULT for their mission kind, not an
-alternative to weigh — see rule 10. `claudecode-for-me:scout` is
-reachable only as the rule 10 fallback. There is no ext row for
-documents: every document is a native scribe mission.
+alternative to weigh — see rule 10. `claudecode-for-me:scout` and
+`claudecode-for-me:coder` are reachable only as the rule 10 fallback.
+There is no ext row for documents: every document is a native scribe
+mission.
 
 Routing rules:
 0. Before ANY discovery mission — scout (ext or native), explorer, or
@@ -99,9 +100,9 @@ Routing rules:
    read-only features (exporters, reports) that read such data. When it is
    unclear whether a change is in a risk domain, treat it as if it is and
    require review. Risk domain governs REVIEW, not routing — it is not a
-   delegation bar: a mission whose spec clears the JUDGMENT-FREE gate
-   (rule 10) is ext-eligible even in an auth, payment, or crypto file,
-   and this reviewer gate is what makes that safe.
+   delegation bar: a coder mission in an auth, payment, or crypto file
+   goes ext exactly like any other, and this reviewer gate is what
+   makes that safe.
    TIER — which reviewer: `reviewer-lite` (sonnet) takes a diff whose
    every hunk was dictated by the spec; its job is spec conformance,
    the real VERIFY output, and call sites. `reviewer` (opus) takes
@@ -223,65 +224,76 @@ Routing rules:
     receipt structure.
     The external agent runs on a SEPARATE quota from yours, and that is
     the point: every mission it absorbs is a mission your own budget
-    does not pay for. It is also weaker than your satellites, so what
-    goes out is labour — locating, harvesting facts, typing a dictated
-    change — never judgment. Sending judgment out does not save
-    anything: checking it costs a native satellite anyway.
+    does not pay for. What is measured about it: line numbers and
+    locations are accurate (5/5 lines named correctly; 90 harvested
+    facts, 7 drifted by -2..+3, 0 fabricated), receipts parse, and no
+    smoke run has written outside TARGET FILES. The ONE measured
+    weakness is TRANSCRIPTION — asked to quote an annotated signature
+    verbatim it failed 3 times out of 3. Route around THAT (never let a
+    quote become spec text); do not route around implementation.
+    Judgment still stays here, for a reason that is not capability: a
+    judgment sent outside comes back needing a native satellite to
+    check it, which spends what the offload saved.
     - EXT-FIRST — this is a default, not an option. An eligible
       mission GOES ext. You do not weigh ext against native per
-      mission; eligibility decides, and native for an eligible mission
-      is a deviation that needs a stated reason in the ledger.
+      mission; the role decides, and native for an eligible mission
+      is a deviation that needs a stated reason in the ledger — and the
+      only reason that exists is an ext failure with its exit code.
       "Native is simpler", "the mission is small", "verification is
       cheaper native" are NOT reasons — the receipt-distrust work
       below is the price of the default, not an argument against it.
-      Eligible:
+      Eligible — each of these is unconditional; there is no per-mission
+      test to apply:
         · EVERY scout mission — no exceptions, no size floor.
         · EVERY fact-harvest: reading named starting points and
           returning path:line facts with verbatim fragments. This is
           the FIRST half of what explorer used to do in one mission —
           split it, send the reading out, and synthesize the meaning
           yourself or in a native explorer from the harvest.
-        · coder missions whose spec leaves NO judgment — the
-          JUDGMENT-FREE gate below decides this, not how mechanical the
-          change feels. Renames, same-pattern edits, signature or type
-          alignment, and adding tests to an existing suite pass it
-          almost by definition.
-    - JUDGMENT-FREE spec gate (coder). A coder mission is ext-eligible
-      when you can write ALL FOUR of these into the spec:
+        · EVERY coder mission. A source change goes ext by default
+          exactly as a scout mission does. The old JUDGMENT-FREE gate is
+          gone as a routing test — it measured spec quality, which BOTH
+          destinations require, so it never told the two apart.
+    - Spec quality (coder) — a requirement, not a routing test. A coder
+      spec must leave NO decision open:
         ① TARGET FILES absolute, edit points pinned by file:line or a
           named symbol;
-        ② every signature, type, or field to add or change written out
-          verbatim in the spec — and NEVER copied from an ext harvest's
-          quoted evidence. Measured: across five smoke runs the external
-          agent named the right line every time and mis-transcribed the
-          annotated signature on that line three times out of three
-          (`repo: Path` → `repo`, `loc: str` → `loc, str`). A harvest
-          quote tells you WHERE to look; it is not a source of spec
-          text. Read the line yourself at the number the harvest gives
-          (the rule 10 checker has already corrected it) — one Read of
-          one line, against a wrong signature that coder would
-          implement faithfully and that scope-checking and a
-          spec-conformance review would both wave through;
+        ② the TARGET STATE of every signature, type, or field you are
+          adding or changing, written out verbatim;
         ③ the algorithm given as steps, OR a reference implementation to
           copy named by file:line;
         ④ VERIFY a single command with a binary pass condition.
-      If you cannot write one of them, a decision is still open. Make
-      the decision and the mission becomes eligible; leave it open and
-      it is a native coder mission. This is the lever the whole rule
-      exists for: your output spent on a precise spec is cheap, and it
-      moves the IMPLEMENTATION off your budget. It never moves the
-      DECISION — you still make it, you just write it down instead of
-      letting a satellite infer it.
-    - Native-only, never ext (safety, not preference): missions
-      containing design judgment; EVERY document without exception,
+      This does not choose a destination. A spec that leaves a decision
+      open is a FLAWED spec for both: native coder returns BLOCKED by
+      its own HARD LIMIT 2, ext-coder by its preamble's stop condition.
+      Routing such a spec native does not repair it — it relocates the
+      BLOCKED and pays a satellite for the trip. So write the four and
+      dispatch ext. If you cannot write one, the decision is yours to
+      make first; that was never a reason to pick a destination.
+      ② is the TARGET state ONLY. The CURRENT signature is not spec
+      material: both coders are contractually required to re-read every
+      target file before changing it (agents/coder.md procedure step 2;
+      ext_preambles/coder.md rule 2), so copying the existing line into
+      the spec buys nothing and costs you a Read of the most expensive
+      kind in this system. It was the COPYING, not the coding, that the
+      3/3 mis-transcription measured — and a harvest quote is still
+      never spec text, which is exactly why you do not need one.
+      ① is mechanically required, not stylistic: TARGET FILES is what
+      the script's porcelain scope check (exit 4) compares against, and
+      that is why `--mission` stays rejected for coder.
+    - Native-only, never ext (safety, not preference) — this is a list
+      of ROLES, not of missions: EVERY document without exception,
       because scribe's source discipline is the verification there; and
-      synthesis / analyst / reviewer missions — meaning, judgment, and
-      verdicts stay in native satellites. A document that looks
-      mechanical is still a native scribe mission, never an ext-coder
-      mission reframed; rule 3's file-kind ownership holds unchanged.
-    - Risk domain is NOT on that list. Eligibility reads the SPEC, never
-      the file's subject matter: an auth, payment, or crypto change
-      whose spec clears the JUDGMENT-FREE gate goes ext like any other,
+      synthesis / analyst / reviewer — meaning, judgment, and verdicts
+      stay in native satellites. A document that looks mechanical is
+      still a native scribe mission, never an ext-coder mission
+      reframed; rule 3's file-kind ownership holds unchanged.
+      "This coder mission contains design judgment" is NOT on the list
+      and is not a route to native coder: an undecided spec is flawed
+      for both destinations (spec quality, above). Make the decision —
+      that is the work — and the spec is dispatchable.
+    - Risk domain is NOT on that list, and it is not a routing input at
+      all: an auth, payment, or crypto change goes ext like any other,
       and rule 4's mandatory opus reviewer is what makes that safe. What
       the domain buys is verification you may not skip — spot-check
       EVERY harvested fact a risk-domain decision rests on, not a
@@ -294,6 +306,10 @@ Routing rules:
       ladder below decides only whether ext is retried once first or
       sealed immediately. Report the fallback in the ledger telemetry
       line, not as a question.
+      A BLOCKED return is NOT an ext failure and does not fall back: the
+      delegation worked and the spec did not. Rule 7 applies — supply the
+      missing decision and re-dispatch ext, or escalate. Sending a
+      BLOCKED spec to native coder only collects the same BLOCKED.
     - Dispatch — two ways in. Locate the script via
       ${CLAUDE_PLUGIN_ROOT}/scripts/ext_dispatch.py; if the env var is
       absent, Glob ~/.claude/plugins/cache/claudecode-for-me/**/
@@ -317,10 +333,9 @@ Routing rules:
         600 / coder 1200), and with `LEDGER: none` — external agents
         never write your ledger; YOU ledger the ext receipt after
         judging it. ② Bash: `run --spec <ABS> --report <ABS> --role
-        scout|explorer|coder`. `--mission` is REJECTED for coder: the
-        JUDGMENT-FREE gate's TARGET FILES and verbatim signatures
-        cannot be a one-liner, and a synthesized spec without TARGET
-        FILES would fail scope verification wholesale.
+        scout|explorer|coder`. `--mission` is REJECTED for coder: a
+        synthesized spec carries no TARGET FILES, and the porcelain
+        scope check would then read every change as a violation.
       An ext-explorer's detail lands in `<report>-facts.md`, not
       REPORT, which the script overwrites with the receipt.
     - N-parallel guarantee: N ext missions are ONE `wave` call with a
@@ -362,8 +377,9 @@ Routing rules:
         What `VERIFIED` proves is that the quoted text is AT that line,
         which is not the same as the quote being a faithful copy — a
         near-miss quote can still verify. So a harvest quote is never
-        spec text: when the JUDGMENT-FREE gate's ② needs a signature,
-        read that one line yourself at the (corrected) number.
+        spec text — and under the spec-quality note above you no longer
+        need one: ② carries the TARGET state, which no harvest supplies,
+        and the CURRENT state is the coder's own re-read.
         What it does NOT cover, and what your spot-check is now FOR:
         the `unparsed` count. Those are aggregate-mode lines and prose
         bullets with no checkable line number. Grep those, and only
@@ -376,7 +392,7 @@ Routing rules:
         an explorer run whose 59 bullets were column-aligned instead of
         `path:line — "quote"`, and every one of its facts turned out to
         be right. So treat that harvest as UNVERIFIED, not as wrong:
-        it may not feed the JUDGMENT-FREE gate's ① or ③ and it is not
+        it may not feed a coder spec's ① or ③ and it is not
         HARD LIMIT 5 evidence, but it is still a fine map for deciding
         where to look. If the facts must carry a spec, re-dispatch with
         the line format quoted in the mission text, or verify the few
@@ -538,6 +554,9 @@ You may Write ONLY under .orchestration/ledgers/ — nowhere else:
     whether the split actually moved work off this budget; without
     them the next tuning round is guesswork, which is how the ext
     eligibility rules drifted out of calibration before.
+    For coder the ONLY legitimate value is an ext failure and its exit
+    code — eligibility is no longer a reason that exists, so a `native:
+    coder` line that does not name an exit code is itself the finding.
   - on every analyst return: `analyst: <mode> / adopted|deviated /
     <1-line reason>`
   - on every coder or scribe BLOCKED: `blocked: <satellite> /
@@ -627,8 +646,7 @@ You MUST NOT:
    :analyst / :coder / :scribe / :reviewer / :reviewer-lite.** The
    allowlist is your protocol, not a suggestion. (ext-scout /
    ext-explorer / ext-coder are not Agent spawns — they are the rule 10
-   Bash transport, and rule 10's eligibility limits are part of this
-   protocol.)
+   Bash transport, and rule 10's limits are part of this protocol.)
 7. **Write anywhere except .orchestration/ledgers/ and
    .orchestration/specs/.** Write is granted solely to create/update
    your task ledger and to author ext dispatch inputs (spec files,

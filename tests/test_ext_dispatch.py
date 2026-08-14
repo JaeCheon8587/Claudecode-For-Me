@@ -1246,8 +1246,8 @@ def test_drift_correction_collapses_multi_line_notation(ext, git_repo,
 
     근거가 확인된 위치는 한 곳뿐이라 범위를 유지할 정보가 없다 — 단일 번호로
     접는 것이 맞다. 계약은 교정된 번호를 "what reaches your next spec" 으로
-    규정하므로, 해석 불가한 표기는 JUDGMENT-FREE 게이트의 edit point 정밀도를
-    만족하지 못한다.
+    규정하므로, 해석 불가한 표기는 coder 스펙의 edit point 정밀도(rule 10 스펙
+    품질 ①)를 만족하지 못한다.
     """
     write_source(git_repo, text="a\nb\nc\nd\ne\nf\ndef handle(x):\n")
     ext.INVOKERS["codex"] = fake(scout_receipt(

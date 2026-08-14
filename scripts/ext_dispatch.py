@@ -86,10 +86,9 @@ SPEC_RETURN = {
     "coder": ("STATUS", "CHANGED", "SPEC", "VERIFY", "RISKS"),
 }
 
-# 인라인 미션(--mission)이 허용되는 역할. coder 는 제외한다 — ext-coder 적격은
-# TARGET FILES 절대경로·축자 시그니처·VERIFY 단일 명령을 스펙에 적을 수 있을 때
-# 성립하므로(JUDGMENT-FREE 게이트) 한 줄 미션으로 표현될 수 없고, TARGET FILES
-# 없는 합성 스펙은 porcelain 대조에서 전량 거짓 위반(exit 4)이 된다.
+# 인라인 미션(--mission)이 허용되는 역할. coder 는 제외한다 — 적격 판정 때문이
+# 아니라(rule 10 은 모든 coder 미션을 ext 기본값으로 둔다) 기계적 이유다:
+# TARGET FILES 없는 합성 스펙은 porcelain 대조에서 전량 거짓 위반(exit 4)이 된다.
 INLINE_MISSION_ROLES = frozenset({"scout", "explorer"})
 
 # stdout 요약에서 원문 그대로 싣는 제어 필드 / 건수로 접는 화물 필드.

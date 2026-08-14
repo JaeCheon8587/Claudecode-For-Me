@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v3.49.0 · 커스텀 스킬 14종 + 슬래시 커맨드 18종 + 에이전트 17종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v3.50.0 · 커스텀 스킬 14종 + 슬래시 커맨드 18종 + 에이전트 17종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,7 +11,7 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `3.49.0` |
+| 버전 | `3.50.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
@@ -66,6 +66,77 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v3.50.0 — coder 적격 판정 폐지: 게이트가 재던 것은 목적지가 아니라 스펙 품질이었다
+
+v3.43.0이 ext-first를 기본값으로 만들고 v3.45.0이 JUDGMENT-FREE 게이트로 coder 적격을
+스펙 속성으로 옮겼는데도, **ext-scout은 전량 나가고 ext-coder는 거의 나가지 않았다.**
+라우팅 표는 둘을 같은 자리에 뒀는데 실제 비율이 갈렸다. 원인이 셋이었고 셋 다 게이트에 있다.
+
+**(1) 게이트가 ext와 native를 구별하지 못했다.** 규정은 "넷 다 못 쓰면 native coder
+미션"이었다. 그런데 판단이 남은 스펙은 **native coder도 거부한다** — `agents/coder.md`
+HARD LIMIT 2가 *"If the spec requires one, it is a flawed spec → STATUS: BLOCKED"*이고,
+이는 `scripts/ext_preambles/coder.md`의 정지 조건과 **같은 규칙**이다. 게이트가 재는 것은
+**스펙 품질**이고 그건 목적지와 무관하다. 통과 못 한 스펙을 native로 보내는 것은 고치는 게
+아니라 **BLOCKED를 옮기고 위성 값을 내는 것**이었다. 적격 판정이 아니라 스펙 요건이어야 했다.
+
+**(2) 조건 ②가 오케스트레이터에게 읽기를 떠넘겼다.** ②는 모든 시그니처를 축자로 적으라 하고
+수확물 인용 복사를 금지하며("Read the line yourself") 실측을 근거로 들었다 — 외부 에이전트가
+**줄 번호는 5/5 정확**, 그 줄 시그니처 **전사는 3/3 오류**. 그런데 **두 coder 모두 계약상
+대상 파일을 재독한다**(`agents/coder.md` 절차 2 / `ext_preambles/coder.md` 규칙 2).
+**현재** 시그니처는 coder가 파일에서 얻고, 스펙에 있어야 하는 건 **바뀐 뒤 상태**뿐이다 —
+그건 파일에 없으니 결정이고 오케스트레이터 몫이 맞다. ②는 이 둘을 안 갈라, 읽으면 되는
+것까지 HL 1이 "제일 비싼 자원"이라 부르는 곳에서 지불하게 했다. **측정된 실패는 전사였지
+코딩이 아니었다** — 우회 대상을 잘못 골랐다.
+
+**(3) 탈출구가 공짜이고 자기채점이었다.** scout에는 게이트가 없다("EVERY scout mission —
+no exceptions, no size floor"). coder는 "못 쓰겠으면 native"인데, **"못 쓰겠다"를 판정하는
+주체가 "쓸 수 있다"의 비용을 내는 주체**다. 렛저 `native:` 한 줄이면 끝이고 ①②③④ 중 무엇이
+안 됐는지 적을 의무가 없어, 게이트가 진짜 열려 있었는지 선언만 했는지 사후에 구별되지
+않았다. v3.46.0이 scout에 내린 진단 — *"인라인 Grep 한 번이 ext-scout보다 싸면, 정책이
+무엇을 쓰든 오케스트레이터는 싼 쪽을 고른다"* — 이 coder에는 적용되지 않은 채 남아 있었다.
+
+**변경**: coder 적격 판정을 없앴다. 라우팅 표는 `Implement — ANY source change` → ext-coder,
+`claudecode-for-me:coder`는 scout과 마찬가지로 **rule 10 폴백으로만** 도달 가능하다.
+①②③④는 폐지가 아니라 **`Spec quality (coder)` — 목적지와 무관한 스펙 요건**으로 강등했고,
+②는 **"바뀐 뒤 상태(TARGET STATE)"만** 가리키도록 좁혔다. ①은 여전히 기계적 필수다 —
+porcelain 스코프 대조(exit 4)가 TARGET FILES를 대조 기준으로 쓰고, `--mission`이 coder에
+거부되는 이유도 그것이다(적격 판정 때문이 아니다). **BLOCKED는 폴백 대상이 아님**을
+명문화했다: 위임은 성공했고 스펙이 실패한 것이라 rule 7이고, 같은 스펙을 native로 보내면
+같은 BLOCKED를 다시 받는다.
+
+**"약하다"는 원칙 선언이었지 실측이 아니었다.** rule 10 서문의 *"It is also weaker than
+your satellites"*에는 근거가 붙은 적이 없고, 저장소에 남은 기록은 오히려 반대다:
+
+| 출처 | 측정 |
+|---|---|
+| v3.42.0 | scout E2E — exit 0, `file:line` **3/3 대조 일치** |
+| v3.45.0 | wave 2-job — 폴백 0/2, 리시트 유효 2/2, 스팟체크 **14/14 라인 정확 일치**, **범위 밖 쓰기 0건** |
+| v3.47.0 | 수확 fact 90건 — drift 7건(offset −2~+3), **날조 0건** |
+| 게이트 ② | 줄 번호 **5/5 정확**, 인용 전사 **3/3 오류** |
+
+**코딩 실패 실측은 0건이다**(v3.40.0~v3.49.0 체인지로그 전수 확인). v3.42.0의 모델 교체
+사유도 능력이 아니라 크레딧 소진에 의한 **강제 이전**이었다. 그래서 블랭킷 주장을 삭제하지
+않고 **실측으로 좁혔다** — 유일하게 측정된 약점인 전사만 명시하고, 판단이 native에 남는
+근거를 능력이 아니라 **검증 경제**(밖으로 보낸 판단은 검사에 native 위성을 다시 요구한다)로
+바꿔 적었다.
+
+**게이트를 뺀 자리는 측정으로 메운다.** 렛저 텔레메트리에서 `native: coder` 라인의 유일한
+정당한 값은 **ext 실패와 그 exit code**이며, exit code를 명명하지 않은 `native: coder`
+라인은 그 자체가 발견 사항이다. 이 변경의 가장 약한 고리가 표본 부족(ext-coder 실측이
+wave 2-job 1회)이므로, 표본을 만드는 것이 이 버전의 목적 절반이다.
+
+**손익 구조**: 아끼는 것은 native coder 위성 1회(사망 기록 184~224k / 46~67콜, 정상 실행은
+그 아래)이고, 새로 내는 것은 스펙 정밀도 증가분 + 리시트 전문 유입 + HL 5 스팟체크다.
+전자가 후자보다 한 자릿수 크므로 **ext-coder가 3번 중 2번 이상 실패해야** 손해로 돌아선다.
+부수 효과로 스펙이 촘촘해지면 rule 4의 리뷰어 티어가 `reviewer`(opus)에서
+`reviewer-lite`(sonnet)로 내려간다 — v3.45.0이 "최빈 opus 소비원"이라 부른 자리다.
+
+**검증**: `tests/test_ext_dispatch.py` 91케이스 통과 — 이 버전의 코드 변경은 주석 1블록과
+테스트 docstring 1개뿐이라 회귀가 없어야 정상이고, 실제로 없었다. 계약 무결성은
+`JUDGMENT-FREE` 전수 grep(계약에 남긴 폐지 사유 1건 외 0건)과 fable/opus 오케스트레이터
+본문 바이트 동일성 diff로 확인했다. **실동 스모크는 이 버전에 포함하지 않았다** — 라우팅
+기본값이 실제로 바뀌는지는 다음 실제 coder 미션이 첫 표본이 된다.
 
 ### v3.49.0 — native explorer를 opus/medium으로: 읽기가 나간 자리에 남은 것은 종합이다
 
@@ -1208,7 +1279,7 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 `scripts/ext_dispatch.py`를 통한 Bash 전송이기 때문이다(모델 `zai/glm-5.2` / effort max,
 v3.42.0). v3.43.0부터 **적격 미션의 기본값은 ext**이고 native 위성은 폴백이다: 모든 탐색 미션은
 ext-scout, 명명된 시작점에서 `path:line` 사실을 수집하는 모든 fact-harvest는 ext-explorer,
-스펙이 판단을 남기지 않는 구현(JUDGMENT-FREE 게이트, v3.45.0)은 ext-coder. 설계 판단, **모든**
+**모든 소스 변경은 ext-coder**(v3.50.0 — JUDGMENT-FREE 게이트 폐지). 설계 판단, **모든**
 문서(ext-scribe는 v3.45.0에서 폐지), 그리고 ext 대응물이 없는 종합·`analyst`·`reviewer`는
 native 고정이다.
 **v3.46.0부터 디스패치는 2경로다** — 탐색·fact-harvest는 `--mission "<한 줄>"`로 스펙 파일 없이
@@ -1225,10 +1296,12 @@ Bash 1콜(스크립트가 `<report>-spec.md`에 스펙을 합성), ext-coder와 
 (경로별 내용 지문 대조), 같은 repo의 ext-coder는 wave 안에서 직렬화되어 서로를 위반으로
 집계하지 않는다. 읽기 역할의 파일 접근도 저장소·REPORT 디렉터리 밖으로 나가지 못하며,
 job 하나의 크래시는 형제 job의 리시트를 삼키지 않고 `exit 1 / job-error`로 강등된다.
-**v3.44.0부터 위험 도메인은 위임 기준이 아니다** — auth·결제·크립토 파일이라도 스펙이
-JUDGMENT-FREE 게이트를 통과하면 ext로 가고, 판단이 남은 변경만 native에 남는다(리뷰 의무
-rule 4는 그대로 유지, 위험 도메인은 opus reviewer 티어 고정). 상세는 rule 10과 v3.44.0 /
-v3.45.0 체인지로그 참조.
+**v3.44.0부터 위험 도메인은 위임 기준이 아니다** — auth·결제·크립토 파일이라도 다른 변경과
+똑같이 ext로 간다(리뷰 의무 rule 4는 그대로 유지, 위험 도메인은 opus reviewer 티어 고정).
+**v3.50.0부터 coder에 적격 판정이 없다** — 게이트가 재던 것은 스펙 품질인데 그건 native
+coder도 요구하므로(HARD LIMIT 2 → BLOCKED) 목적지를 가르지 못했다. ①②③④는 남되 **경로
+선택이 아니라 스펙 요건**이고, ②는 "바뀐 뒤 상태"만 가리킨다 — 현재 시그니처는 두 coder
+모두 파일을 재독해 얻는다. 상세는 rule 10과 v3.44.0 / v3.45.0 / v3.50.0 체인지로그 참조.
 
 `coder`/`scribe` 분리 근거는 **코드에는 기계적 오라클(VERIFY)이 있고 산문에는 없다**는 비대칭이다.
 소유권은 파일 종류로 가르며(소스와 그 주석·docstring은 coder, 문서는 scribe), 코드+문서 동시
