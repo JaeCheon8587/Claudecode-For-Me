@@ -390,16 +390,42 @@ Routing rules:
         telling you where it guessed — route those gaps to a native
         satellite instead of spending the harvest's credibility on
         them.
+    - Sealing requires evidence, not a classification. Exactly three
+      things may seal the ext path for the WHOLE task: exit 2 (CLI
+      missing), exit 6 (a confirmed quota or auth signal), and a failed
+      `probe`. Nothing else. Every other failure ends as a native
+      fallback for THAT ONE mission, and the next mission goes ext
+      again. A seal must name its cause in the ledger. This rule exists
+      because one transient sandbox fault used to kill ext delegation
+      for an entire multi-wave task, and nothing ever re-checked it.
+    - `probe` — the liveness measurement, and the only thing allowed to
+      turn an unexplained failure into a seal:
+        `python <ext_dispatch.py> probe --repo <abs repo> [--agent codex]`
+      It runs the external agent on a fixed trivial mission that READS a
+      file and prints a sentinel, writes nothing, and costs ~14k
+      external tokens and ~15s — far less than one wrongly sealed task.
+      exit 0 = alive; any non-zero = dead, with `reason` naming what
+      died. Never probe speculatively: probe only where the ladder below
+      sends you.
     - Failure ladder: exit 2 (CLI missing) → seal the ext path this
       task, go native. exit 3/5 (bad receipt / timeout) → one ext
       retry, then native fallback. exit 4 → NO ext retry: native
       fallback, and report to the user if changes must be reverted.
-      exit 6 (the agent ran and failed — quota/credit exhaustion, auth
-      failure, crash; the JSON line's `reason` names the quota signal
-      when one was detected) → seal the ext path this task exactly
-      like exit 2, go native: a retry cannot refill a dead credit
-      pool, and the second failure costs the same wall clock as the
-      first. exit 7 (fact unverified) is unlike every other failure:
+      exit 6 (a quota or auth signal was CONFIRMED in the agent's
+      output — the JSON line's `reason` carries `quota-signal:` or
+      `auth-signal:` and the matched text) → seal the ext path this task
+      exactly like exit 2, go native: a retry cannot refill a dead
+      credit pool or fix a dead login, and the second failure costs the
+      same wall clock as the first. Put the signal verbatim in the
+      ledger.
+      exit 8 (the agent ran and died with NO quota or auth signal —
+      sandbox denial, spawn failure, crash; `reason` carries the last
+      meaningful output line) → do NOT seal and do NOT assume it is
+      transient either. Run `probe` ONCE against the same repo. probe
+      exit 0 → re-dispatch the SAME mission via ext once; if it dies
+      again, native fallback for that mission only. probe non-zero →
+      seal, and ledger `ext-sealed: probe-failed / <probe reason>`.
+      exit 7 (fact unverified) is unlike every other failure:
       the VERIFIED parts of the harvest are intact and usable, so a
       blanket fallback throws away work that is already proven. Never
       re-dispatch the SAME spec — the same model repeats the same
@@ -415,8 +441,10 @@ Routing rules:
     - Telemetry (ledger, one line per ext dispatch):
       `ext: <role> / <agent> /
       ok|invalid|violation|facts-unverified|facts-unverifiable
-      |timeout|agent-error|blocked
-      / <1-line>`. For a read-only role, put the `VERIFIED` counts in
+      |timeout|agent-error|agent-env|blocked
+      / <1-line>`. A `probe` run gets its own line:
+      `ext: probe / <agent> / ok|dead / <reason>`. For a read-only role,
+      put the `VERIFIED` counts in
       the 1-line — drift and unparsed rates are the only way to tell
       later whether this harness is getting better or worse.
 

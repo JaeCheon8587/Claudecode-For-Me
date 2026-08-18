@@ -34,7 +34,9 @@ Exit codes:
     3  리시트 추출·구조 검증 실패
     4  SPEC 위반 (TARGET FILES 밖 변경 — script-verified)
     5  타임아웃
-    6  에이전트 실행 실패 (rc != 0 + 리시트 마커 없음 — 쿼터/크레딧 소진 포함)
+    6  에이전트 하드 실패 (rc != 0 + 리시트 없음 + 쿼터·인증 시그널 확정)
+    8  에이전트 환경 실패 (rc != 0 + 리시트 없음 + 원인 시그널 없음 —
+       샌드박스·spawn·크래시 계열. 대개 일시적이라 probe 로 재확인한다)
     7  fact 미검증 (읽기 전용 역할의 path:line 주장이 파일과 불일치 — script-verified)
 """
 
@@ -62,8 +64,9 @@ EXIT_NO_AGENT = 2
 EXIT_BAD_RECEIPT = 3
 EXIT_SPEC_VIOLATION = 4
 EXIT_TIMEOUT = 5
-EXIT_AGENT_ERROR = 6
+EXIT_AGENT_ERROR = 6      # 쿼터·인증 확정 실패 — 재시도가 무의미하다
 EXIT_FACTS_UNVERIFIED = 7
+EXIT_AGENT_ENV = 8        # 원인 시그널 없는 실행 실패 — probe 로 판정한다
 
 RECEIPT_MARKER = "## RECEIPT"
 RECEIPT_MAX_LINES = 30
@@ -131,8 +134,16 @@ _SKIP_DIRS = {".git", "node_modules", "dist", "build", "coverage",
               "__pycache__", ".venv", "venv", "bin", "obj"}
 
 # rc != 0 + 리시트 부재일 때만 스캔하는 원인 추정 시그널 (소문자 부분 매칭).
+# 이 둘에 걸리면 재시도가 무의미하다 (exit 6) — 걸리지 않으면 원인 미상이고,
+# 원인 미상은 대개 일시적 환경 결함이라 봉인이 아니라 probe 대상이다 (exit 8).
 QUOTA_SIGNALS = ("quota", "usage limit", "credit", "rate limit",
                  "insufficient", "429")
+# 맨 숫자 코드("401")는 넣지 않는다 — exit 6 은 봉인 지시이고, 파일 내용이나
+# 토큰 수에 우연히 섞인 세 자리가 ext 를 태스크 내내 죽이는 오탐이 된다.
+# 실제 인증 실패는 사실상 항상 단어를 함께 출력한다.
+AUTH_SIGNALS = ("unauthorized", "forbidden", "not logged in",
+                "authentication failed", "invalid api key",
+                "401 unauthorized", "403 forbidden")
 
 PREAMBLE_DIR = Path(__file__).resolve().parent / "ext_preambles"
 
@@ -692,6 +703,43 @@ def _detect_quota_signal(text: str):
     return None
 
 
+def _detect_auth_signal(text: str):
+    """인증 실패 계열 시그널 탐지. 매칭 문자열 or None."""
+    lowered = text.lower()
+    for sig in AUTH_SIGNALS:
+        if sig in lowered:
+            return sig
+    return None
+
+
+def _detect_hard_signal(text: str):
+    """재시도가 무의미한 실패인지 판정. (kind, signal) or None.
+
+    쿼터를 먼저 본다 — 쿼터 소진 응답이 401/403 을 함께 실어 오는 경우가 있고,
+    그때 원인은 인증이 아니라 쿼터다.
+    """
+    sig = _detect_quota_signal(text)
+    if sig:
+        return ("quota", sig)
+    sig = _detect_auth_signal(text)
+    if sig:
+        return ("auth", sig)
+    return None
+
+
+def _last_meaningful_line(text: str, limit: int = 200) -> str:
+    """원인 표기용으로 stderr 의 마지막 의미 있는 한 줄을 뽑는다.
+
+    원인 문자열이 없으면 오케스트레이터에게는 판단할 재료 자체가 없다 —
+    exit 8 은 '무엇이 죽었는지'를 반드시 실어야 probe 판정이 의미를 갖는다.
+    """
+    for line in reversed((text or "").splitlines()):
+        stripped = line.strip()
+        if stripped:
+            return stripped[:limit]
+    return ""
+
+
 _FINGERPRINT_MAX = 2 * 1024 * 1024  # 초과 시 내용 해시 대신 (크기, mtime)
 
 
@@ -975,16 +1023,27 @@ def _execute_job(job: dict, dry_run: bool) -> dict:
         receipt = _extract_receipt(out)
         if receipt is None:
             if rc != 0:
-                # CLI 는 돌았지만 비정상 종료 + 리시트 부재 = 에이전트 실행 실패
-                # (쿼터 소진·인증 실패·크래시). 리시트 불량(3)으로 분류하면
-                # 오케스트레이터가 죽은 크레딧 풀에 재시도 1회를 낭비한다.
-                signal = _detect_quota_signal(out + "\n" + err)
-                if signal:
-                    result["reason"] = f"quota-signal: {signal}"
-                result.update(
-                    status=f"agent-error: exit {rc}"
-                           + (f" ({signal})" if signal else ""),
-                    exit=EXIT_AGENT_ERROR)
+                # CLI 는 돌았지만 비정상 종료 + 리시트 부재 = 에이전트 실행 실패.
+                # 리시트 불량(3)으로 분류하면 오케스트레이터가 죽은 크레딧 풀에
+                # 재시도 1회를 낭비한다. 그렇다고 전부 6 으로 묶으면 반대 사고가
+                # 난다 — 샌드박스·spawn 크래시 같은 일시적 환경 결함까지 죽은
+                # 크레딧 풀과 같은 취급을 받아 ext 경로가 태스크 내내 봉인된다.
+                # 그래서 원인 시그널이 확정된 것만 6, 나머지는 8 로 내린다.
+                hard = _detect_hard_signal(out + "\n" + err)
+                if hard:
+                    kind, signal = hard
+                    result["reason"] = f"{kind}-signal: {signal}"
+                    result.update(
+                        status=f"agent-error: exit {rc} ({signal})",
+                        exit=EXIT_AGENT_ERROR)
+                    return result
+                detail = (_last_meaningful_line(err)
+                          or _last_meaningful_line(out))
+                result["reason"] = (f"no quota/auth signal; last: {detail}"
+                                    if detail else
+                                    "no quota/auth signal; no agent output")
+                result.update(status=f"agent-env: exit {rc}",
+                              exit=EXIT_AGENT_ENV)
                 return result
             result.update(status="invalid: RECEIPT marker missing",
                           exit=EXIT_BAD_RECEIPT)
@@ -1116,6 +1175,67 @@ def _print_receipt(res: dict, full: bool) -> None:
     print(f"data: {res['report']}")
 
 
+PROBE_SENTINEL = "PROBE-OK"
+
+# probe 는 반드시 파일 읽기를 포함해야 한다 — 실제로 신고된 고장이 deny-read
+# 였고, 읽기 없는 probe 는 바로 그 고장을 통과시킨다. 쓰기는 하지 않는다.
+PROBE_PROMPT = (
+    "Run one shell command that prints the first line of any one text file "
+    "in the current directory. Do not create, modify, or delete anything. "
+    "Then output exactly this token on its own line and stop: "
+    + PROBE_SENTINEL
+)
+
+
+def probe_agent(agent: str, model: str, repo: str, timeout: int) -> dict:
+    """ext 경로가 지금 살아 있는지 실측한다. 산출물 없음 — 상태 질의다.
+
+    오케스트레이터가 ext 경로를 태스크 전체에 대해 봉인해도 되는 유일한 근거.
+    실패 분류만으로 봉인하면 일시적 환경 결함 1건이 남은 태스크 전체의
+    ext 위임을 죽인다 — 그 사고가 이 서브커맨드가 존재하는 이유다.
+    """
+    res = {"status": "dead", "exit": EXIT_AGENT_ENV, "role": "probe",
+           "agent": agent, "model": model, "repo": repo, "reason": None}
+    try:
+        out, err, rc = INVOKERS[agent](
+            PROBE_PROMPT, model, "low", timeout, repo)
+    except FileNotFoundError as exc:
+        res.update(status="dead", exit=EXIT_NO_AGENT, reason=str(exc))
+        return res
+    except subprocess.TimeoutExpired:
+        res.update(status="dead", exit=EXIT_TIMEOUT,
+                   reason=f"probe timed out after {timeout}s")
+        return res
+    except OSError as exc:
+        res.update(status="dead", exit=EXIT_AGENT_ENV,
+                   reason=f"probe could not start: {exc}")
+        return res
+
+    if PROBE_SENTINEL in out:
+        res.update(status="ok", exit=EXIT_OK,
+                   reason=f"sentinel returned (agent exit {rc})")
+        return res
+    hard = _detect_hard_signal(out + "\n" + err)
+    if hard:
+        kind, signal = hard
+        res.update(status="dead", exit=EXIT_AGENT_ERROR,
+                   reason=f"{kind}-signal: {signal}")
+        return res
+    detail = _last_meaningful_line(err) or _last_meaningful_line(out)
+    res.update(status="dead", exit=EXIT_AGENT_ENV,
+               reason=(f"no sentinel (agent exit {rc}); last: {detail}"
+                       if detail else f"no sentinel, no output (exit {rc})"))
+    return res
+
+
+def cmd_probe(args) -> int:
+    repo = args.repo or str(Path.cwd())
+    res = probe_agent(args.agent, args.model or DEFAULT_MODEL, repo,
+                      args.timeout)
+    print(json.dumps(res, ensure_ascii=False))
+    return res["exit"]
+
+
 def cmd_run(args) -> int:
     if bool(args.spec) == bool(args.mission):
         _err("exactly one of --spec / --mission is required", EXIT_ERR)
@@ -1217,6 +1337,14 @@ def main() -> int:
                        help="읽기 전용 역할도 리시트 전문을 stdout 에 출력")
     p_run.add_argument("--dry-run", action="store_true")
     p_run.set_defaults(func=cmd_run)
+
+    p_probe = sub.add_parser(
+        "probe", help="ext 경로 생존 실측 (봉인 판정의 유일한 근거)")
+    p_probe.add_argument("--repo", default=None, help="실행 cwd (기본: 현재)")
+    p_probe.add_argument("--agent", default="codex", choices=sorted(INVOKERS))
+    p_probe.add_argument("--model", default=None)
+    p_probe.add_argument("--timeout", type=int, default=90)
+    p_probe.set_defaults(func=cmd_probe)
 
     p_wave = sub.add_parser("wave", help="N개 병렬 위임 (동시 기동 보장)")
     p_wave.add_argument("--manifest", required=True,

@@ -67,6 +67,80 @@ pip install -U codenavigator
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
 
+### v3.55.0 — ext 봉인은 증거를 가지게: exit 6 단일 버킷 분해 + `probe` 게이트
+
+**사건**: ext 경로가 살아 있는데도 `ext-coder`가 계속 쓰이지 않았다. 멀쩡한
+경로를 봉인한 판단 1회가 태스크 전체의 ext 위임을 죽였고, 그것을 되돌릴
+수단이 없었다.
+
+**재현 시도 결과 (2026-08-18, codex-cli `0.144.4`)**: 재현되지 않는다.
+이 레포에서 `zai/glm-5.3` + `xhigh` 모두 파일 읽기 성공, 배너가
+`sandbox: danger-full-access`. v3.54.0이 이미 기록한 그대로
+`helper_unknown_error: apply deny-read ACLs`는 codex `0.147.0` 회귀이고
+`0.144.4`에서는 미재현이다. 즉 고장난 것은 ext가 아니라, **한 번 내려진
+봉인을 해제할 장치가 없었다는 점**이다.
+
+**결함 1 — exit 6이 서로 다른 두 실패를 한 통에 담았다.**
+`rc != 0` + 리시트 부재는 전부 `EXIT_AGENT_ERROR(6)`으로 떨어졌다.
+`_detect_quota_signal()`은 v3.41.0부터 있었지만 결과를 `reason` 문자열에만
+싣고 **exit code를 바꾸지 않았다**. 그래서 오케스트레이터에게는 다음 둘이
+구별 불가능하게 도달했다 — 죽은 크레딧 풀(복구 불가, 봉인이 맞다)과
+샌드박스·spawn 크래시(대개 일시적, 봉인은 과잉이다).
+
+**결함 2 — 봉인에 만료도 재확인도 없었다.**
+사다리는 exit 6을 조건 없이 "seal the ext path this task"로 보냈고,
+환경이 멀쩡해졌는지 물어볼 수단이 아예 없었다.
+
+**변경 1 — `EXIT_AGENT_ENV = 8` 신설, exit 6의 의미를 좁힌다.**
+
+| 상황 | v3.54.0 | v3.55.0 |
+|---|---|---|
+| rc!=0 + 리시트 부재 + 쿼터·인증 시그널 확정 | exit 6 | **exit 6** (봉인, 유지) |
+| rc!=0 + 리시트 부재 + 시그널 없음 | exit 6 (봉인) | **exit 8** (probe 대상) |
+| rc==0 + 마커 부재 | exit 3 | exit 3 (불변) |
+
+`AUTH_SIGNALS`를 추가하고 `_detect_hard_signal()`이 quota → auth 순서로
+판정한다 (쿼터 소진 응답이 401을 함께 실어 오는 경우 원인은 인증이 아니라
+쿼터다). **맨 숫자 토큰(`401`/`403`)은 시그널에 넣지 않았다** — exit 6은 봉인
+지시이므로, 파일 내용이나 버퍼 크기에 우연히 섞인 세 자리가 ext를 태스크
+내내 죽이는 오탐이 된다. exit 8은 `reason`에 stderr의 마지막 유의미한 한
+줄(≤200자)을 싣는다 — 원인 문자열이 없으면 상위가 판단할 재료 자체가 없다.
+
+**변경 2 — `probe` 서브커맨드 신설. 봉인의 유일한 실증 장치다.**
+
+```text
+python scripts/ext_dispatch.py probe --repo <abs repo> [--agent codex]
+→ {"status":"ok","exit":0,"role":"probe","agent":"codex",
+    "model":"zai/glm-5.3","repo":"...","reason":"sentinel returned (agent exit 0)"}
+```
+
+고정된 사소한 미션(effort `low`)으로 파일 1건을 **읽게** 하고 `PROBE-OK`
+사인을 받는다. 읽기를 빼면 샌드박스 deny-read 고장을 그대로 통과시키므로
+읽기는 필수다. 쓰기는 하지 않고 리포트 파일도 남기지 않는다 — probe는
+산출물이 아니라 상태 질의다. 실측: **14.5초 / 약 13.5k 외부 토큰**,
+잘못 봉인된 태스크 1회의 손실보다 훨씬 싸다.
+
+**변경 3 — 사다리 위에 "봉인 자격" 조항을 넣었다** (`opus`/`fable`
+오케스트레이터 rule 10, 본문 동일).
+ext 경로를 태스크 전체에 대해 봉인할 자격은 정확히 셋뿐이다 — exit 2(CLI
+부재), exit 6(쿼터·인증 확정), `probe` 실패. 그 외 어떤 실패도 **해당 미션
+1건의 네이티브 폴백에서 끝나고, 다음 미션은 다시 ext로 나간다.**
+exit 8 → 같은 repo에 `probe` 1회 → ok면 같은 미션을 ext로 1회 재디스패치,
+dead면 봉인 + 렛저 `ext-sealed: probe-failed / <reason>`.
+텔레메트리에 `agent-env` 상태값과 `ext: probe / <agent> / ok|dead / <reason>`
+행을 추가했다.
+
+**회귀 없음**: `tests/test_ext_dispatch.py` **94 passed** (85 → 94, 신설 9건:
+exit 8 분리와 `reason` 내용, auth 시그널, 쿼터 우선순위, 맨 숫자 코드 거부,
+probe의 ok/env/hard/CLI 부재, 프롬프트가 파일 읽기를 강제하는지).
+`--dry-run` exit 0 불변, rc==0 + 마커 부재 → exit 3 불변.
+
+**범위 밖 — 사용자 확인 필요**: `~/.codex/config.toml`에
+`sandbox_mode = "danger-full-access"`와 `[windows] sandbox = "elevated"`가
+동시에 남아 있다. 지금은 `danger-full-access`가 이긴다는 것을 실측했지만,
+죽은 `[windows]` 블록은 codex 업데이트로 우선순위가 바뀌는 순간 deny-read
+사고를 재발시킨다. 사용자 홈 설정이라 이 버전에서는 건드리지 않았다.
+
 ### v3.54.0 — ext 기본 모델 glm-5.3으로 재상향(effort xhigh는 유지)
 
 v3.53.0의 원복을 **다시 되돌린다**. 바뀌는 것은 `scripts/ext_dispatch.py`의
@@ -1457,6 +1531,13 @@ job 하나의 크래시는 형제 job의 리시트를 삼키지 않고 `exit 1 /
 `FACTS FILE` 선언값이 유일한 그 지점이었고, 역할과 함께 사라졌다.
 **v3.44.0부터 위험 도메인은 위임 기준이 아니다** — auth·결제·크립토 파일이라도 다른 변경과
 똑같이 ext로 간다(리뷰 의무 rule 4는 그대로 유지, 위험 도메인은 opus reviewer 티어 고정).
+**v3.55.0부터 ext 봉인은 증거를 요구한다** — ext 경로를 태스크 전체에 대해 봉인할
+자격은 셋뿐이다: exit 2(CLI 부재), exit 6(쿼터·인증 시그널 확정), `probe` 실패.
+그 외 실패는 해당 미션 1건의 native 폴백에서 끝나고 다음 미션은 다시 ext로 간다.
+원인 시그널 없는 실행 실패는 **exit 8**(`agent-env`)로 분리되어
+`python scripts/ext_dispatch.py probe --repo <abs repo>` 1회 실측으로 판정한다 —
+probe는 파일을 읽고 `PROBE-OK`를 돌려주는 사소 미션이며(읽기를 빼면 deny-read 고장을
+통과시킨다) 쓰기도 리포트도 남기지 않는다. 실측 14.5초 / 약 13.5k 외부 토큰.
 **v3.50.0부터 coder에 적격 판정이 없다** — 게이트가 재던 것은 스펙 품질인데 그건 native
 coder도 요구하므로(HARD LIMIT 2 → BLOCKED) 목적지를 가르지 못했다. ①②③④는 남되 **경로
 선택이 아니라 스펙 요건**이고, ②는 "바뀐 뒤 상태"만 가리킨다 — 현재 시그니처는 두 coder

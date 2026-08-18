@@ -290,14 +290,27 @@ def test_confidence_after_long_list_is_cut_and_fails(ext, git_repo):
     assert "CONFIDENCE" in res["status"]
 
 
-# ------------------------------------------------- agent error (exit 6)
+# ---------------------------------- agent error (exit 6) / env (exit 8)
 
-def test_nonzero_rc_without_receipt_is_agent_error(ext, git_repo):
+def test_nonzero_rc_without_signal_is_agent_env(ext, git_repo):
+    """원인 시그넊 없는 사망은 6 이 아니다.
+
+    6 은 오키스트레이톰에게 토스후 봉인을 지시하는 뒱급이다. 샤드박스·
+    spawn 톴상까지 6 으로 보내면 일시적 결함 1건이 남은 태스크 전지의
+    ext 위임을 죽이고, 재확인하는 장치가 없어 부활도 부활하지 않는다.
+    """
     ext.INVOKERS["codex"] = fake("boom", rc=1)
     res = ext._execute_job(make_job(git_repo), False)
-    assert res["exit"] == ext.EXIT_AGENT_ERROR
-    assert res["status"].startswith("agent-error: exit 1")
-    assert res["reason"] is None
+    assert res["exit"] == ext.EXIT_AGENT_ENV
+    assert res["status"].startswith("agent-env: exit 1")
+    assert res["reason"] == "no quota/auth signal; last: boom"
+
+
+def test_agent_env_reason_survives_empty_output(ext, git_repo):
+    ext.INVOKERS["codex"] = fake("", stderr="", rc=137)
+    res = ext._execute_job(make_job(git_repo), False)
+    assert res["exit"] == ext.EXIT_AGENT_ENV
+    assert res["reason"] == "no quota/auth signal; no agent output"
 
 
 def test_quota_signal_is_reported_as_reason(ext, git_repo):
@@ -307,6 +320,70 @@ def test_quota_signal_is_reported_as_reason(ext, git_repo):
     assert res["exit"] == ext.EXIT_AGENT_ERROR
     assert res["reason"] == "quota-signal: usage limit"
     assert "usage limit" in res["status"]
+
+
+def test_auth_signal_is_a_hard_failure(ext, git_repo):
+    ext.INVOKERS["codex"] = fake(
+        "", stderr="request failed: 401 Unauthorized", rc=1)
+    res = ext._execute_job(make_job(git_repo), False)
+    assert res["exit"] == ext.EXIT_AGENT_ERROR
+    assert res["reason"] == "auth-signal: unauthorized"
+
+
+def test_bare_numeric_code_is_not_an_auth_seal(ext, git_repo):
+    """숫자 세 자리 우연 일치로 태스크 전체를 봉인하면 안 된다 → exit 8."""
+    ext.INVOKERS["codex"] = fake(
+        "", stderr="wrote 403 bytes to buffer, then crashed", rc=1)
+    res = ext._execute_job(make_job(git_repo), False)
+    assert res["exit"] == ext.EXIT_AGENT_ENV
+
+
+def test_quota_wins_over_auth_when_both_present(ext, git_repo):
+    """상황: 쿼터 소진 응답이 401 을 함게 싫고 오는 다 — 원인은 쿼터다."""
+    ext.INVOKERS["codex"] = fake(
+        "", stderr="401 Unauthorized: quota exhausted", rc=1)
+    res = ext._execute_job(make_job(git_repo), False)
+    assert res["reason"] == "quota-signal: quota"
+
+
+# ------------------------------------------------------------ probe
+
+def test_probe_ok_when_sentinel_returned(ext, tmp_path):
+    ext.INVOKERS["codex"] = fake(
+        "first line" + chr(10) + ext.PROBE_SENTINEL + chr(10), rc=0)
+    res = ext.probe_agent("codex", "m", str(tmp_path), 30)
+    assert res["exit"] == ext.EXIT_OK
+    assert res["status"] == "ok"
+    assert res["role"] == "probe"
+
+
+def test_probe_dead_without_sentinel_is_env(ext, tmp_path):
+    ext.INVOKERS["codex"] = fake("", stderr="deny-read ACLs", rc=1)
+    res = ext.probe_agent("codex", "m", str(tmp_path), 30)
+    assert res["exit"] == ext.EXIT_AGENT_ENV
+    assert res["status"] == "dead"
+    assert "deny-read ACLs" in res["reason"]
+
+
+def test_probe_dead_with_quota_signal_is_hard(ext, tmp_path):
+    ext.INVOKERS["codex"] = fake("", stderr="429 rate limit", rc=1)
+    res = ext.probe_agent("codex", "m", str(tmp_path), 30)
+    assert res["exit"] == ext.EXIT_AGENT_ERROR
+
+
+def test_probe_reports_missing_cli_as_no_agent(ext, tmp_path):
+    def _missing(prompt, model, effort, timeout, cwd):
+        raise FileNotFoundError("codex CLI not found on PATH")
+
+    ext.INVOKERS["codex"] = _missing
+    res = ext.probe_agent("codex", "m", str(tmp_path), 30)
+    assert res["exit"] == ext.EXIT_NO_AGENT
+
+
+def test_probe_prompt_requires_a_file_read(ext):
+    """probe 가 파일 읽기를 뻐면 deny-read 고장을 그대로 통과시킨다."""
+    assert "first line" in ext.PROBE_PROMPT
+    assert ext.PROBE_SENTINEL in ext.PROBE_PROMPT
 
 
 def test_zero_rc_without_receipt_stays_bad_receipt(ext, git_repo):
