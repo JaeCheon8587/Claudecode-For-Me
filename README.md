@@ -67,6 +67,39 @@ pip install -U codenavigator
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
 
+### v3.54.0 — ext 기본 모델 glm-5.3으로 재상향(effort xhigh는 유지)
+
+v3.53.0의 원복을 **다시 되돌린다**. 바뀌는 것은 `scripts/ext_dispatch.py`의
+`DEFAULT_MODEL` 하나뿐이고, scout·coder의 `xhigh`와 타임아웃(300s/1200s)은 그대로다.
+
+| 항목 | v3.53.0 | v3.54.0 |
+|---|---|---|
+| 모델 | `zai/glm-5.2` | **`zai/glm-5.3`** |
+| scout effort | `xhigh` | `xhigh` (유지) |
+| coder effort | `xhigh` | `xhigh` (유지) |
+| 타임아웃 | scout 300s / coder 1200s | 불변 |
+
+**결함 대응이 아니라 운영 선택이다 — v3.53.0과 같은 성격의 판단이고 방향만 반대다.**
+glm-5.2가 고장 나서 내리는 게 아니다. v3.53.0이 남긴 실측이 그대로 근거가 된다: 원복
+직전(2026-08-15) glm-5.3 + xhigh를 실제 ext-scout 디스패치로 확인했고 raw 배너에
+`model: zai/glm-5.3` / `reasoning effort: xhigh`, `exit 0`,
+`VERIFIED 2/2 facts (0 drifted, 0 unparsed)`였다. 두 모델 모두 살아 있음이 확인된 상태에서
+기본값을 어느 쪽에 둘지의 선택이고, 이번에는 5.3이다.
+
+**effort는 이번에도 건드리지 않는다.** v3.53.0이 `xhigh`를 유지한 근거(glm-5.2 + xhigh
+실측 수용)와 v3.52.0이 `xhigh`로 내린 근거(모델 교체에 맞춘 짝)가 둘 다 `xhigh`를 가리키고,
+모델이 5.3으로 돌아와도 그 결론은 바뀌지 않는다. `max` 복귀는 여전히 별도 근거가 생길 때
+별도 버전에서 한다.
+
+**이번 버전에서 새 스모크는 돌리지 않았다 — 근거의 출처를 흐리지 않기 위해 명시한다.**
+이 값의 실증은 위 v3.53.0 원복 직전 배너 측정이 전부이고, 그 이후 codex 버전이 바뀌었다면
+재측정이 필요하다. v3.53.0이 남긴 환경 리스크(codex `0.147.0`의 Windows 샌드박스
+`helper_unknown_error: apply deny-read ACLs` 회귀, `0.144.4`에서는 미재현)도 모델과
+무관하게 그대로 유효하다.
+
+**회귀 없음**: `tests/test_ext_dispatch.py` **85 passed**. 테스트는 모델·effort 값을
+고정하지 않고 invoker 시그니처만 검증하므로, 기본값 교체는 테스트를 그대로 지나간다.
+
 ### v3.53.0 — ext 기본 모델 glm-5.2로 원복(effort xhigh는 유지)
 
 v3.52.0의 **절반만 되돌린다**. `scripts/ext_dispatch.py`의 상수 하나(`DEFAULT_MODEL`)가
@@ -1400,8 +1433,8 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `reviewer-lite` | sonnet / high | **v3.45.0 신설**. 모든 hunk가 스펙에 받아쓰기된 diff 전용 — 스펙 대조·VERIFY raw 확인·호출부 점검. 티어 밖(위험 도메인·설계 판단·규범 문서)을 발견하면 `VERDICT: ESCALATE`로 opus reviewer에 이관 |
 
 **외부 위임 2종(ext-scout / ext-coder)은 이 표에 없다** — Agent 스폰이 아니라
-`scripts/ext_dispatch.py`를 통한 Bash 전송이기 때문이다(모델 `zai/glm-5.2` / effort xhigh,
-v3.53.0). v3.43.0부터 **기본값은 ext**이고 native 위성은 폴백이다: 모든 탐색 미션은
+`scripts/ext_dispatch.py`를 통한 Bash 전송이기 때문이다(모델 `zai/glm-5.3` / effort xhigh,
+v3.54.0). v3.43.0부터 **기본값은 ext**이고 native 위성은 폴백이다: 모든 탐색 미션은
 ext-scout, **모든 소스 변경은 ext-coder**(v3.50.0 — JUDGMENT-FREE 게이트 폐지).
 **읽고 이해하기**(v3.51.0에서 ext-explorer 폐지), 설계 판단, **모든** 문서(ext-scribe는
 v3.45.0에서 폐지), `analyst`·`reviewer`는 native 고정이다 — **ext 경계는 위치와 타이핑
