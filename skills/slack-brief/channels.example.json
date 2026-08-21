@@ -1,0 +1,32 @@
+{
+  "_comment": "이 파일을 .claude/slack-channels.json 또는 ~/.claude/slack-channels.json 으로 복사해 실제 값을 채운다. 실제 채널 ID·봇 ID는 repo에 커밋하지 않는다. display는 Slack에 보이는 표시명, handle은 @핸들 — 둘은 다를 수 있고 멘션에 쓰이는 것은 mention의 U ID뿐이다.",
+  "sender_display": "홍길동",
+  "channels": [
+    {
+      "key": "dev-core",
+      "name": "#dev-core",
+      "channel_id": "C0000000DEV",
+      "bot": {
+        "display": "devbot",
+        "handle": "devbot",
+        "mention": "<@U0000000DEV>",
+        "in_channel": true
+      },
+      "purpose": "백엔드 구현 논의",
+      "tone": "기술 상세, 코드 경로 포함"
+    },
+    {
+      "key": "ops-alert",
+      "name": "#ops-alert",
+      "channel_id": "C0000000OPS",
+      "bot": {
+        "display": "opsbot",
+        "handle": "opsbot",
+        "mention": "<@U0000000OPS>",
+        "in_channel": false
+      },
+      "purpose": "운영 장애 대응",
+      "tone": "간결, 영향 범위 먼저"
+    }
+  ]
+}

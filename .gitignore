@@ -16,3 +16,6 @@ _inspect.py
 _dbg.py
 _debug_*.py
 .claude/doc-driven-review-logs/
+
+# Slack 채널·봇 실 ID (워크스페이스 비밀) — example만 커밋한다
+.claude/slack-channels.json

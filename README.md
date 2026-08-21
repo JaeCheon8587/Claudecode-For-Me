@@ -67,6 +67,75 @@ pip install -U codenavigator
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
 
+### v3.56.0 — slack-brief 추가: 대화 토픽을 채널 봇의 작업 트리거로 전송
+
+세션에서 나눈 논의가 세션 안에만 남고 채널의 AI 에이전트 봇에게 전달되지 않았다.
+수동으로 옮기면 형식이 매번 달라지고, 봇 멘션을 평문 `@표시명`으로 쓰면 Slack이
+mention 엔티티로 파싱하지 않아 `app_mention` 이벤트가 발생하지 않는다 — **봇이
+조용히 안 깨어난다.** 실패가 눈에 보이지 않는 종류의 실패다.
+
+`slack-brief`는 대화에서 토픽을 뽑아 `AskUserQuestion` 다중선택으로 확정받고,
+타입 5종(`[개발]`/`[기술]`/`[결정]`/`[장애]`/`[제안]`) 양식으로 정리해 채널별 담당
+봇을 멘션한 메시지를 보낸다. 각 타입은 기승전결 4비트를 자기 언어의 절 이름으로
+가지며 "기/승/전/결" 글자는 노출하지 않는다. `*배경*`은 전 타입 공통 고정 절로
+타입별 기절을 **대체하지 않고 추가**되어 토픽당 5절이 된다.
+
+**설계 결정 1 — 멘션은 공지가 아니라 작업 트리거다.** 봇이 본문을 읽고 실제로 일하므로
+**토픽 1개 = 메시지 1개**로 쪼갠다 — 한 메시지에 토픽을 묶으면 봇이 무엇을 처리해야 할지
+모호해진다.
+
+**설계 결정 2 — 본문에 작업 지시문을 쓰지 않는다.** 초기 설계는 `*봇 요청*` 절(1문장·명령형·
+대상과 산출물 명시)을 필수로 두었다. 실제 채널에 붙어 있는 에이전트들은 **각자 담당 업무가
+이미 정해져 있고**, 멘션된 내용을 그 업무 기준으로 처리한다. 지시문을 붙이면 그 판단을 덮어써
+본래 업무와 충돌한다. 절을 제거하고 self-check에 `지시문 부재` 항목을 넣어 명령형 요청 문장이
+본문에 들어가는 것을 막는다. 지시문을 좁히기 위해 두었던 맵핑 `capabilities` 필드와 파괴적
+어휘 경고도 존재 이유가 사라져 함께 제거했다 — 지시문이 없으면 평서형 기술 서술에 걸려
+매 실행마다 오경보만 냈을 것이다.
+
+**설계 결정 2 — 단일 에이전트.** 서브에이전트 오케스트레이션을 검토했으나 대화 내용을
+아는 것은 Main뿐이고 위임하려면 대화 전문을 복사해야 해서 context 이득이 없다. 오버스펙
+으로 판단해 제거했다. Critic 역할은 전송 직전 인라인 self-check 8항목으로 축소했다.
+이 결정은 사용자 요청으로 최초 계획(Planner→Writer→Critic 위임)을 되돌린 것이다.
+
+**되돌릴 수 없는 발신에 대한 게이트.** Step 6 프리뷰·승인 없이 전송하지 않는다. 승인
+선택지는 `전송`/`타입 수정`/`취소` 3지다. 실패 건 자동 재시도와 성공 건 재전송을 금지한다 —
+재전송은 봇이 같은 일을 두 번 하게 만든다. `--dry-run`은 프리뷰까지만 수행하고 전송 도구를
+호출하지 않는다.
+
+**Slack 제약을 계약으로 고정.** 전송 대상은 `channel_id`만 사용(채널명은 이름 변경에
+취약), 모든 메시지는 top-level(`thread_ts` 금지 — 봇 트리거는 top-level이 확실히 전달됨),
+하드 상한 3000자(MCP 도구 상한 5000자와 Block Kit section text 상한 3000자 중 낮은 쪽),
+소프트 권고 1200자, 채널 단위 순차 전송(채널당 대략 1 msg/sec).
+
+**마크다운 규칙은 실물 도구 시그니처를 보고 뒤집었다.** 인증 후 확인된 `slack_send_message`는
+**표준 마크다운**(`**굵게**`)을 받아 Slack 형식으로 변환한다. 최초 설계는 Slack 원시
+mrkdwn(`*굵게*`)을 강제하고 `**`를 금지했는데, 그대로 두면 변환기를 거쳐 별표가 본문에
+노출됐을 것이다. 절 라벨을 전부 `**라벨**`로 바꾸고 self-check에 마크다운 항목을 추가해
+8항목이 되었다. 멘션 `<@U…>`를 백틱으로 감싸거나 이스케이프하지 않을 것도 같은 항목에서 검사한다.
+채널이 1개뿐일 때 `AskUserQuestion` 최소 옵션 2개를 채울 수 없는 문제도 함께 막았다 —
+토픽 1개 예외와 대칭으로, 질문 없이 확정하고 프리뷰에서 확인받는다.
+
+**맵핑은 repo 밖.** `.claude/slack-channels.json` → `~/.claude/slack-channels.json` 순으로
+찾고 없으면 중단한다(자동 생성 금지). repo에는 placeholder만 담은 `channels.example.json`을
+싣는다. `bot.mention`은 `^<@[UWB][A-Z0-9]+>$` 검증을 통과해야 하고, `bot.in_channel`이
+`true`가 아니면 경고한다 — 앱이 채널 멤버가 아니면 멘션이 렌더돼도 이벤트를 못 받지만
+스킬이 직접 확인할 방법이 없다.
+
+**Slack MCP 미인증 처리.** 현재 워크스페이스에 붙은 서버는 `claude.ai Slack` 하나이고
+미인증 상태라 전송 도구 이름·파라미터를 하드코딩할 수 없다. Step 0에서 `ToolSearch`로
+전송 도구를 런타임 발견하고, `authenticate` 계열만 나오면 `/mcp` 안내 후 중단한다.
+스킬이 OAuth를 자동 시도하지 않는다.
+
+산출물은 `.process/slack-brief/<TS>/`(`topics.json`·`msg-*.md`·`receipt.json`)에 남기고
+전송 이력은 append-only `.process/slack-brief/sent-log.jsonl`에 쌓아 프리뷰에서 같은
+(채널, 토픽) 중복 발신을 경고한다.
+
+**실측 검증(2026-08-21).** 실제 워크스페이스에서 end-to-end 1건을 발신해 확인했다. 봇이 없는
+자기 DM으로 먼저 렌더 테스트를 돌려 `<@U…>`가 mention 엔티티로 보존되고 이중 별표가 저장
+원문에서 단일 별표로 변환되는 것을 확인한 뒤, 실채널로 1건 발신해 담당 봇이 1초 안에 스레드로
+응답하는 것까지 확인했다. 표시명·핸들·멘션 U ID가 서로 다를 수 있어 맵핑에 `display`와 `handle`을
+분리해 두었고, 멘션에 쓰이는 것은 `mention`의 U ID뿐이다.
+
 ### v3.55.0 — ext 봉인은 증거를 가지게: exit 6 단일 버킷 분해 + `probe` 게이트
 
 **사건**: ext 경로가 살아 있는데도 `ext-coder`가 계속 쓰이지 않았다. 멀쩡한
@@ -1446,7 +1515,7 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 
 ## 5. 플러그인 구성요소
 
-### Skill 13종
+### Skill 14종
 
 | Skill | 슬래시 커맨드 | 역할 |
 |---|---|---|
@@ -1460,11 +1529,12 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `meta-prompter` | `/claudecode-for-me:meta-prompter [요청]` | 거친 요청 → 구조화된 메타 프롬프트 |
 | `requirement-spec` | `/claudecode-for-me:requirement-spec [주제]` | grill-me→acceptance-design→meta-prompter→codex 검증을 자동 체인. 요구사항 도출·완료조건 4축 설계·개발 지시서 `.requirements/requirement-{slug}.md` 산출 후 정리본+설계본 대비 codex 검증↔보완 수렴 루프(최대 3회·99% 임계). 확정 후 `AskUserQuestion`으로 pipeline-runner 실행 여부를 물어 인라인 핸드오프 |
 | `safe-pull` | `/claudecode-for-me:safe-pull [원격/브랜치]` | git pull 전 fetch(비파괴)로 변경·충돌·사이드이펙트 브리핑 후 AskUserQuestion 컨펌 게이트 |
+| `slack-brief` | `/claudecode-for-me:slack-brief [--channels <key,key>] [--dry-run] [--max <N>]` | 대화에서 토픽을 뽑아 다중선택으로 확정받고 타입 5종 양식(기승전결)으로 정리해 Slack 채널 담당 봇을 멘션한 **작업 트리거**로 전송. 토픽 1개 = 메시지 1개, 본문에 작업 지시문 금지(봇이 담당 업무 기준으로 처리), 전송 전 승인 게이트. 단일 에이전트 |
 | `ssot-write` | `/claudecode-for-me:ssot-write <TASK-path> [--app <APP>] [--process <path>]` | Opus Main이 Opus Planner·Sonnet Writer·Opus Critic을 실제 독립 에이전트로 호출한다. Writer가 계획된 SSOT를 직접 수정하고 Critic은 Plan 없이 TASK 핵심 의미와 실제 SSOT 투영을 네 의미 축으로 최대 3회 비교 |
 | `task-write` | `/claudecode-for-me:task-write [--app <APP>] [--from <requirements-path>] [요청]` | 요구사항 문서/자연어 요청에서 TASK 작업 범위 계약만 생성. FRD/FC/ADR/ADR-CATALOG/PRD/ARCHITECTURE 분석·수정 없음 |
 | `work-packet-write` | `/claudecode-for-me:work-packet-write <TASK-path> [--app <APP>] [--process <process-dir>] [--name <title>]` | TASK와 Required SSOT Execution Matrix를 연결하는 forge 입력용 Work Packet 생성. TASK/SSOT/코드 수정 없이 실행 규칙·경계·검증 입력만 정리 |
 
-### Command 18종
+### Command 19종
 
 | Command | 설명 |
 |---|---|
@@ -1483,6 +1553,7 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `pipeline-runner` | pipeline-runner skill 진입. requirement-spec 산출물 이후 작업 규모를 판단해 후속 스킬 파이프라인을 설계·컨펌 후 build/progress 문서 기반으로 실행 |
 | `requirement-spec` | requirement-spec skill 진입. grill-me→acceptance-design→meta-prompter→codex 검증 자동 체인 메타 스킬. 확정 후 pipeline-runner 실행 여부 컨펌 게이트 |
 | `safe-pull` | safe-pull skill 진입. fetch 후 브리핑 → 컨펌 게이트 → pull |
+| `slack-brief` | slack-brief skill 진입. 토픽 모달 → 채널 모달 → 토픽당 메시지 작성 → self-check 8항목 → 프리뷰 승인 게이트 → `channel_id`로 순차 전송. `--dry-run`은 프리뷰까지만 |
 | `ssot-write` | Opus Main 기반 3-agent ssot-write 진입. Main이 build/progress를 읽고 Planner→Writer→Critic을 순환하며 Critic FAIL은 Planner의 실패 target 전용 REPAIR 계획으로 돌아간다. git commit은 범위 밖 |
 | `task-write` | task-write skill 진입. TASK 파일만 생성하고 SSOT 문서는 수정하지 않음 |
 | `work-packet-write` | work-packet-write skill 진입. TASK와 Required SSOT Execution Matrix를 연결하는 Work Packet만 생성하고 다음 단계를 forge-scope로 넘김 |
