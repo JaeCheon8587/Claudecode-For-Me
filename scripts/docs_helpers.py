@@ -8,6 +8,7 @@ Subcommands:
     git-user    git config user.name
     check       v0.7 파일 무결성 검사
     check-task  task-write 전용 TASK 단일 파일 구조 검사
+    check-instruction  requirement-spec 지시서(requirement-{slug}.md) 검증 게이트 Code 노드
 
 Standard library only. Windows PowerShell 호환.
 """
@@ -97,6 +98,24 @@ ACTIVE_RANGE = range(1, 100)   # F001..F099
 BACKLOG_RANGE = range(101, 1000)  # F101..F999
 
 BACKEND_TABLE_HEADER_KEYS = ("SYSTEM_CODE", "APP_CODE", "App")
+
+
+# ---------------------------------------------------------------------------
+# check-instruction (requirement-spec 지시서 검증 게이트 — Code 노드)
+# ---------------------------------------------------------------------------
+
+# meta-prompter 출력 맨 위 메타 헤더: "유형: X / 추가한 가정 N개"
+INSTRUCTION_TYPE_HEADER_PATTERN = re.compile(r"^유형:\s*(.+?)\s*$", re.MULTILINE)
+
+# 유형(공백 제거 키) → 유형별 필수 항목 (지시서 본문에 있어야 하는 리터럴)
+INSTRUCTION_TYPE_REQUIRED_ITEM = {
+    "기능개발": "[완료 조건]",
+    "리팩토링": "[보존해야 할 동작]",
+    "문서화": "[대상 독자]",
+    "분석": "[분석 질문]",
+}
+# [필수 사항] OCP·SRP 고정문구가 필요한 유형
+INSTRUCTION_TYPES_NEED_MUST = {"기능개발", "리팩토링"}
 
 
 # ---------------------------------------------------------------------------
@@ -793,6 +812,92 @@ def cmd_check_task(repo: Path, app: str, task: str) -> int:
 
 
 # ---------------------------------------------------------------------------
+# check-instruction
+# ---------------------------------------------------------------------------
+
+
+def _normalize_instruction_type(raw: str) -> str:
+    """유형 헤더 문자열에서 주 유형만 뽑아 공백 제거 키로 정규화.
+
+    예: "기능 개발 (보조: 문서화) / 추가한 가정 1개" -> "기능개발"
+    """
+    head = raw.split("/")[0].split("(")[0]
+    return re.sub(r"\s+", "", head)
+
+
+def _check_instruction_file(repo: Path, file_arg: str) -> list[CheckResult]:
+    path = Path(file_arg)
+    if not path.is_absolute():
+        path = repo / path
+    path = path.resolve()
+
+    results: list[CheckResult] = []
+
+    text = _read_text(path)
+    if text is None:
+        results.append(CheckResult("FAIL", "READ_TEXT", "cannot read", path))
+        return results
+    results.append(CheckResult("PASS", "READ_TEXT", "readable", path))
+
+    # 메타 헤더 (유형: X / 추가한 가정 N개)
+    header = INSTRUCTION_TYPE_HEADER_PATTERN.search(text)
+    type_key: str | None = None
+    if header is None:
+        results.append(CheckResult("FAIL", "META_HEADER", "'유형:' 메타 헤더 없음", path))
+    else:
+        raw_type = header.group(1).strip()
+        type_key = _normalize_instruction_type(raw_type)
+        results.append(CheckResult("PASS", "META_HEADER", f"유형: {raw_type}", path))
+
+    # 유형 무관 필수 항목
+    for item, code in (("[작업 목표]", "INSTR_GOAL"), ("[작업 내용]", "INSTR_CONTENT")):
+        if item in text:
+            results.append(CheckResult("PASS", code, f"{item} 존재", path))
+        else:
+            results.append(CheckResult("FAIL", code, f"{item} 없음", path))
+
+    # 유형별 필수 항목
+    if type_key in INSTRUCTION_TYPE_REQUIRED_ITEM:
+        item = INSTRUCTION_TYPE_REQUIRED_ITEM[type_key]
+        if item in text:
+            results.append(CheckResult("PASS", "INSTR_TYPE_REQUIRED", f"{item} 존재 (유형 {type_key})", path))
+        else:
+            results.append(CheckResult("FAIL", "INSTR_TYPE_REQUIRED", f"{item} 없음 (유형 {type_key} 필수)", path))
+    elif type_key is None:
+        results.append(CheckResult("WARN", "INSTR_TYPE_REQUIRED", "유형 미상 — 유형별 필수 검사 건너뜀", path))
+    else:
+        results.append(CheckResult("WARN", "INSTR_TYPE_REQUIRED", f"미인식 유형 '{type_key}' — 유형별 필수 검사 건너뜀", path))
+
+    # 고정문구 [필수 사항] (기능개발·리팩토링만)
+    if type_key in INSTRUCTION_TYPES_NEED_MUST:
+        if "[필수 사항]" in text and "OCP" in text and "SRP" in text:
+            results.append(CheckResult("PASS", "INSTR_FIXED_MUST", "[필수 사항] OCP·SRP 고정문구 존재", path))
+        else:
+            results.append(CheckResult("FAIL", "INSTR_FIXED_MUST", "[필수 사항] OCP·SRP 고정문구 누락 (기능개발·리팩토링 필수)", path))
+    else:
+        results.append(CheckResult("PASS", "INSTR_FIXED_MUST", "해당 없음 (유형 조건부)", path))
+
+    # 고정문구 [에이전트 행동 규칙] (모든 유형, 블록+핵심문구 — 정확 줄수 미검사)
+    if "[에이전트 행동 규칙]" in text and "변경 계획" in text and "사전 승인" in text:
+        results.append(CheckResult("PASS", "INSTR_GUARDRAIL", "[에이전트 행동 규칙] 블록·핵심문구 존재", path))
+    else:
+        results.append(CheckResult("FAIL", "INSTR_GUARDRAIL", "[에이전트 행동 규칙] 블록 또는 핵심문구(변경 계획/사전 승인) 누락", path))
+
+    return results
+
+
+def cmd_check_instruction(repo: Path, file_arg: str) -> int:
+    results = _check_instruction_file(repo, file_arg)
+    for r in results:
+        print(_format(r, repo))
+    p = sum(1 for r in results if r.level == "PASS")
+    w = sum(1 for r in results if r.level == "WARN")
+    f = sum(1 for r in results if r.level == "FAIL")
+    print(f"Summary: {p} PASS, {w} WARN, {f} FAIL")
+    return 1 if f > 0 else 0
+
+
+# ---------------------------------------------------------------------------
 # Entry
 # ---------------------------------------------------------------------------
 
@@ -836,6 +941,10 @@ def main(argv: list[str] | None = None) -> int:
     sp_check_task.add_argument("--app", required=True)
     sp_check_task.add_argument("--task", required=True)
 
+    sp_check_instr = sub.add_parser("check-instruction")
+    sp_check_instr.add_argument("--repo", required=True)
+    sp_check_instr.add_argument("--file", required=True)
+
     try:
         args = parser.parse_args(argv)
     except SystemExit as e:
@@ -857,6 +966,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_check(repo, args.app)
     if args.cmd == "check-task":
         return cmd_check_task(repo, args.app, args.task)
+    if args.cmd == "check-instruction":
+        return cmd_check_instruction(repo, args.file)
     print(f"FAIL ARGS unknown cmd: {args.cmd}", file=sys.stderr)
     return 2
 

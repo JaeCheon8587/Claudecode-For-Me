@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v3.53.0 · 커스텀 스킬 14종 + 슬래시 커맨드 18종 + 에이전트 17종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v3.57.0 · 커스텀 스킬 14종 + 슬래시 커맨드 18종 + 에이전트 18종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,12 +11,12 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `3.53.0` |
+| 버전 | `3.57.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
 | 네임스페이스 | `/claudecode-for-me:<name>` |
-| 구성요소 | Skill 14 · Command 18 · Agent 17 (`agents/`) · Python helper 9 (`scripts/`) |
+| 구성요소 | Skill 14 · Command 18 · Agent 18 (`agents/`) · Python helper 9 (`scripts/`) |
 | 외부 연동 도구 | [`codenavigator`](https://github.com/JaeCheon8587/codenavigator) (PyPI) — codenav-bootstrap / codenav-frontmatter-gen 슬래시가 호출 |
 
 플러그인은 **글로벌 캐시**에 설치되므로 한 번 설치 후 모든 프로젝트의 **새 세션**에서 자동 노출된다. 프로젝트별 재설치 불필요.
@@ -66,6 +66,44 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v3.57.0 — requirement-spec에 지시서 검증 게이트 추가 + codex 자기검증 루프 제거
+
+요구사항 파이프라인(`requirement-spec → task-write → ssot-write → work-packet-write`)에서
+**meta-prompter 결과(지시서)의 내부 논리 결함이 어디서도 검증되지 않았다.** 구 Phase 4 codex는
+"지시서가 정본을 얼마나 반영했나(coverage)"만 봤고, `task-write`의 `task-critic`도 지시서를
+GROUND TRUTH로 신뢰하므로(요구사항 원문 기준으로 TASK 충실도만 판정) 지시서 태생 결함(모순·
+누락·완료조건↔검증법 단절·엣지↔기대동작 불일치)이 하류로 그대로 전파됐다.
+
+**변경 1 — Phase 3.5 지시서 검증 게이트 신설 (Code + LLM 이중).** 지시서를 **감사 대상**으로
+내부 건전성을 1회 비대화로 판정한다.
+
+- **Code 노드** — `scripts/docs_helpers.py`에 `check-instruction` 서브커맨드 추가. 메타 헤더
+  `유형:` 파싱 → 유형 무관 필수(`[작업 목표]`·`[작업 내용]`) → 유형별 필수(기능개발 `[완료 조건]`
+  / 리팩토링 `[보존해야 할 동작]` / 문서화 `[대상 독자]` / 분석 `[분석 질문]`) → 고정문구(유형
+  조건부) 검사. 항목별 PASS/FAIL + 사유를 출력하고 위반 시 `exit≠0`. python 없으면 스킵
+  (best-effort). meta-prompter가 근거 없는 항목을 의도적으로 생략하는 규약을 존중해 **보장 항목만**
+  검사한다(오탐 억제).
+- **LLM 노드** — 지시서 내부 4축(모순·누락/미결·완료조건↔검증방법·엣지↔기대동작) 건전성 판정.
+  **best-effort 하이브리드**: `codex`가 있으면 codex(다른 모델, soundness 전용 프롬프트)로 위임해
+  모델 다양성을 얻고, 없거나 실패하면 신설 `agents/requirement-critic.md` 서브에이전트로 폴백한다.
+  각 위반은 지시서 원문 인용을 근거로 하고, 소규모 작업의 정당한 항목 생략은 위반으로 보지 않는다.
+- **판정·라우팅** — Code `exit≠0` ∪ LLM FAIL → 게이트 FAIL. Code 사유와 LLM 위반을 하나의
+  리스트로 병합 출력하고 `AskUserQuestion`으로 자가수정/재인터뷰/무시 분기한다. **게이트 PASS
+  전에는 하류(task-write)로 넘어가지 않는다** — 결함 지시서의 하류 전파를 차단한다.
+
+**변경 2 — codex 자기검증↔보완 수렴 루프(구 Phase 4) + 수렴 리뷰(구 Phase 5) 제거.** 검증은
+이제 Phase 3.5 게이트가 담당하므로, codex coverage 루프(최대 3회·최대 ~30분)를 걷어내 토큰·
+지연·외부 의존을 줄였다. 구 Phase 6(후속 핸드오프)를 **Phase 5로** 당겼다. coverage(정본↔지시서
+반영률)는 이 파이프라인에서 빠졌고, 필요하면 LLM 노드에 축으로 흡수할 수 있다.
+
+**신설 에이전트**: `requirement-critic`(Agent 17 → 18). `task-critic` 패턴을 미러링해 독립
+컨텍스트에서 지시서 4축만 판정하고 `SUCCESS|FAIL`을 반환한다.
+
+**검증**: `tests/test_docs_helpers.py` **17 passed**(기존 check-task + 신설 check-instruction 6건).
+test-project 더미로 라이브 확인 — 정상 지시서 → 게이트 **PASS**(오탐 0), 결함 지시서(모순·누락·
+AC↔검증법 3종 주입) → 게이트 **FAIL**로 3/3 검출 + task-write 차단. codex 미설치 환경이라 LLM
+노드는 서브에이전트 폴백 경로로 검증했다.
 
 ### v3.56.0 — slack-brief 추가: 대화 토픽을 채널 봇의 작업 트리거로 전송
 
@@ -1527,7 +1565,7 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `forge-scope` | `/claudecode-for-me:forge-scope <WORK_PACKET-or-TASK-doc-path> [--name <slug>] [--force]` | Work Packet을 우선 입력으로 받아 Ready gate, 연결 TASK, Required SSOT Execution Matrix를 소비해 워크트리에서 고정 계약-TDD 파이프라인(계약+테스트→구현→빌드/유닛테스트)으로 구현. TASK 직접 입력은 legacy 호환. 빌드는 `.csproj` 단위만(솔루션 금지). 정리는 `forge-cancel`. |
 | `grill-me` | `/claudecode-for-me:grill-me [주제]` | 1문 1답으로 요구사항 모호점 추적 |
 | `meta-prompter` | `/claudecode-for-me:meta-prompter [요청]` | 거친 요청 → 구조화된 메타 프롬프트 |
-| `requirement-spec` | `/claudecode-for-me:requirement-spec [주제]` | grill-me→acceptance-design→meta-prompter→codex 검증을 자동 체인. 요구사항 도출·완료조건 4축 설계·개발 지시서 `.requirements/requirement-{slug}.md` 산출 후 정리본+설계본 대비 codex 검증↔보완 수렴 루프(최대 3회·99% 임계). 확정 후 `AskUserQuestion`으로 pipeline-runner 실행 여부를 물어 인라인 핸드오프 |
+| `requirement-spec` | `/claudecode-for-me:requirement-spec [주제]` | grill-me→acceptance-design→meta-prompter→지시서 검증 게이트를 자동 체인. 요구사항 도출·완료조건 4축 설계·개발 지시서 `.requirements/requirement-{slug}.md` 산출 후 Phase 3.5 게이트(Code 구조검사 + LLM 4축 건전성)로 검증, 통과 전 하류 차단. 확정 후 `AskUserQuestion`으로 pipeline-runner 실행 여부를 물어 인라인 핸드오프 |
 | `safe-pull` | `/claudecode-for-me:safe-pull [원격/브랜치]` | git pull 전 fetch(비파괴)로 변경·충돌·사이드이펙트 브리핑 후 AskUserQuestion 컨펌 게이트 |
 | `slack-brief` | `/claudecode-for-me:slack-brief [--channels <key,key>] [--dry-run] [--max <N>]` | 대화에서 토픽을 뽑아 다중선택으로 확정받고 타입 5종 양식(기승전결)으로 정리해 Slack 채널 담당 봇을 멘션한 **작업 트리거**로 전송. 토픽 1개 = 메시지 1개, 본문에 작업 지시문 금지(봇이 담당 업무 기준으로 처리), 전송 전 승인 게이트. 단일 에이전트 |
 | `ssot-write` | `/claudecode-for-me:ssot-write <TASK-path> [--app <APP>] [--process <path>]` | Opus Main이 Opus Planner·Sonnet Writer·Opus Critic을 실제 독립 에이전트로 호출한다. Writer가 계획된 SSOT를 직접 수정하고 Critic은 Plan 없이 TASK 핵심 의미와 실제 SSOT 투영을 네 의미 축으로 최대 3회 비교 |
@@ -1551,19 +1589,19 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `grill-me` | grill-me skill 진입 |
 | `meta-prompter` | meta-prompter skill 진입 |
 | `pipeline-runner` | pipeline-runner skill 진입. requirement-spec 산출물 이후 작업 규모를 판단해 후속 스킬 파이프라인을 설계·컨펌 후 build/progress 문서 기반으로 실행 |
-| `requirement-spec` | requirement-spec skill 진입. grill-me→acceptance-design→meta-prompter→codex 검증 자동 체인 메타 스킬. 확정 후 pipeline-runner 실행 여부 컨펌 게이트 |
+| `requirement-spec` | requirement-spec skill 진입. grill-me→acceptance-design→meta-prompter→지시서 검증 게이트(Code+LLM) 자동 체인 메타 스킬. 확정 후 pipeline-runner 실행 여부 컨펌 게이트 |
 | `safe-pull` | safe-pull skill 진입. fetch 후 브리핑 → 컨펌 게이트 → pull |
 | `slack-brief` | slack-brief skill 진입. 토픽 모달 → 채널 모달 → 토픽당 메시지 작성 → self-check 8항목 → 프리뷰 승인 게이트 → `channel_id`로 순차 전송. `--dry-run`은 프리뷰까지만 |
 | `ssot-write` | Opus Main 기반 3-agent ssot-write 진입. Main이 build/progress를 읽고 Planner→Writer→Critic을 순환하며 Critic FAIL은 Planner의 실패 target 전용 REPAIR 계획으로 돌아간다. git commit은 범위 밖 |
 | `task-write` | task-write skill 진입. TASK 파일만 생성하고 SSOT 문서는 수정하지 않음 |
 | `work-packet-write` | work-packet-write skill 진입. TASK와 Required SSOT Execution Matrix를 연결하는 Work Packet만 생성하고 다음 단계를 forge-scope로 넘김 |
 
-### Agent 16종
+### Agent 18종
 
 에이전트는 두 계열로 나뉜다. **오케스트레이션 하네스**는 메인 오케스트레이터가 직접 스폰하는
 범용 위성이고, **스킬 전용 위성**은 해당 슬래시 커맨드 내부에서만 호출된다.
 
-#### 오케스트레이션 하네스 (8)
+#### 오케스트레이션 하네스 (9)
 
 | Agent | 모델 / effort | 역할 |
 |---|---|---|
@@ -1619,7 +1657,7 @@ coder도 요구하므로(HARD LIMIT 2 → BLOCKED) 목적지를 가르지 못했
 변경은 coder→scribe 순차로 처리한다. 분리 근거는 v3.36.0, 근거 추적 계약의 세부(소스-퍼스트
 절차·`spec` 소스·리뷰 연결)는 v3.37.0 체인지로그 참조.
 
-#### 스킬 전용 위성 (8)
+#### 스킬 전용 위성 (9)
 
 | Agent | 모델 | 소속 스킬 | 역할 |
 |---|---|---|---|
@@ -1631,6 +1669,7 @@ coder도 요구하므로(HARD LIMIT 2 → BLOCKED) 목적지를 가르지 못했
 | `ssot-critic` | opus | `ssot-write` | TASK 핵심 의미 ↔ 실제 SSOT 투영 독립 대조 |
 | `wp-builder` | opus | `work-packet-write` | handoff·TASK 근거로 Work Packet 링킹 작성 |
 | `wp-critic` | opus | `work-packet-write` | Work Packet 링킹 정확성만 판정(내용 진위는 판정 안 함) |
+| `requirement-critic` | opus | `requirement-spec` | 지시서 내부 4축(모순·누락·완료조건↔검증방법·엣지↔기대동작) 건전성 독립 판정 — Phase 3.5 게이트 LLM 노드(codex 있으면 codex 위임, 없으면 이 서브에이전트) |
 
 계열별로 `writer`는 sonnet, `planner`/`critic`은 opus다. writer가 sonnet인 이유는 위에 opus
 planner가 `plan.json`으로 판단을 끝내주기 때문이며, 이 전제가 없는 오케스트레이션 하네스에서는
@@ -1824,19 +1863,19 @@ git repo·입력 문서 존재·**미결 항목 없음**을 검사한다. Work P
 - **채팅 출력 전용**: 마크다운 코드블록 1개로 wrap, `.md` 저장 안 함
 - 개조식 종결 강제, 출력 끝 `[에이전트 행동 규칙]` 4문구 자동 부착
 
-### 6.7 requirement-spec (메타 스킬 — grill-me→acceptance-design→meta-prompter→codex 파이프라인)
+### 6.7 requirement-spec (메타 스킬 — grill-me→acceptance-design→meta-prompter→지시서 검증 게이트 파이프라인)
 
 ```
 /claudecode-for-me:requirement-spec 사칙연산 계산기 개발
 ```
 
-- **메타 스킬**: grill-me(6.5)·acceptance-design(6.12)·meta-prompter(6.6)를 자동 인라인 체인으로 엮고 codex 자기검증을 붙임. 1회 호출 → 자동 진행(사용자 상호작용은 grill-me 인터뷰 + acceptance-design 인터뷰 + 최종 리뷰만)
-- **파이프라인**: `요구사항 도출(grill-me) → 완료조건·엣지·오류·검증 4축 설계(acceptance-design) → 개발 지시서 정제(meta-prompter) → .requirements/requirement-{slug}.md 저장 → codex 검증↔보완 수렴 루프(최대 3회·99% 임계)`
-- **Phase 1.5**: acceptance-design의 타겟 doc = grill-me 정리본(`grill-me-{slug}.md`). 설계본 `{slug}-acceptance.md` 산출. meta-prompter 입력·codex GROUND TRUTH가 정리본 + 설계본 둘 다를 포함 → 지시서에 완료조건·검증이 실림
+- **메타 스킬**: grill-me(6.5)·acceptance-design(6.12)·meta-prompter(6.6)를 자동 인라인 체인으로 엮고 지시서 검증 게이트(Code+LLM)를 붙임. 1회 호출 → 자동 진행(사용자 상호작용은 grill-me 인터뷰 + acceptance-design 인터뷰 + 게이트 FAIL 분기 + 후속 핸드오프만)
+- **파이프라인**: `요구사항 도출(grill-me) → 완료조건·엣지·오류·검증 4축 설계(acceptance-design) → 개발 지시서 정제(meta-prompter) → .requirements/requirement-{slug}.md 저장 → 지시서 검증 게이트(Code 구조검사 + LLM 4축 건전성)`
+- **Phase 1.5**: acceptance-design의 타겟 doc = grill-me 정리본(`grill-me-{slug}.md`). 설계본 `{slug}-acceptance.md` 산출. meta-prompter 입력이 정리본 + 설계본 둘 다를 포함 → 지시서에 완료조건·검증이 실림
 - **slug 일관**: 세 산출물이 동일 slug 공유 — `grill-me-{slug}.md`(정리본) ↔ `{slug}-acceptance.md`(설계본) ↔ `requirement-{slug}.md`(지시서)
-- **codex 자기검증**: grill-me 정리본 + acceptance 설계본=GROUND TRUTH 기준 체크리스트 생성 → 지시서 반영도 대조 → `Coverage: N%` + 보완점. 모델 `zai/glm-5.2`, reasoning effort 레벨 `max` (`-c model_reasoning_effort="max"`)
+- **Phase 3.5 지시서 검증 게이트**: 지시서를 감사 대상으로 내부 4축(모순·누락·완료조건↔검증방법·엣지↔기대동작) 판정. **Code 노드**=`docs_helpers.py check-instruction`(메타헤더·필수항목·고정문구 구조검사, python 있으면 실행), **LLM 노드**=codex 있으면 codex(soundness 전용 프롬프트) 없으면 `requirement-critic` 서브에이전트. Code `exit≠0` ∪ LLM FAIL → 게이트 FAIL, 위반 리스트 출력 후 자가수정/재인터뷰/무시 분기, **PASS 전 하류(task-write) 차단**
 - **Phase 게이트**: 각 Phase 전이 조건 미충족 시 다음 Phase 진입 금지
-- **codex 미설치 시** 검증만 생략(`/codex:setup` 안내), 지시서는 보존
+- **codex/python 미설치 시** 게이트는 best-effort로 폴백(Code 노드 스킵 또는 LLM 노드 서브에이전트) — 검증은 계속 동작
 - 산출물은 지시서까지 — **구현 코드 미작성·`ExitPlanMode` 미호출**
 
 ### 6.8 commit-analysis
@@ -2058,7 +2097,8 @@ Claudecode-For-Me/
 │   ├── reviewer.md              # Opus fresh-context 검증 (read-only)
 │   ├── task-{planner,writer,critic}.md   # task-write 전용
 │   ├── ssot-{planner,writer,critic}.md   # ssot-write 전용
-│   └── wp-{builder,critic}.md            # work-packet-write 전용
+│   ├── wp-{builder,critic}.md            # work-packet-write 전용
+│   └── requirement-critic.md            # requirement-spec Phase 3.5 게이트 LLM 노드(codex 폴백)
 ├── skills/                      # Claude Code 스킬 (자연어 트리거)
 │   ├── acceptance-design/
 │   ├── branch-review/

@@ -1,13 +1,13 @@
 ---
 name: requirement-spec
-description: 요구사항을 대화로 도출하고 완료조건·검증을 설계한 뒤 개발 지시서로 정제하고 codex로 자기검증하는 메타 스킬. grill-me로 요구사항 도출 → acceptance-design으로 완료조건·엣지·오류·검증 4축 설계 → meta-prompter로 개발 지시서 정제 → .requirements/requirement-{slug}.md 저장 → codex 검증↔보완 수렴 루프(최대 3회·99% 임계) → 확정 후 pipeline-runner 실행 여부를 물어 인라인 핸드오프. "요구사항 지시서 만들어줘", "요구사항부터 같이 정리해서 작업지시서까지", "요구사항 도출하고 검증까지", "requirement-spec" 요청 시 트리거.
+description: 요구사항을 대화로 도출하고 완료조건·검증을 설계한 뒤 개발 지시서로 정제하고 지시서 검증 게이트(Code+LLM 건전성)로 자기검증하는 메타 스킬. grill-me로 요구사항 도출 → acceptance-design으로 완료조건·엣지·오류·검증 4축 설계 → meta-prompter로 개발 지시서 정제 → .requirements/requirement-{slug}.md 저장 → 지시서 검증 게이트(모순·누락·완료조건↔검증방법·엣지↔기대동작) → 확정 후 pipeline-runner 실행 여부를 물어 인라인 핸드오프. "요구사항 지시서 만들어줘", "요구사항부터 같이 정리해서 작업지시서까지", "요구사항 도출하고 검증까지", "requirement-spec" 요청 시 트리거.
 argument-hint: "[요구사항 도출할 주제]"
 ---
 
 # Requirement Spec
 
 요구사항 도출부터 개발 지시서 산출·자기검증까지를 **한 번의 호출로 자동 진행**하는 메타 스킬.
-기존 스킬(`grill-me`, `acceptance-design`, `meta-prompter`)을 인라인 실행으로 엮고, codex 위임 검증을 붙인 오케스트레이터다.
+기존 스킬(`grill-me`, `acceptance-design`, `meta-prompter`)을 인라인 실행으로 엮고, 지시서 검증 게이트(Code+LLM)를 붙인 오케스트레이터다.
 
 **최종 산출물**: `.requirements/requirement-{slug}.md` — 다른 AI 에이전트가 그대로 수행할 수 있는 개발 지시서.
 `{slug}`는 grill-me 결과물(`.requirements/grill-me-{slug}.md`)과 **동일**하다.
@@ -16,9 +16,9 @@ argument-hint: "[요구사항 도출할 주제]"
 
 ## 동작 원칙
 
-- **자동 인라인 체인**: Phase 1~6을 자동으로 이어 간다. **사용자 상호작용은 grill-me 인터뷰(Phase 1)·acceptance-design 인터뷰(Phase 1.5)·최종 리뷰(Phase 5)·후속 핸드오프(Phase 6)에서만** 발생한다.
+- **자동 인라인 체인**: Phase 1~5를 자동으로 이어 간다. **사용자 상호작용은 grill-me 인터뷰(Phase 1)·acceptance-design 인터뷰(Phase 1.5)·게이트 FAIL 분기(Phase 3.5)·후속 핸드오프(Phase 5)에서만** 발생한다.
 - **인라인 실행**: 다른 스킬을 호출할 때는 해당 `SKILL.md`를 읽어 **그 지침을 이 대화에서 그대로 수행**한다(별도 프로세스·핸드오프 아님).
-- **산출물 경계**: 지시서 저장/갱신까지가 이 스킬 **자체의** 산출물이다. **구현 코드를 직접 작성하지 않고, `ExitPlanMode`를 호출하지 않는다.** (단, 정리본·지시서를 `.requirements/`에 저장하는 파일 쓰기는 허용. 또한 Phase 6에서 **사용자가 명시적으로 선택하면** pipeline-runner로 인라인 핸드오프하며, pipeline-runner 자체 승인 게이트가 다시 막으므로 이 스킬이 구현으로 직행하지 않는다.)
+- **산출물 경계**: 지시서 저장/갱신까지가 이 스킬 **자체의** 산출물이다. **구현 코드를 직접 작성하지 않고, `ExitPlanMode`를 호출하지 않는다.** (단, 정리본·지시서를 `.requirements/`에 저장하는 파일 쓰기는 허용. 또한 Phase 5에서 **사용자가 명시적으로 선택하면** pipeline-runner로 인라인 핸드오프하며, pipeline-runner 자체 승인 게이트가 다시 막으므로 이 스킬이 구현으로 직행하지 않는다.)
 - **Phase 게이트(전역)**: 각 Phase는 게이트다. 해당 Phase의 **전이 조건(완료 조건)을 충족하기 전에는 절대로 다음 Phase로 넘어가지 않는다.** 건너뛰기·앞당기기 금지. 각 Phase 머리의 ⛔ 게이트 문구를 매번 확인한다.
 
 ---
@@ -29,7 +29,7 @@ argument-hint: "[요구사항 도출할 주제]"
 
 스킬 활성화 시:
 1. 주제를 1~2문장으로 확인한다.
-2. 파이프라인을 1줄로 선언한다: *"요구사항 도출(grill-me) → 완료조건·검증 4축 설계(acceptance-design) → 개발 지시서 정제(meta-prompter) → 저장 → codex 검증↔보완 수렴 루프(최대 3회·99%). grill-me·acceptance-design 인터뷰 외에는 자동 진행한다."*
+2. 파이프라인을 1줄로 선언한다: *"요구사항 도출(grill-me) → 완료조건·검증 4축 설계(acceptance-design) → 개발 지시서 정제(meta-prompter) → 저장 → 지시서 검증 게이트(Code+LLM 건전성). grill-me·acceptance-design 인터뷰 외에는 자동 진행한다."*
 3. `$ARGUMENTS`를 Phase 1의 grill-me 주제로 넘긴다.
 
 ---
@@ -68,14 +68,14 @@ acceptance-design이 사용자 중단으로 설계본을 확정하지 못하면 
 - `skills/meta-prompter/SKILL.md`를 읽어 수행한다. **입력 = Phase 1 정리본 전문 + Phase 1.5 4축 설계본 전문**(`.requirements/grill-me-{slug}.md` + `.requirements/{slug}-acceptance.md` 내용). 정리본은 무엇을·왜, 설계본은 완료조건·엣지·오류·검증을 공급한다.
 - meta-prompter가 작업 유형 분류 → 템플릿 선정 → 메타프롬프트 생성을 수행한다.
 - meta-prompter의 필수 항목이 정리본에서 채워지지 않으면 그 규칙대로 ≤3개를 묶어 한 번에 질문한다(정리본이 대부분 커버하므로 질문 0건을 기대).
-- 산출 = 코드블록 1개(메타헤더 + 본문 + `[에이전트 행동 규칙]` 가드레일 4문구, **개조식** 종결).
+- 산출 = 코드블록 1개(메타헤더 + 본문 + `[에이전트 행동 규칙]` 가드레일 문구, **개조식** 종결).
 - **주의**: meta-prompter는 파일을 저장하지 않는다. 저장은 Phase 3에서 이 스킬이 직접 한다.
 
 ---
 
 ## Phase 3 — 지시서 저장
 
-> ⛔ **게이트**: `.requirements/requirement-{slug}.md` 저장이 완료되기 **전에는 절대** Phase 4로 넘어가지 않는다.
+> ⛔ **게이트**: `.requirements/requirement-{slug}.md` 저장이 완료되기 **전에는 절대** Phase 3.5로 넘어가지 않는다.
 
 - Phase 2 코드블록의 **내부 내용**을 추출해 `.requirements/requirement-{slug}.md`에 저장한다(`Write`).
 - `.requirements/` 폴더가 없으면 생성한다.
@@ -94,128 +94,97 @@ acceptance-design이 사용자 중단으로 설계본을 확정하지 못하면 
 
 ---
 
-## Phase 4 — codex 자기검증↔보완 수렴 루프 (최대 3회 · 99% 임계)
+## Phase 3.5 — 지시서 검증 게이트 (Code + LLM 건전성 감사)
 
-> ⛔ **게이트**: 루프가 임계(99%) 도달 또는 최대 3회로 종료되기 **전에는 절대** Phase 5로 넘어가지 않는다. codex 미설치/오류 분기일 때는 Phase 5~6을 건너뛰고 즉시 종료한다(그 외 경로로 진행 금지).
+> ⛔ **게이트**: 게이트가 **PASS**로 판정되기 **전에는 절대** Phase 5(후속 핸드오프)로 넘어가지 않는다. **FAIL이면 하류(task-write 등)로 진행하지 않는다.**
 
-grill-me 정리본 + acceptance 4축 설계본을 기준(GROUND TRUTH), requirement 지시서를 검증 대상(ARTIFACT)으로 두고 codex에 위임해 검증하고, 임계 미달이면 codex가 짚은 보완점을 지시서에 자동 반영한 뒤 재검증한다. **임계(기본 99%) 도달 또는 최대 반복(기본 3회) cap**까지 반복한다.
+Phase 3에서 저장한 `.requirements/requirement-{slug}.md`(지시서)를 **감사 대상**으로, 지시서 **내부 건전성**을 1회 비대화로 검증한다.
+(이 게이트는 지시서 **내부 논리**만 본다. 정본↔지시서 반영률(coverage)은 이 파이프라인에서 검증하지 않는다 — 필요하면 LLM 노드에 커버리지 축을 추가할 수 있다.)
 
-- **루프 파라미터**: 기본 `max_iter=3`, `threshold=99%`. 사용자가 횟수/임계를 다르게 말하면 그 값을 쓴다.
-- **수렴 구조**: ddr-loop(검증=codex / 수정=claude)와 동일. 마지막 라운드는 검증만 하고 보완하지 않는다.
+### 3.5-1. Code 노드 (결정론적, best-effort)
 
-### 가용성 체크
-- `codex --version`을 시도한다. 실패하면:
-  ```
-  codex CLI 미설치. `/codex:setup`을 먼저 실행하세요. (검증 생략 — 지시서는 저장됨)
-  ```
-  를 안내하고 **Phase 5~6을 건너뛰고 종료**한다(지시서 산출물은 그대로 보존).
-
-### 호출
-- **cwd = 프로젝트 루트** (codex가 `.requirements/*.md`를 직접 읽도록).
-- 아래 프롬프트를 **stdin**으로 전달한다 (모델 `zai/glm-5.2`, reasoning effort 레벨 `max` 고정):
+- python 실행이 가능하면 실행한다. 불가하면 이 층을 건너뛰고 LLM 노드로만 판정한다(그 사실을 1줄 로그로 남김):
   ```bash
-  codex exec --skip-git-repo-check -m zai/glm-5.2 -c model_reasoning_effort="max" -
+  python "${CLAUDE_PLUGIN_ROOT}/scripts/docs_helpers.py" check-instruction --repo <REPO_ROOT> --file .requirements/requirement-{slug}.md
   ```
-  - reasoning effort는 CLI 플래그가 아니라 **config 키 `model_reasoning_effort`**로 전달한다(`-c`). 값(레벨)은 `low`/`medium`/`high`/`xhigh`/`max`. (`--effort` 플래그는 존재하지 않음.)
-  - Windows에서 `codex` 실행 파일이 `.cmd`/`.bat`이면 `cmd /c codex exec --skip-git-repo-check -m zai/glm-5.2 -c model_reasoning_effort="max" -` 로 래핑한다.
-  - 장시간(최대 ~30분) 걸릴 수 있다.
+  - Windows에서 `python`이 안 되면 `py -3 ...` 또는 `cmd /c python ...` 순으로 시도한다.
+- 출력의 각 `FAIL <CODE> <경로> <사유>` 줄과 **종료 코드**를 수집한다. 종료 코드 ≠ 0 → Code 위반 있음.
+- 검사 항목: 메타 헤더(`유형:`)·유형 무관 필수(`[작업 목표]`·`[작업 내용]`)·유형별 필수·고정문구(유형 조건부).
 
-### codex 프롬프트 템플릿
-`{grill_me_path}`, `{acceptance_path}`, `{requirement_path}`를 실제 경로로 치환해 전달한다:
+### 3.5-2. LLM 노드 (지시서 내부 4축 건전성) — best-effort: codex 우선, 서브에이전트 폴백
 
-```
-# ROLE
-You are a requirements auditor. The grill-me 정리본 + acceptance 4축 설계본 together are the GROUND TRUTH (확정 요구사항·완료조건·검증 설계).
-The requirement 지시서 is the ARTIFACT to audit. Judge how completely the 지시서 reflects the GROUND TRUTH.
-Do not invent requirements not present in the GROUND TRUTH.
+지시서를 **감사 대상**으로 4축(모순·누락/미결·완료조건↔검증방법·엣지↔기대동작) **내부 건전성**을 판정한다. **codex가 있으면 codex(다른 모델)로 위임**해 모델 다양성을 얻고, 없거나 실패하면 **`requirement-critic` 서브에이전트로 폴백**한다. 두 경로의 판정 기준·출력 의미는 동일하다. (커버리지는 어느 쪽도 판정하지 않는다.)
 
-# GROUND TRUTH — 요구사항 정리본 (read this file directly)
-{grill_me_path}
+#### (a) codex 우선
+- `codex --version`을 시도한다(Windows에서 실행 파일이 `.cmd`/`.bat`이면 `cmd /c`로 래핑). 성공하면 아래로 위임한다.
+- cwd = 프로젝트 루트. 프롬프트를 **stdin**으로 전달한다(모델 `zai/glm-5.2`, `-c model_reasoning_effort="high"` — 필요시 상향):
+  ```bash
+  codex exec --skip-git-repo-check -m zai/glm-5.2 -c model_reasoning_effort="high" -
+  ```
+- 프롬프트 템플릿(`{requirement_path}`를 실제 경로로 치환):
+  ```
+  # ROLE
+  You are an instruction auditor. Judge ONLY the INTERNAL soundness of the 지시서 itself.
+  Do NOT judge coverage against any source. Read the file directly.
 
-# GROUND TRUTH — 완료조건·엣지·오류·검증 4축 설계본 (read this file directly)
-{acceptance_path}
+  # ARTIFACT (read this file directly)
+  {requirement_path}
 
-# ARTIFACT (read this file directly)
-{requirement_path}
+  # TASK — 4축 내부 건전성
+  A 모순: 항목 간 상충 / 완료조건↔작업목표·작업내용 상충 / 동일 대상 수치·식별자·결정값 불일치.
+  B 누락·미결: 완료조건 최소 1개 / 언급된 입력·기능의 처리 정의 / 미결이 "미결로 명시".
+  C 완료조건↔검증방법: 모든 완료조건에 대응 검증방법 / 떠도는 검증방법 없음 / 판정 가능.
+  D 엣지↔기대동작: 명시된 엣지·오류마다 기대동작 / 정상경로와 양립.
 
-# TASK
-1. GROUND TRUTH(정리본+설계본)에서 확정 요구사항·핵심 결정·완료조건·엣지케이스·오류케이스·검증방법·Open Items를 빠짐없이 추출해 체크리스트로 만든다.
-2. 각 항목이 ARTIFACT(지시서)에 반영됐는지 판정한다: ✓ 반영 / ⚠ 부분 / ✗ 누락.
-3. Coverage %를 아래 RUBRIC으로 계산한다.
-4. 보완 필요 항목과 "지시서의 어디를 어떻게 고쳐야 하는지"를 구체적으로 제시한다.
+  # RULES
+  - 각 위반은 지시서 원문 인용을 근거로 한다. 인용으로 못 밝히면 위반 아님(오탐 억제).
+  - 근거 없는 선택 항목의 정당한 생략은 누락이 아니다. 커버리지는 판정하지 않는다.
 
-# OUTPUT FORMAT — STRICT
-No preamble before `## Checklist`. No epilogue after the `Coverage: N%` line.
+  # OUTPUT — STRICT
+  축별 한 줄: A/B/C/D 각 `PASS|FAIL — 근거`.
+  위반이 있으면 `[축] 위치 — 원문 인용 — 문제`로 나열.
+  맨 마지막 줄 정확히: `RESULT: SUCCESS` 또는 `RESULT: FAIL`
+  ```
+- stdout에서 마지막 `RESULT:\s*(SUCCESS|FAIL)`를 파싱해 LLM 판정으로 삼고, 위반 줄을 수집한다. **파싱 실패·실행 오류 시 (b)로 폴백**한다.
 
-## Checklist (from GROUND TRUTH)
-| # | 요구사항 (정리본 근거) | 상태 | 지시서 반영 위치/항목 | 비고 (누락·약한 부분) |
-|---|---|---|---|---|
-| 1 | <정리본 요구사항 한 줄> | ✓/⚠/✗ | <지시서 항목/섹션 or MISSING> | <≤120자, ✗·⚠는 누락 내용 명시> |
-| 2 | ... | ... | ... | ... |
+#### (b) 서브에이전트 폴백
+- codex가 없거나 실패하면 `requirement-critic` 서브에이전트를 **실제 독립 에이전트로** 호출한다. 파일 내용·수정 힌트 없이 **경로만 전달**한다:
+  - `INSTRUCTION_PATH` = `.requirements/requirement-{slug}.md`
+  - `REVIEW_PATH` = `.requirements/requirement-{slug}.gate.json`
+- Critic은 4축을 판정하고 `SUCCESS|FAIL REVIEW_PATH=<path>`만 반환한다. `REVIEW_PATH`의 `findings`를 읽는다.
 
-(GROUND TRUTH의 모든 요구사항을 열거. 같은 주제 요구는 한 행으로 통합하고 상태는 가장 나쁜 것 우선 ✗ > ⚠ > ✓.)
+어느 경로든 결과 = **LLM 판정(SUCCESS/FAIL) + 위반 리스트**.
 
-## Gaps to Fix
-1. [<상태>] <항목> — 지시서의 <항목/섹션>을 <어떻게> 보완. (정리본 근거 "...")
-2. ...
+### 3.5-3. 판정 + 라우팅
 
-(보완 필요 항목만. 최대 10개. 없으면 `- (none)`.)
-
-## Coverage
-Counts: ✓ <a>, ⚠ <b>, ✗ <c>
-<가중 산식을 명시: 각 행 weight = 핵심 요구 2, 부수 요구 1. ✓는 weight 전액, ⚠는 0.5×weight, ✗는 0.
- pct = round(100 × passed_weight / total_weight). 예: "✓2개(2,2), ⚠1개(2→1), ✗1개(1→0) → passed=5 / total=7 → 71%">
-
-Coverage: <integer 0-100>%
-
-# FIELD RULES
-- 상태 기호: 정확히 ✓, ⚠, ✗ 중 하나.
-- ⚠ Partial: 항목은 언급됐으나 정리본의 결정·제약·수치가 일부 누락. 핵심 literal(수치·식별자·결정값)이 빠지면 ⚠가 아니라 ✗.
-- ✗ Missing: 지시서에 해당 요구가 전혀 없거나 정반대.
-- Open Items(미결)는 "지시서에 미결로 명시됐는가"로 판정한다.
-- 의심스러우면 더 엄격한 쪽(✗ over ⚠, ⚠ over ✓)을 택한다.
-- 100%는 모든 행이 ✓일 때만.
-```
-
-### 루프 실행 (i = 1 → max_iter)
-
-각 라운드 `i`에서:
-1. **검증**: 위 codex 호출을 실행하고 stdout을 캡처한다. 마지막 `Coverage: <N>%` 라인에서 정수를 추출한다(정규식 `Coverage:\s*(\d{1,3})%`, 마지막 매칭). trajectory에 N을 기록한다.
-   - 로그 1줄: `[req-spec] iteration i/{max_iter}: Coverage N%`.
-   - **파싱 실패**: codex raw 출력을 그대로 노출하고 루프를 중단한다(현 지시서 확정) → Phase 5.
-2. **임계 도달** (`N ≥ threshold`): 수렴 성공. 루프를 종료한다 → Phase 5.
-3. **마지막 라운드** (`i == max_iter`): cap 도달. 보완하지 않고 루프를 종료한다(마지막은 검증만) → Phase 5.
-4. **그 외**: codex `Gaps to Fix`를 지시서에 반영해 `.requirements/requirement-{slug}.md`를 **덮어쓴다**.
-   - meta-prompter 출력 규약(개조식 종결, 항목 형식, 가드레일 4문구, 코드블록 본문 구조)을 유지한다(재서술 금지).
-   - 다음 라운드(`i+1`)로 진행해 1번부터 재검증한다.
-
-trajectory(예: `82% → 94% → 99%`)·최종 Coverage·반영 라운드 수·종료 사유(임계/cap)를 Phase 5 보고용으로 보존한다.
+- **게이트 FAIL** = (Code 종료코드 ≠ 0) **또는** (Critic FAIL). 그 외 **PASS**.
+- 결과를 아래 형식으로 출력한다 — Code FAIL 줄과 Critic findings를 **하나의 위반 리스트**로 병합한다:
+  ```
+  [게이트] PASS | FAIL
+  위반: (있을 때만, 축/항목 — 위치 — 근거)
+    - Code / INSTR_TYPE_REQUIRED — requirement-{slug}.md — [완료 조건] 없음 (유형 기능개발 필수)
+    - LLM C / AC-VERIFY-LINK — [완료 조건] 3항 — "응답 200ms 이내"에 대응 검증방법 없음
+  ```
+- **PASS** → 지시서 확정. Phase 5(후속 핸드오프)로 진행한다.
+- **FAIL** → 위반 리스트를 노출하고, **반드시 `AskUserQuestion` 1회**로 분기한다. 임의로 진행하지 않는다.
+  - question: "지시서 검증 게이트 FAIL — 위반 {N}건. 어떻게 할까요?"
+  - options:
+    - **자가수정 (Recommended)** — 위반 항목만 지시서에 반영해 `.requirements/requirement-{slug}.md`를 덮어쓴 뒤(meta-prompter 출력 규약 유지) **Phase 3.5를 재실행**. 자가수정 재실행은 **최대 2회**.
+    - **재인터뷰** — 정본 자체의 결함이면 Phase 1/1.5로 돌아가 정본을 다시 다듬는다.
+    - **무시하고 진행** — 위반을 남긴 채 Phase 5로 진행(권장하지 않음).
+  - **게이트가 PASS 되거나 사용자가 "무시하고 진행"을 명시적으로 고르기 전에는 하류(task-write)로 넘어가지 않는다.**
 
 ---
 
-## Phase 5 — 수렴 결과 리뷰
+## Phase 5 — 종료 및 후속 핸드오프
 
-> ⛔ **게이트**: 사용자의 답을 받기 **전에는 절대** Phase 6으로 넘어가지 않는다. 임의로 가정하지 않는다.
+> ⛔ **게이트**: 지시서를 먼저 마감 보고한 뒤, 후속 핸드오프 질문을 **반드시 AskUserQuestion으로** 묻는다. 이 스킬은 구현 코드를 직접 작성하지 않는다 — 후속 진행 여부는 오직 사용자 선택으로만 결정된다.
 
-- 루프 결과를 텍스트로 요약·노출한다: **trajectory**(`82% → 94% → 99%`), **최종 Coverage %**, 반영한 보완 라운드 수, **종료 사유**(임계 도달 / cap 도달), 남은 ✗/⚠ 항목과 마지막 `Gaps to Fix`.
-- 리뷰 시 **반드시** `AskUserQuestion`을 사용.
-- `AskUserQuestion` 1회:
-  - 임계 도달 시 question: "수렴 완료 (Coverage {N}%). 이대로 확정할까요?"
-  - cap 도달(미달) 시 question: "최대 {max_iter}회 반복했으나 {N}% (임계 {threshold}% 미달). 어떻게 할까요?"
-  - options: **확정 (Recommended)** / **보완 1회 더 — 마지막 Gaps 반영**
+### 5-1. 지시서 마감
+- Phase 3.5 게이트를 PASS한 `.requirements/requirement-{slug}.md`를 확정하고, 최종 경로를 한 줄로 보고한다.
 
----
-
-## Phase 6 — 종료 및 후속 핸드오프
-
-> ⛔ **게이트**: Phase 5의 사용자 선택에 따라 지시서를 먼저 마감한 뒤, 후속 핸드오프 질문을 **반드시 AskUserQuestion으로** 묻는다. 이 스킬은 구현 코드를 직접 작성하지 않는다 — 후속 진행 여부는 오직 사용자 선택으로만 결정된다.
-
-### 6-1. 지시서 마감
-- **확정 선택**: 현 지시서를 그대로 확정하고 최종 경로 + 최종 Coverage를 한 줄로 보고한다.
-- **보완 1회 더 선택**: 마지막 `Gaps to Fix`를 지시서에 반영해 `.requirements/requirement-{slug}.md`를 덮어쓴다(meta-prompter 출력 규약 유지). 갱신 후 최종 경로를 보고한다. (재검증은 하지 않는다 — 루프는 Phase 4에서 이미 종료.)
-
-### 6-2. 후속 파이프라인 핸드오프 (AskUserQuestion, 1회)
-- 6-1에서 지시서가 마감된 **직후**(확정/보완 어느 경로든), **반드시** `AskUserQuestion`으로 후속 실행 여부를 묻는다. 텍스트로만 묻고 넘어가지 않는다.
+### 5-2. 후속 파이프라인 핸드오프 (AskUserQuestion, 1회)
+- 5-1 직후, **반드시** `AskUserQuestion`으로 후속 실행 여부를 묻는다. 텍스트로만 묻고 넘어가지 않는다.
 - question: "지시서 확정 완료 (`{최종 경로}`). 후속 파이프라인(pipeline-runner)을 실행할까요?"
 - options (2개):
   - **지금 바로 실행 (Recommended)** — 이 세션에서 pipeline-runner를 인라인 실행
@@ -232,10 +201,10 @@ trajectory(예: `82% → 94% → 99%`)·최종 Coverage·반영 라운드 수·�
 | grill-me 미확정/사용자 중단 | 파이프라인 중단, 지시서 생성 안 함 |
 | acceptance-design 미확정/사용자 중단 | 파이프라인 중단, 지시서 생성 안 함 (정리본은 보존) |
 | meta-prompter 필수 항목 누락 | meta-prompter 규칙대로 ≤3개 묶음 질문 |
-| codex 미설치 | `/codex:setup` 안내, Phase 5~6 스킵, 지시서 보존하고 종료 |
-| codex timeout/실행 오류 | 에러 노출, 지시서 보존, 검증 생략 종료 |
-| `Coverage:` 파싱 실패 | codex raw 출력 노출 후 Phase 5 진행 |
-| 같은 slug 재실행 | grill-me가 suffix(`-2`)로 slug를 분기하면 충돌 없음. 동일 slug면 Phase 6 갱신 흐름으로 흡수 |
+| 지시서 검증 게이트 FAIL | 위반 리스트 노출 → 자가수정/재인터뷰/무시 분기, PASS 전 하류 차단 (Phase 3.5) |
+| python 미설치 | Code 노드 스킵, LLM 노드로만 게이트 판정 (Phase 3.5) |
+| codex 미설치/실행·파싱 오류 | LLM 노드는 `requirement-critic` 서브에이전트로 폴백 (Phase 3.5) |
+| 같은 slug 재실행 | grill-me가 suffix(`-2`)로 slug를 분기하면 충돌 없음. 동일 slug면 기존 파일을 덮어쓴다 |
 
 ## slug 일관성 규칙
 
