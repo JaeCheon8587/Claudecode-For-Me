@@ -109,7 +109,7 @@ def test_public_branch_review_contract_mentions_hardened_rules():
     skill = (REPO_ROOT / "skills" / "branch-review" / "SKILL.md").read_text(encoding="utf-8")
     readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
 
-    assert "임의 축(bugs/style/spec/perf)에 CRITICAL" in skill
+    assert "Recommendation precedence" in skill
     assert "`--spec <path>`" in skill
     assert "chunk-<id>.log" in skill
     assert "임의 축 CRITICAL" in readme

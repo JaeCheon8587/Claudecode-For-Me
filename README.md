@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v3.57.0 · 커스텀 스킬 14종 + 슬래시 커맨드 18종 + 에이전트 18종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v3.58.0 · 커스텀 스킬 11종 + 슬래시 커맨드 15종 + 에이전트 9종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,12 +11,12 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `3.57.0` |
+| 버전 | `3.58.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
 | 네임스페이스 | `/claudecode-for-me:<name>` |
-| 구성요소 | Skill 14 · Command 18 · Agent 18 (`agents/`) · Python helper 9 (`scripts/`) |
+| 구성요소 | Skill 11 · Command 15 · Agent 9 (`agents/`) · Python helper 6 (`scripts/`) |
 | 외부 연동 도구 | [`codenavigator`](https://github.com/JaeCheon8587/codenavigator) (PyPI) — codenav-bootstrap / codenav-frontmatter-gen 슬래시가 호출 |
 
 플러그인은 **글로벌 캐시**에 설치되므로 한 번 설치 후 모든 프로젝트의 **새 세션**에서 자동 노출된다. 프로젝트별 재설치 불필요.
@@ -66,6 +66,40 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v3.58.0 — 문서 체계를 Intent 1문서로 통합: task-write/ssot-write/work-packet-write/pipeline-runner 제거
+
+Intent는 **기능 명세와 작업 지시를 한 문서에** 담는다. Intent : 작업 단위 = **1:1**이라 TASK를
+별도 문서로 쪼갤 이유가 사라졌고, 그러자 영구 SSOT 투영(`ssot-write`)과 그 어댑터
+(`work-packet-write`), 이들을 엮던 오케스트레이터(`pipeline-runner`)도 함께 불필요해졌다.
+파이프라인을 고치는 대신 **걷어냈다**.
+
+**삭제 — 43 파일 / -4,728줄.** 스킬 4(`task-write`·`ssot-write`·`work-packet-write`·
+`pipeline-runner`) / 동명 커맨드 4 / 에이전트 9(`task-planner`·`task-writer`·`task-critic`,
+`ssot-planner`·`ssot-writer`·`ssot-critic`, `wp-builder`·`wp-critic`, `requirement-critic`) /
+스크립트 3(`pipeline_runner_init.py`·`pipeline_runner_check.py`·`docs_conformance.py`) /
+템플릿 2(`docs/.templates/App/TASK/`·`App/WORK_PACKET/`) / 테스트 6 /
+문서 1(`docs/DEVELOPMENT_PIPELINE.md`).
+
+**requirement-spec 재작성.** 체인 메타 스킬(acceptance-design·meta-prompter 인라인 호출,
+`.requirements/` 산출물, 지시서 검증 게이트, pipeline-runner 핸드오프)을 전부 걷어내고
+Phase 0~3으로 다시 썼다 — **Phase 0 Orient**(App·유형 한 턴 확인, 템플릿 경로 3단 해석,
+NNN 채번) → **Phase 1** grill-me 인터뷰 인라인(오버라이드 3개: 탐색 영역에 완료 조건·검증
+방법·Out of scope·결정과 기각 대안 추가 / 출력 포맷을 Intent Part 1로 / grill-me Phase 4의
+정리본 파일 자동 저장 단계 제외) → **Phase 2** Part 2 파생(사용자 질문 없이 FR·엣지·오류·
+Acceptance·Verification·Risks·Handoff 도출) → **Phase 3** 승인 1회(`Open questions`가 `none`
+∧ Handoff에 `pending` 없음 ∧ 유형 단일값 → 상태 `approved`). 산출물은
+`docs/<App>/INTENT/<App>-INT-<NNN>.md` **1개**, 인자는 `[--app <App>] [--type 기능개발|리팩토링]`.
+
+**신설 템플릿**: `docs/.templates/App/INTENT/APP-INT-001-TEMPLATE.md` — Part 1 기능 명세
+6섹션 + Part 2 작업 지시 7섹션.
+
+**`scripts/docs_helpers.py` 정리.** `check-task` 서브커맨드, `TASK_SECTION*`·
+`TASK_SUBSECTION`·`TASK_OPTIONAL_SECTION_PLACEHOLDER_WORDS` 상수, `next-id`의 WORK_PACKET
+분기를 제거했다. 남은 서브커맨드는 7종(`list-apps`/`next-id`/`parse-fc`/`parse-frd`/
+`git-user`/`check`/`check-instruction`)이고 `TASK_FILENAME_PATTERN`은 보존했다.
+
+**검증**: `pytest tests/` **184 passed, 1 skipped**.
 
 ### v3.57.0 — requirement-spec에 지시서 검증 게이트 추가 + codex 자기검증 루프 제거
 
@@ -1553,7 +1587,7 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 
 ## 5. 플러그인 구성요소
 
-### Skill 14종
+### Skill 11종
 
 | Skill | 슬래시 커맨드 | 역할 |
 |---|---|---|
@@ -1565,14 +1599,11 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `forge-scope` | `/claudecode-for-me:forge-scope <WORK_PACKET-or-TASK-doc-path> [--name <slug>] [--force]` | Work Packet을 우선 입력으로 받아 Ready gate, 연결 TASK, Required SSOT Execution Matrix를 소비해 워크트리에서 고정 계약-TDD 파이프라인(계약+테스트→구현→빌드/유닛테스트)으로 구현. TASK 직접 입력은 legacy 호환. 빌드는 `.csproj` 단위만(솔루션 금지). 정리는 `forge-cancel`. |
 | `grill-me` | `/claudecode-for-me:grill-me [주제]` | 1문 1답으로 요구사항 모호점 추적 |
 | `meta-prompter` | `/claudecode-for-me:meta-prompter [요청]` | 거친 요청 → 구조화된 메타 프롬프트 |
-| `requirement-spec` | `/claudecode-for-me:requirement-spec [주제]` | grill-me→acceptance-design→meta-prompter→지시서 검증 게이트를 자동 체인. 요구사항 도출·완료조건 4축 설계·개발 지시서 `.requirements/requirement-{slug}.md` 산출 후 Phase 3.5 게이트(Code 구조검사 + LLM 4축 건전성)로 검증, 통과 전 하류 차단. 확정 후 `AskUserQuestion`으로 pipeline-runner 실행 여부를 물어 인라인 핸드오프 |
+| `requirement-spec` | `/claudecode-for-me:requirement-spec [--app <App>] [--type 기능개발\|리팩토링]` | grill-me 인터뷰(인라인)로 요구사항을 도출해 Intent Part 1(기능 명세 6섹션)을 쓰고, Part 2(작업 지시 7섹션)를 질문 없이 파생한 뒤 승인 1회로 확정. 산출물은 `docs/<App>/INTENT/<App>-INT-<NNN>.md` 1개 |
 | `safe-pull` | `/claudecode-for-me:safe-pull [원격/브랜치]` | git pull 전 fetch(비파괴)로 변경·충돌·사이드이펙트 브리핑 후 AskUserQuestion 컨펌 게이트 |
 | `slack-brief` | `/claudecode-for-me:slack-brief [--channels <key,key>] [--dry-run] [--max <N>]` | 대화에서 토픽을 뽑아 다중선택으로 확정받고 타입 5종 양식(기승전결)으로 정리해 Slack 채널 담당 봇을 멘션한 **작업 트리거**로 전송. 토픽 1개 = 메시지 1개, 본문에 작업 지시문 금지(봇이 담당 업무 기준으로 처리), 전송 전 승인 게이트. 단일 에이전트 |
-| `ssot-write` | `/claudecode-for-me:ssot-write <TASK-path> [--app <APP>] [--process <path>]` | Opus Main이 Opus Planner·Sonnet Writer·Opus Critic을 실제 독립 에이전트로 호출한다. Writer가 계획된 SSOT를 직접 수정하고 Critic은 Plan 없이 TASK 핵심 의미와 실제 SSOT 투영을 네 의미 축으로 최대 3회 비교 |
-| `task-write` | `/claudecode-for-me:task-write [--app <APP>] [--from <requirements-path>] [요청]` | 요구사항 문서/자연어 요청에서 TASK 작업 범위 계약만 생성. FRD/FC/ADR/ADR-CATALOG/PRD/ARCHITECTURE 분석·수정 없음 |
-| `work-packet-write` | `/claudecode-for-me:work-packet-write <TASK-path> [--app <APP>] [--process <process-dir>] [--name <title>]` | TASK와 Required SSOT Execution Matrix를 연결하는 forge 입력용 Work Packet 생성. TASK/SSOT/코드 수정 없이 실행 규칙·경계·검증 입력만 정리 |
 
-### Command 19종
+### Command 15종
 
 | Command | 설명 |
 |---|---|
@@ -1588,20 +1619,14 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `forge-scope` | forge-scope skill 진입 |
 | `grill-me` | grill-me skill 진입 |
 | `meta-prompter` | meta-prompter skill 진입 |
-| `pipeline-runner` | pipeline-runner skill 진입. requirement-spec 산출물 이후 작업 규모를 판단해 후속 스킬 파이프라인을 설계·컨펌 후 build/progress 문서 기반으로 실행 |
-| `requirement-spec` | requirement-spec skill 진입. grill-me→acceptance-design→meta-prompter→지시서 검증 게이트(Code+LLM) 자동 체인 메타 스킬. 확정 후 pipeline-runner 실행 여부 컨펌 게이트 |
+| `requirement-spec` | requirement-spec skill 진입. grill-me 인터뷰 → Intent Part 1 → Part 2 파생 → 승인 1회. 산출물은 `docs/<App>/INTENT/<App>-INT-<NNN>.md` 1개 |
 | `safe-pull` | safe-pull skill 진입. fetch 후 브리핑 → 컨펌 게이트 → pull |
 | `slack-brief` | slack-brief skill 진입. 토픽 모달 → 채널 모달 → 토픽당 메시지 작성 → self-check 8항목 → 프리뷰 승인 게이트 → `channel_id`로 순차 전송. `--dry-run`은 프리뷰까지만 |
-| `ssot-write` | Opus Main 기반 3-agent ssot-write 진입. Main이 build/progress를 읽고 Planner→Writer→Critic을 순환하며 Critic FAIL은 Planner의 실패 target 전용 REPAIR 계획으로 돌아간다. git commit은 범위 밖 |
-| `task-write` | task-write skill 진입. TASK 파일만 생성하고 SSOT 문서는 수정하지 않음 |
-| `work-packet-write` | work-packet-write skill 진입. TASK와 Required SSOT Execution Matrix를 연결하는 Work Packet만 생성하고 다음 단계를 forge-scope로 넘김 |
 
-### Agent 18종
+### Agent 9종
 
-에이전트는 두 계열로 나뉜다. **오케스트레이션 하네스**는 메인 오케스트레이터가 직접 스폰하는
-범용 위성이고, **스킬 전용 위성**은 해당 슬래시 커맨드 내부에서만 호출된다.
-
-#### 오케스트레이션 하네스 (9)
+에이전트 9종은 전부 **오케스트레이션 하네스**다 — 메인 오케스트레이터가 직접 스폰하는 범용 위성이고,
+특정 슬래시 커맨드 전용 위성은 없다.
 
 | Agent | 모델 / effort | 역할 |
 |---|---|---|
@@ -1657,24 +1682,6 @@ coder도 요구하므로(HARD LIMIT 2 → BLOCKED) 목적지를 가르지 못했
 변경은 coder→scribe 순차로 처리한다. 분리 근거는 v3.36.0, 근거 추적 계약의 세부(소스-퍼스트
 절차·`spec` 소스·리뷰 연결)는 v3.37.0 체인지로그 참조.
 
-#### 스킬 전용 위성 (9)
-
-| Agent | 모델 | 소속 스킬 | 역할 |
-|---|---|---|---|
-| `task-planner` | opus | `task-write` | 요구사항 → TASK 계획 + 고정 완료기준 |
-| `task-writer` | sonnet | `task-write` | plan.json 범위의 TASK 파일 1개 작성 |
-| `task-critic` | opus | `task-write` | 요구사항 원문 ↔ 실제 TASK 독립 대조 판정 |
-| `ssot-planner` | opus | `ssot-write` | TASK → SSOT 변경 계획 |
-| `ssot-writer` | sonnet | `ssot-write` | plan.json 범위의 SSOT 실제 작성 |
-| `ssot-critic` | opus | `ssot-write` | TASK 핵심 의미 ↔ 실제 SSOT 투영 독립 대조 |
-| `wp-builder` | opus | `work-packet-write` | handoff·TASK 근거로 Work Packet 링킹 작성 |
-| `wp-critic` | opus | `work-packet-write` | Work Packet 링킹 정확성만 판정(내용 진위는 판정 안 함) |
-| `requirement-critic` | opus | `requirement-spec` | 지시서 내부 4축(모순·누락·완료조건↔검증방법·엣지↔기대동작) 건전성 독립 판정 — Phase 3.5 게이트 LLM 노드(codex 있으면 codex 위임, 없으면 이 서브에이전트) |
-
-계열별로 `writer`는 sonnet, `planner`/`critic`은 opus다. writer가 sonnet인 이유는 위에 opus
-planner가 `plan.json`으로 판단을 끝내주기 때문이며, 이 전제가 없는 오케스트레이션 하네스에서는
-문서 작성 위성(`scribe`)이 opus인 것과 대비된다.
-
 ---
 
 ## 6. Skill 상세
@@ -1697,7 +1704,7 @@ planner가 `plan.json`으로 판단을 끝내주기 때문이며, 이 전제가 
 - **Spec 5층 fallback**: `--spec <path>` → 이슈본문 → docs/specs → PR description → 커밋 메시지 → 부재 (HIGH~NONE 신뢰도 등급)
 - **Standards 신뢰도 등급 (신규)**: lint설정+CLAUDE.md/CONTRIBUTING 존재 여부로 STRONG/WEAK/NONE — 규칙 문서 없는 레포에서 style 의견이 과신되는 것 방지
 - **Recommendation precedence**: 임의 축 CRITICAL → Conflicts → Intent mismatch → spec MISSING/PARTIAL≥2 → 임의축 MAJOR → SHIP 순으로 상위 1개만 채택
-- **templates/**: 4 finder 프롬프트(`bugs/style/spec/perf-finder.md`) + 최종 출력 스켈레톤(`report-template.md`) + process 문서 2종을 `skills/branch-review/templates/`에서 관리 (ssot-write와 동일 관례). 출력 포맷은 SKILL.md에 하드코딩하지 않고 `report-template.md` 단일 출처
+- **templates/**: 4 finder 프롬프트(`bugs/style/spec/perf-finder.md`) + 최종 출력 스켈레톤(`report-template.md`) + process 문서 2종을 `skills/branch-review/templates/`에서 관리. 출력 포맷은 SKILL.md에 하드코딩하지 않고 `report-template.md` 단일 출처
 - **BLUF + 요약우선**: 리포트 최상단 1줄 결정 라벨+카운트, 청크/대형 diff는 Summary·Recommendation을 verbatim보다 먼저 노출. CRITICAL 전건 열거는 Summary 1곳으로 단일화
 - **영속화**: `.process/branch-review-<sha>/`(build+progress) + `.review/branch-review-<sha>.md`(최종보고). `--resume`으로 중단된 청크 리뷰 재개(완료 청크는 `chunk-<id>.log` raw 출력으로 재사용)
 - **다언어**: TS/JS · Python · Go · Rust · Java/Kotlin · C#/.NET · Ruby · Swift
@@ -1755,29 +1762,7 @@ codenav --root <repo> ui --port 9876
 
 상세는 [codenavigator README](https://github.com/JaeCheon8587/codenavigator#readme) 및 [frontmatter 규약](https://github.com/JaeCheon8587/codenavigator/blob/main/docs/frontmatter.md) 참조.
 
-### 6.3 task-write / ssot-write (TASK 계약 → 영구 SSOT 반영)
-
-```
-/claudecode-for-me:task-write --app Billing --from .requirements/order-refund.md
-/claudecode-for-me:ssot-write docs/Billing/TASK/Billing-TASK-014.md --app Billing
-/claudecode-for-me:work-packet-write docs/Billing/TASK/Billing-TASK-014.md --app Billing
-/claudecode-for-me:ssot-write docs/Billing/TASK/Billing-TASK-014.md --process .process/Billing-TASK-014
-```
-
-- **책임 분리** — `task-write`는 TASK 파일만 생성한다. PRD/FC/FRD/ADR/ADR-CATALOG/ARCHITECTURE 분석·수정·후보 작성은 금지.
-- **실제 에이전트 분리** — Main은 Opus, Planner는 Opus, Writer는 Sonnet, Critic은 Opus다. Main이 세 역할을 대신하지 않는다.
-- **Bootstrap-only Agent dispatch** — registry를 조회하지 않고 세 역할 모두 `general-purpose` 독립 agent에 역할 정의 경로를 전달한다. `ssot-*` availability probe는 금지하며 Planner/Critic=Opus, Writer=Sonnet 모델 고정은 유지한다.
-- **파일 계약** — Planner는 `plan.json`, Writer는 `changes.json`, Critic은 `review.json`만 소유한다. 에이전트 간에는 내용 복사 없이 파일 경로만 전달한다.
-- **Writer 직접 수정** — Writer가 `plan.json.target_path`의 SSOT를 직접 수정하고 파일·섹션·anchor·summary·완료 조건을 `changes.json`에 cycle 간 누적 기록한다.
-- **진행 문서** — `build.md`가 고정 실행 설계, `progress.md`가 현재 cycle·역할·결과다. Main은 모든 Agent 호출 전에 둘을 다시 읽는다.
-- **좁은 Critic** — Critic은 Plan을 읽지 않고 TASK 핵심 의미와 실제 SSOT 투영만 직접 비교한다. 모순·핵심 누락·금지 범위 포함·근거 없는 추가 결정 중 하나라도 실패하면 `FAIL + REVIEW_PATH`를 반환한다.
-- **재계획 루프** — Critic FAIL은 Writer가 아니라 Planner로 돌아가며 Planner는 FAIL target만 포함한 REPAIR 계획을 작성한다. Critic은 최대 3회이며 세 번째 FAIL은 `MANUAL_REQUIRED`다.
-- **NOOP 검토** — NOOP도 Critic을 호출하고 Writer만 생략한다.
-- **handoff 즉시 생성** — Critic SUCCESS 직후 승인 질문이나 git commit 없이 handoff를 생성한다. git 작업은 이 스킬 범위 밖이다.
-- **실행 manifest** — `handoff.json`이 `work-packet-write`의 단일 machine input이다. Gate Controller·state·baseline·audit·resume는 사용하지 않는다.
-- **후속 단계** — Work Packet 생성 후 `Next: forge-scope`로 구현 단계에 넘긴다.
-
-### 6.4 forge-scope / forge-cancel (harness_framework 임베디드)
+### 6.3 forge-scope / forge-cancel (harness_framework 임베디드)
 
 `forge-scope`는 Work Packet을 우선 입력으로 받아 워크트리에서 **고정 계약-TDD 파이프라인**으로 구현한다. python(`worktree_setup.py`)은 **셋업·검증·정리만** 하고, 실제 코딩(계약+테스트→구현→빌드/유닛테스트)은 호출 세션이 워크트리 안에서 인라인으로 수행한다. 빌드/테스트는 **솔루션(`*.sln`) 금지, 대상 `.csproj` 단위만**. TASK 직접 입력은 legacy 호환 경로로 유지된다.
 
@@ -1835,7 +1820,9 @@ git repo·입력 문서 존재·**미결 항목 없음**을 검사한다. Work P
 .process/
 ```
 
-### 6.5 grill-me
+Work Packet·TASK 를 생성하던 스킬(`work-packet-write`·`task-write`)이 v3.58.0에서 제거되어, 두 입력 경로는 현재 **재설계 대기 상태**다.
+
+### 6.4 grill-me
 
 ```
 /claudecode-for-me:grill-me 알림 시스템 설계
@@ -1850,7 +1837,7 @@ git repo·입력 문서 존재·**미결 항목 없음**을 검사한다. Work P
 - 확정 시 정리본을 **`.requirements/grill-me-{slug}.md` 자동 저장**(slug=영어 kebab, 동명 시 번호 suffix)
 - 산출물은 정리본까지 — **구현 plan·`ExitPlanMode` 미수행**. 다음 단계(meta-prompter 등)는 사용자가 정리본을 받아 진행
 
-### 6.6 meta-prompter
+### 6.5 meta-prompter
 
 ```
 /claudecode-for-me:meta-prompter ApiGateway에 health check 엔드포인트 추가
@@ -1863,22 +1850,21 @@ git repo·입력 문서 존재·**미결 항목 없음**을 검사한다. Work P
 - **채팅 출력 전용**: 마크다운 코드블록 1개로 wrap, `.md` 저장 안 함
 - 개조식 종결 강제, 출력 끝 `[에이전트 행동 규칙]` 4문구 자동 부착
 
-### 6.7 requirement-spec (메타 스킬 — grill-me→acceptance-design→meta-prompter→지시서 검증 게이트 파이프라인)
+### 6.6 requirement-spec (grill-me 인터뷰 → Intent Part 1 → Part 2 파생 → 승인 1회)
 
 ```
-/claudecode-for-me:requirement-spec 사칙연산 계산기 개발
+/claudecode-for-me:requirement-spec [--app <App>] [--type 기능개발|리팩토링]
 ```
 
-- **메타 스킬**: grill-me(6.5)·acceptance-design(6.12)·meta-prompter(6.6)를 자동 인라인 체인으로 엮고 지시서 검증 게이트(Code+LLM)를 붙임. 1회 호출 → 자동 진행(사용자 상호작용은 grill-me 인터뷰 + acceptance-design 인터뷰 + 게이트 FAIL 분기 + 후속 핸드오프만)
-- **파이프라인**: `요구사항 도출(grill-me) → 완료조건·엣지·오류·검증 4축 설계(acceptance-design) → 개발 지시서 정제(meta-prompter) → .requirements/requirement-{slug}.md 저장 → 지시서 검증 게이트(Code 구조검사 + LLM 4축 건전성)`
-- **Phase 1.5**: acceptance-design의 타겟 doc = grill-me 정리본(`grill-me-{slug}.md`). 설계본 `{slug}-acceptance.md` 산출. meta-prompter 입력이 정리본 + 설계본 둘 다를 포함 → 지시서에 완료조건·검증이 실림
-- **slug 일관**: 세 산출물이 동일 slug 공유 — `grill-me-{slug}.md`(정리본) ↔ `{slug}-acceptance.md`(설계본) ↔ `requirement-{slug}.md`(지시서)
-- **Phase 3.5 지시서 검증 게이트**: 지시서를 감사 대상으로 내부 4축(모순·누락·완료조건↔검증방법·엣지↔기대동작) 판정. **Code 노드**=`docs_helpers.py check-instruction`(메타헤더·필수항목·고정문구 구조검사, python 있으면 실행), **LLM 노드**=codex 있으면 codex(soundness 전용 프롬프트) 없으면 `requirement-critic` 서브에이전트. Code `exit≠0` ∪ LLM FAIL → 게이트 FAIL, 위반 리스트 출력 후 자가수정/재인터뷰/무시 분기, **PASS 전 하류(task-write) 차단**
-- **Phase 게이트**: 각 Phase 전이 조건 미충족 시 다음 Phase 진입 금지
-- **codex/python 미설치 시** 게이트는 best-effort로 폴백(Code 노드 스킵 또는 LLM 노드 서브에이전트) — 검증은 계속 동작
-- 산출물은 지시서까지 — **구현 코드 미작성·`ExitPlanMode` 미호출**
+- **산출물은 Intent 1개** — `docs/<App>/INTENT/<App>-INT-<NNN>.md`. 인터뷰 정리본·별도 지시서·TASK 등 부속 문서는 만들지 않는다
+- **Phase 0 Orient**: App·유형(`기능개발`/`리팩토링`)을 한 턴에 묶어 1회 확인 → 템플릿 경로를 repo → `${CLAUDE_PLUGIN_ROOT}` → 없으면 중단 순 3단으로 해석 → `docs/<App>/INTENT/` 의 `<App>-INT-*.md` 최대 번호 + 1(3자리 0패딩)로 NNN 채번 → 템플릿 복사 후 `상태`=`draft`
+- **Phase 1 grill-me 인터뷰(인라인)**: `grill-me`(6.4) Phase 0~4를 그대로 수행하되 오버라이드 3개 — ① 탐색 영역에 `완료 조건·검증 방법`·`Out of scope`·`결정과 기각 대안` 추가 ② 출력 포맷을 정리본(배경·전개·전환·결론) 대신 **Intent Part 1 6섹션**으로 교체 ③ grill-me Phase 4의 **정리본 파일 자동 저장 단계만 제외**(리뷰 1~3단계는 유지)
+- **Phase 2 Part 2 파생**: 사용자에게 질문하지 않고 **Part 1만 근거로** 7섹션(Functional requirements / Edge cases / Error cases / Acceptance / Verification / Risks / Handoff)을 채운다. FR은 Outcome·Decisions·Constraints에서 추적 가능해야 하고, 해당 없는 섹션은 `none`, 모르는 Handoff 값은 `pending`
+- **Phase 3 승인(1회)**: 경로와 Part 1·2 섹션별 핵심 요약 제시. 승인 조건은 `Open questions`가 `none` ∧ Handoff에 `pending` 없음 ∧ `유형`이 단일값으로 확정. 충족 시 `상태`=`approved`, 거절·중단 시 `draft` 유지
+- **Intent 템플릿**: `docs/.templates/App/INTENT/APP-INT-001-TEMPLATE.md` — Part 1 기능 명세 6섹션(Problem / Outcome / Affected / Constraints / Decisions / Open questions) + Part 2 작업 지시 7섹션
+- **경계**: 클래스명·파일명·구현 방법은 어느 Part에도 쓰지 않는다(개발 세션 몫). 후속 스킬 자동 호출 없음, `ExitPlanMode` 미호출
 
-### 6.8 commit-analysis
+### 6.7 commit-analysis
 
 ```
 /claudecode-for-me:commit-analysis
@@ -1889,7 +1875,7 @@ git repo·입력 문서 존재·**미결 항목 없음**을 검사한다. Work P
 - Co-Authored-By / "Generated with Claude Code" 문구 제외
 - 한글 커밋 메시지
 
-### 6.9 doc-driven-review
+### 6.8 doc-driven-review
 
 ```
 /claudecode-for-me:doc-driven-review docs/spec-feature.md
@@ -1921,7 +1907,7 @@ git repo·입력 문서 존재·**미결 항목 없음**을 검사한다. Work P
 
 ---
 
-### 6.10 safe-pull
+### 6.9 safe-pull
 
 ```
 /claudecode-for-me:safe-pull                  # 현재 브랜치 추적 upstream 자동
@@ -1948,13 +1934,13 @@ git repo·입력 문서 존재·**미결 항목 없음**을 검사한다. Work P
 
 ---
 
-### 6.11 acceptance-design
+### 6.10 acceptance-design
 
 ```
 /claudecode-for-me:acceptance-design docs/feature.md
 ```
 
-타겟 문서(spec/FRD)는 "무엇을 만든다"는 적어도 **완료조건·엣지케이스·오류케이스·검증방법**이 비거나 모호한 경우가 많다. acceptance-design은 그 doc를 ground truth로 읽고 위 4축을 사용자와 같이 설계한다. 질문 방식은 grill-me(6.5)와 동일하되, 시작 시 doc를 읽고 질문 범위를 4축으로 고정한다는 점이 다르다.
+타겟 문서(spec/FRD)는 "무엇을 만든다"는 적어도 **완료조건·엣지케이스·오류케이스·검증방법**이 비거나 모호한 경우가 많다. acceptance-design은 그 doc를 ground truth로 읽고 위 4축을 사용자와 같이 설계한다. 질문 방식은 grill-me(6.4)와 동일하되, 시작 시 doc를 읽고 질문 범위를 4축으로 고정한다는 점이 다르다.
 
 - **doc 입력 필수**: `$ARGUMENTS` doc 경로 → `Read` 1회. 경로 없음 "문서 경로 필수" / 파일 없음 "오류: 문서 파일 없음" 종료.
 - **4축 고정**: 완료조건(Acceptance Criteria) / 엣지케이스 / 오류케이스 / 검증방법. doc에 명시된 것은 확인, 빈 곳·모호한 곳 우선 질문.
@@ -1965,7 +1951,7 @@ git repo·입력 문서 존재·**미결 항목 없음**을 검사한다. Work P
 
 ---
 
-### 6.12 ddr-loop (문서↔코드 수렴 루프)
+### 6.11 ddr-loop (문서↔코드 수렴 루프)
 
 ```
 /claudecode-for-me:ddr-loop LOADER-WP-007    # Work Packet 기반 forge-scope면 docs 자동 구성
@@ -2086,7 +2072,7 @@ Claudecode-For-Me/
 ├── .claude-plugin/
 │   ├── plugin.json              # 매니페스트 (name·version·author)
 │   └── marketplace.json         # 마켓플레이스 등록 정보
-├── agents/                      # 서브에이전트 정의 16종 (5절 참조)
+├── agents/                      # 서브에이전트 정의 9종 (5절 참조)
 │   ├── fable-orchestrator.md    # Fable 메인 오케스트레이터
 │   ├── opus-orchestrator.md     # Opus 변종 (본문 동일, frontmatter 4줄만 상이)
 │   ├── scout.md                 # Sonnet 위치 탐색 (read-only)
@@ -2095,10 +2081,7 @@ Claudecode-For-Me/
 │   ├── coder.md                 # Sonnet 코드 구현 + VERIFY
 │   ├── scribe.md                # Opus 문서 작성 + 근거 추적
 │   ├── reviewer.md              # Opus fresh-context 검증 (read-only)
-│   ├── task-{planner,writer,critic}.md   # task-write 전용
-│   ├── ssot-{planner,writer,critic}.md   # ssot-write 전용
-│   ├── wp-{builder,critic}.md            # work-packet-write 전용
-│   └── requirement-critic.md            # requirement-spec Phase 3.5 게이트 LLM 노드(codex 폴백)
+│   └── reviewer-lite.md         # Sonnet 스펙 대조 전용 (티어 밖은 ESCALATE)
 ├── skills/                      # Claude Code 스킬 (자연어 트리거)
 │   ├── acceptance-design/
 │   ├── branch-review/
@@ -2110,9 +2093,7 @@ Claudecode-For-Me/
 │   ├── meta-prompter/
 │   ├── requirement-spec/
 │   ├── safe-pull/
-│   ├── ssot-write/
-│   ├── task-write/
-│   └── work-packet-write/
+│   └── slack-brief/
 ├── commands/                    # 슬래시 커맨드 (명시 호출)
 │   ├── codenav-templates/       # /codenav-install 이 워크스페이스로 복사하는 자산
 │   │   ├── CODENAV-GUIDE-TEMPLATE.md
@@ -2131,19 +2112,18 @@ Claudecode-For-Me/
 │   ├── meta-prompter.md
 │   ├── requirement-spec.md
 │   ├── safe-pull.md
-│   ├── ssot-write.md
-│   ├── task-write.md
-│   └── work-packet-write.md
+│   └── slack-brief.md
 ├── docs/                       # v0.7 문서 시스템 자산
-│   └── .templates/             # PRD/FC/FRD/ADR/ARCHITECTURE/CLAUDE/README 양식 + App/ + .rules/ (코드 룰 3종)
+│   └── .templates/             # PRD/FC/FRD/ADR/ARCHITECTURE/CLAUDE/README 양식 + App/ (ADR·INTENT·FRD·PRD·FC·ARCHITECTURE·ADR-CATALOG) + .rules/ (코드 룰 3종)
 ├── scripts/                     # Python deterministic helper
 │   ├── branch_review_chunk_plan.py  # branch-review diff 크기측정·모드판정·청크분할·patch 생성
 │   ├── ddr_loop.py              # ddr-loop 워크트리·docs 검증 + .process 스캐폴딩 (init)
 │   ├── doc_driven_review.py
-│   ├── docs_conformance.py
 │   ├── docs_helpers.py
+│   ├── ext_dispatch.py          # ext-scout / ext-coder 외부 위임 디스패치
 │   ├── worktree_setup.py        # forge-scope 워크트리 셋업·검증·cancel
 │   ├── ddr_templates/           # ddr-loop build/progress 템플릿
+│   ├── ext_preambles/           # ext 역할별 프리앰블
 │   └── forge_templates/         # forge-scope build/progress 템플릿 + docs/.templates 시드
 ├── tests/                       # pytest 스위트 (forge·docs·doc-driven-review)
 ├── samples/                     # (gitignored) 로컬 C# 테스트 픽스처 — 미커밋
@@ -2163,7 +2143,6 @@ Claudecode-For-Me/
 | `forge-scope` 가 워크트리 안 만들고 종료(exit 2) | Work Packet 이 Draft, Blocking 존재, 연결 TASK/Required SSOT 링크 누락, 또는 TASK 문서 미결 항목(§7 결정·§11 미확인·placeholder·`**TEMPLATE**` 배너) | Work Packet을 Ready로 확정하고 Required SSOT 파일을 생성/연결한 뒤 재시도. TASK legacy 입력이면 문서 완성·미결 해소 |
 | `ddr-loop` init exit 2 "forge 워크트리 없음" | 해당 slug 워크트리 미생성 | 먼저 `/forge-scope <WORK_PACKET>` 실행, 또는 forge-cancel에 쓴 slug 확인 (`worktree_setup.py list`) |
 | `ddr-loop` 첫 review exit 2 | codex CLI 미설치 (리뷰는 codex 의존) | `/codex:setup` 후 재시도 |
-| `task-write` App 후보 없음 | `/CLAUDE.md` Backend Services Overview 표 + `docs/<App>/` 부재 | App 행 추가 + 폴더 부트스트랩 |
 | `codenav frontmatter gen` 결과 `generated=0` | `claude` CLI 부재 또는 stdout JSON 키 mismatch | `where claude` 확인. v1.15.0+ 는 `result`/`response` 둘 다 처리 |
 | `codenav frontmatter gen` "git working tree is dirty" 거부 | 안전장치 | commit/stash 또는 `--allow-dirty` |
 | `codenav ui --port 8765` 실행 시 `WinError 10013` | Windows excluded port range (8601-8900 등) | 다른 포트 사용 (예: `--port 9876`). `netsh interface ipv4 show excludedportrange protocol=tcp` 로 확인 |
