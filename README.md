@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v3.58.0 · 커스텀 스킬 11종 + 슬래시 커맨드 15종 + 에이전트 9종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v3.59.0 · 커스텀 스킬 11종 + 슬래시 커맨드 15종 + 에이전트 9종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,7 +11,7 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `3.58.0` |
+| 버전 | `3.59.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
@@ -66,6 +66,21 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v3.59.0 — commit-analysis에 배포 여부 게이트 추가: 배포 커밋은 본문에 `[Deploy]`
+
+커밋 메시지만 보고 "이 커밋이 푸쉬되면 배포가 나가는가"를 알 수 없었다. 커밋 생성 직전
+AskUserQuestion으로 **배포 없음 / 배포 포함**을 명시 선택받고, 후자면 커밋 메시지 본문에 `[Deploy]`를 넣는다.
+CD 트리거가 커밋 메시지에서 배포 의도를 읽을 수 있고, `git log`에서도 배포 커밋이 구분된다.
+
+**commands/commit-analysis.md만 변경 (+33/-5줄).** SKILL 위임 없는 인라인 커맨드라 파일 하나로 끝난다.
+`allowed-tools`에 `AskUserQuestion` 추가 / "배포 여부 선택" 절 신설 / 규칙 5(배포 마커) 추가 /
+작업 흐름 4→5단계 재배치 / 2단 커밋 예시 추가.
+
+**push는 여전히 안 한다.** 선택은 커밋 메시지 성격만 바꾼다. `allowed-tools`에 `git push` 없음 — 의도적.
+푸쉬는 사용자가 직접 한다.
+
+**검증**: pytest tests/ **184 passed, 1 skipped** (commit-analysis 전용 테스트 없음 — 회귀 확인용).
 
 ### v3.58.0 — 문서 체계를 Intent 1문서로 통합: task-write/ssot-write/work-packet-write/pipeline-runner 제거
 
@@ -1614,7 +1629,7 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `codenav-install` | 프로젝트 루트의 `tools/codenavigator/` 폴더에 codenavigator (PyPI) 격리 설치 + `codenav.ps1/codenav.sh` launcher + `.gitignore` 자동 작성 + `docs/codenav-guide.md` 작성 + 루트 `CLAUDE.md` 링크 셋업 |
 | `doc-driven-review` | doc-driven-review skill 진입. Codex CLI 위임 read-only 리뷰. `--worktree <branch\|path>` linked worktree / `--commit <ref>` 커밋 노드 지목 지원 |
 | `ddr-loop` | ddr-loop skill 진입. forge 워크트리 브랜치↔docs 수렴 루프(codex reviewer + 세션 fixer, 최대 3회·99%) |
-| `commit-analysis` | 변경 분석 후 `[ADD]`/`[MOD]`/`[FIX]` 자동 판단 한글 커밋 생성 |
+| `commit-analysis` | 배포 여부 확인 후 `[ADD]`/`[MOD]`/`[FIX]` 자동 판단 한글 커밋 생성 (배포 시 본문에 `[Deploy]`) |
 | `forge-cancel` | forge-scope 워크트리·`feat-<slug>` 브랜치 제거 (서브모듈 메인 원본 보존). `<slug>` 지정 또는 생략 시 목록에서 선택. 스킬 없이 커맨드 단독 |
 | `forge-scope` | forge-scope skill 진입 |
 | `grill-me` | grill-me skill 진입 |
@@ -1870,10 +1885,13 @@ Work Packet·TASK 를 생성하던 스킬(`work-packet-write`·`task-write`)이 
 /claudecode-for-me:commit-analysis
 ```
 
+- **배포 여부 게이트** — 커밋 직전 AskUserQuestion 1회: **배포 없음** / **배포 포함**
+- **배포 포함** 선택 시 커밋 메시지 **본문(body)** 첫 줄에 `[Deploy]`. 제목은 `[구분자] <설명>` 형식 그대로 유지
 - 구분자 자동: `[ADD]` 추가 / `[MOD]` 수정 / `[FIX]` 버그
 - `.md` 자동 제외 (`git add --all` 후 `git reset -- "*.md"`)
 - Co-Authored-By / "Generated with Claude Code" 문구 제외
 - 한글 커밋 메시지
+- **push 안 함** — 커밋까지만 수행. 푸쉬는 사용자가 직접
 
 ### 6.8 doc-driven-review
 
