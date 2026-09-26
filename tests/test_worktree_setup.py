@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -9,6 +10,9 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "scripts" / "worktree_setup.py"
+
+sys.path.insert(0, str(ROOT / "scripts"))
+import docs_helpers as _dh  # noqa: E402  (script 와 같은 scripts/ 디렉토리)
 
 
 def run_git(repo: Path, *args: str) -> subprocess.CompletedProcess:
@@ -33,120 +37,91 @@ def commit_all(repo: Path, message: str = "docs") -> None:
     run_git(repo, "commit", "-q", "-m", message)
 
 
-def write_task(repo: Path, nnn: str = "001") -> Path:
-    task = repo / "docs" / "XLAB" / "TASK" / f"XLAB-TASK-{nnn}.md"
-    task.parent.mkdir(parents=True, exist_ok=True)
-    task.write_text(
-        f"""# XLAB-TASK-{nnn} - Sample
+# tests/test_docs_helpers.py 의 INTENT_CANONICAL (app=Demo, nnn=001) 사본 —
+# approved 변형 요건에 맞춰 Handoff 의 pending 을 실제 값으로 채웠다.
+INTENT_TEXT = """# Demo-INT-001 — 샘플 기능 Intent
 
 | 항목 | 값 |
 |---|---|
-| 문서 ID | XLAB-TASK-{nnn} |
-| 버전 | 1.0 |
-| 상태 | Accepted |
+| 문서 ID | Demo-INT-001 |
+| 유형 | 기능개발 |
+| 상태 | draft |
+| 작성 | tester · 2026-09-15 |
+| 승인 | pending |
+| 관련 Intent | none |
+| 검증 | pending |
 
-## 8. 작업 단계
-| 단계 | 작업 | 산출물 / 관찰 가능 결과 | 선행 조건 | 상태 |
-|---|---|---|---|---|
-| 1 | 샘플 구현 | 테스트 통과 | 없음 | Todo |
+## Part 1 — 기능 명세
 
-## 9. 완료 기준
-| ID | Given (전제) | When (행위) | Then (기대 결과, literal 우선) | 확인 방법 | 검증 대상 (§8 단계 / §3 목표) |
-|---|---|---|---|---|---|
-| AC-T{nnn}-001 | 입력 | 실행 | 성공 | 단위 | §8-1 |
+### Problem
+문제 설명.
 
-### 9.1 단위 테스트 명세
-| ID | 테스트명 | 프로젝트 | 클래스 | 함수명 | 선행 조건/픽스처 | 검증 대상 | 도입 근거 | 검증 AC |
-|---|---|---|---|---|---|---|---|---|
-| TS-T{nnn}-001 | sample | tests/Sample.Tests.csproj | SampleTests | passes | 없음 | 성공 | 회귀 방지 | AC-T{nnn}-001 |
+### Outcome
+결과 설명.
 
-### 9.2 엣지 케이스
-없음 - 경계 조건 없음
+- Out of scope: 항목A, 항목B
 
-### 9.3 오류 처리
-없음 - 오류 입력 없음
+### Affected
+영향 설명.
 
-## 12. 구현 참고 정보
-없음
-""",
-        encoding="utf-8",
-    )
-    return task
+### Constraints
+- C1. 제약 조건 — `{code, message}` 포맷 유지
 
+### Decisions
+- D1. 결정 — 근거: 근거 — 기각 대안: 대안
 
-def write_ssot(repo: Path, nnn: str = "001") -> Path:
-    ssot = repo / "docs" / "XLAB" / "FRD" / f"XLAB-FRD-{nnn}.md"
-    ssot.parent.mkdir(parents=True, exist_ok=True)
-    ssot.write_text(f"# XLAB-FRD-{nnn}\n\n## 1. 기준\n- 구현 기준\n", encoding="utf-8")
-    return ssot
+### Open questions
+none
 
+---
 
-def write_work_packet(repo: Path, nnn: str = "001", *, status: str = "Ready", ssot_nnn: str = "001") -> Path:
-    wp = repo / "docs" / "XLAB" / "WORK_PACKET" / f"XLAB-WP-{nnn}.md"
-    wp.parent.mkdir(parents=True, exist_ok=True)
-    wp.write_text(
-        f"""# XLAB-WP-{nnn} - Sample
+## Part 2 — 작업 지시
 
+### Functional requirements
+- FR-1. 요구 문장 (D1)
+
+### Edge cases
+- E-1. a → b (FR-1)
+
+### Error cases
+- X-1. a → b (FR-1)
+
+### Acceptance
+- [ ] A-1. 완료 조건 (FR-1)
+
+### Verification
+- 확인 방법
+
+### Risks
+- 리스크
+
+### Handoff
 | 항목 | 값 |
 |---|---|
-| 문서 ID | XLAB-WP-{nnn} |
-| 버전 | 1.0 |
-| 상태 | {status} |
-| 연결 TASK | [XLAB-TASK-{nnn}](../TASK/XLAB-TASK-{nnn}.md) |
+| repo · app | forge-test · Demo |
+| base branch | main |
+| 브랜치명 | intent/Demo-INT-001 |
+| 손대지 말 영역 | docs/Demo |
+| 완료 보고 방식 | 완료 보고 |
+"""
 
-## 3. Execution Gate
 
-| 상태 | 실행 판단 | 기준 |
-|---|---|---|
-| Ready | forge-scope 진행 가능 | blocking 없음 |
-| Draft | 구현 금지 | Blocking / Open Questions 해결 필요 |
+def _meta_row(text: str, key: str, value: str) -> str:
+    return re.sub(rf"(?m)^\| {re.escape(key)} \| .*$", f"| {key} | {value} |", text, count=1)
 
-| 현재 판정 | 근거 |
-|---|---|
-| {status} | 문서 준비 상태 |
 
-## 4. Required SSOT Execution Matrix
-
-| SSOT type | Action | Document | Read range | Why required | Source matrix row | Priority |
-|---|---|---|---|---|---|---|
-| FRD | UPDATE | [XLAB-FRD-{ssot_nnn}](../FRD/XLAB-FRD-{ssot_nnn}.md) | §1 | 기능 기준 | row 1 | Required |
-
-## 5. 실행 규칙
-- TASK 에 없는 작업은 구현하지 않는다.
-
-## 6. 실행 경계
-| 구분 | 내용 |
-|---|---|
-| 반드시 수행 | 샘플 구현 |
-| 금지 | 범위 밖 구현 |
-| 허용 | 테스트 보강 |
-| 중단 조건 | 충돌 |
-
-## 7. Blocking / Open Questions
-
-| Issue | Source | Impact | Required decision |
-|---|---|---|---|
-| none | none | none | none |
-
-## 8. 검증 입력
-| 구분 | 기준 |
-|---|---|
-| 완료 기준 | TASK §9 |
-| 단위 테스트 | TASK §9.1 |
-| 빌드/테스트 명령 | 코드베이스 기준으로 탐색 |
-
-## 10. Implementation Output Contract
-| 항목 | 필수 내용 |
-|---|---|
-| Changed files | 변경한 파일 목록 |
-| Scope match | 구현 범위 일치 여부 |
-| Tests run | 실행한 빌드/테스트 |
-| Not run | 미실행 검증 |
-| Deviations | 이탈 |
-""",
-        encoding="utf-8",
-    )
-    return wp
+def write_intent(repo: Path, status: str = "approved", **overrides: str) -> Path:
+    text = INTENT_TEXT
+    if status == "approved":
+        text = _meta_row(text, "승인", "tester · 2026-09-26")
+        text = _meta_row(text, "검증", "PASS — code PASS · llm PASS · 1/3")
+    text = _meta_row(text, "상태", status)
+    for key, value in overrides.items():
+        text = _meta_row(text, key, value)
+    intent = repo / "docs" / "Demo" / "INTENT" / "Demo-INT-001.md"
+    intent.parent.mkdir(parents=True, exist_ok=True)
+    intent.write_text(text, encoding="utf-8")
+    return intent
 
 
 def run_init(repo: Path, doc: Path, *extra: str) -> subprocess.CompletedProcess:
@@ -161,62 +136,229 @@ def run_init(repo: Path, doc: Path, *extra: str) -> subprocess.CompletedProcess:
     )
 
 
+def run_script(repo: Path, *argv: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        [sys.executable, str(SCRIPT), *argv],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        env={**os.environ, "PYTHONUTF8": "1"},
+    )
+
+
 def manifest_from(result: subprocess.CompletedProcess) -> dict:
     return json.loads(result.stdout.strip().splitlines()[-1])
 
 
-def test_ready_work_packet_init_passes_and_manifest_tracks_task(git_repo: Path):
-    task = write_task(git_repo, "001")
-    write_ssot(git_repo, "001")
-    wp = write_work_packet(git_repo, "001")
+def test_approved_intent_variant_is_fail_free(tmp_path: Path):
+    intent = write_intent(tmp_path)
+    results = _dh._check_intent_file(tmp_path, intent)
+    fails = [f"{r.code}: {r.message}" for r in results if r.level == "FAIL"]
+    assert not fails, fails
+
+
+def test_approved_committed_intent_creates_worktree(git_repo: Path):
+    intent = write_intent(git_repo)
     commit_all(git_repo)
 
-    result = run_init(git_repo, wp)
+    result = run_init(git_repo, intent)
 
     assert result.returncode == 0, result.stderr
     manifest = manifest_from(result)
-    assert manifest["input_kind"] == "WORK_PACKET"
-    assert manifest["work_packet"] == str(wp.resolve())
-    assert manifest["task_doc"] == str(task.resolve())
-    build_md = Path(manifest["build_md"]).read_text(encoding="utf-8")
-    assert "Work Packet: `docs/XLAB/WORK_PACKET/XLAB-WP-001.md`" in build_md
-    assert "TASK 문서: `docs/XLAB/TASK/XLAB-TASK-001.md`" in build_md
+    assert manifest["intent_id"] == "Demo-INT-001"
+    assert Path(manifest["worktree"]).exists()
 
 
-def test_draft_work_packet_blocks_before_worktree_creation(git_repo: Path):
-    write_task(git_repo, "002")
-    write_ssot(git_repo, "002")
-    wp = write_work_packet(git_repo, "002", status="Draft")
+def test_in_dev_committed_intent_creates_worktree(git_repo: Path):
+    intent = write_intent(git_repo, status="in-dev")
+    commit_all(git_repo)
+
+    result = run_init(git_repo, intent)
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_draft_intent_blocks_before_worktree_creation(git_repo: Path):
+    intent = write_intent(git_repo, status="draft")
+    commit_all(git_repo)
+
+    result = run_init(git_repo, intent)
+
+    assert result.returncode == 2
+    assert "approved" in result.stderr
+    assert not (git_repo / ".worktree").exists()
+
+
+def test_approved_intent_with_failed_verification_blocks(git_repo: Path):
+    intent = write_intent(git_repo, 검증="FAIL — code PASS · llm FAIL · 3/3")
+    commit_all(git_repo)
+
+    result = run_init(git_repo, intent)
+
+    assert result.returncode == 2
+    assert "INT_APPROVED_GATE" in result.stderr
+    assert not (git_repo / ".worktree").exists()
+
+
+def test_work_packet_input_is_rejected(git_repo: Path):
+    wp = git_repo / "docs" / "X" / "WORK_PACKET" / "X-WP-001.md"
+    wp.parent.mkdir(parents=True, exist_ok=True)
+    wp.write_text("# X-WP-001\n", encoding="utf-8")
     commit_all(git_repo)
 
     result = run_init(git_repo, wp)
 
     assert result.returncode == 2
-    assert "Draft = do not implement" in result.stderr
-    assert not (git_repo / ".worktree" / "XLAB-WP-002").exists()
+    assert "폐지" in result.stderr
+    assert not (git_repo / ".worktree").exists()
 
 
-def test_ready_work_packet_with_missing_required_ssot_blocks(git_repo: Path):
-    write_task(git_repo, "003")
-    wp = write_work_packet(git_repo, "003", ssot_nnn="999")
-    commit_all(git_repo)
-
-    result = run_init(git_repo, wp)
-
-    assert result.returncode == 2
-    assert "Required SSOT" in result.stderr
-    assert "파일 없음" in result.stderr
-    assert not (git_repo / ".worktree" / "XLAB-WP-003").exists()
-
-
-def test_task_direct_input_keeps_legacy_gate_and_manifest(git_repo: Path):
-    task = write_task(git_repo, "004")
+def test_task_input_is_rejected(git_repo: Path):
+    task = git_repo / "docs" / "X" / "TASK" / "X-TASK-001.md"
+    task.parent.mkdir(parents=True, exist_ok=True)
+    task.write_text("# X-TASK-001\n", encoding="utf-8")
     commit_all(git_repo)
 
     result = run_init(git_repo, task)
 
+    assert result.returncode == 2
+    assert "폐지" in result.stderr
+    assert not (git_repo / ".worktree").exists()
+
+
+def test_zero_commit_repo_blocks_with_and_without_force(tmp_path: Path):
+    repo = tmp_path / "empty"
+    repo.mkdir()
+    run_git(repo, "init", "-q")
+    run_git(repo, "config", "user.email", "forge-test@example.invalid")
+    run_git(repo, "config", "user.name", "Forge Test")
+    run_git(repo, "config", "commit.gpgsign", "false")
+    run_git(repo, "config", "core.autocrlf", "false")
+    intent = write_intent(repo)
+
+    for extra in ([], ["--force"]):
+        result = run_init(repo, intent, *extra)
+        assert result.returncode == 2
+        assert "커밋이 하나도 없다" in result.stderr
+
+
+def test_uncommitted_intent_blocks_with_and_without_force(git_repo: Path):
+    intent = write_intent(git_repo)
+
+    for extra in ([], ["--force"]):
+        result = run_init(git_repo, intent, *extra)
+        assert result.returncode == 2
+        assert "마지막 커밋에 없다" in result.stderr
+
+
+def test_handoff_branch_name_is_used(git_repo: Path):
+    intent = write_intent(git_repo)
+    commit_all(git_repo)
+
+    result = run_init(git_repo, intent)
+
+    assert result.returncode == 0, result.stderr
+    assert manifest_from(result)["branch"] == "intent/Demo-INT-001"
+    assert run_git(git_repo, "rev-parse", "--verify", "refs/heads/intent/Demo-INT-001").returncode == 0
+
+
+def test_handoff_branch_name_fallback_when_not_a_ref(git_repo: Path):
+    intent = write_intent(git_repo, 브랜치명="없음 — main 작업 트리에서 직접 작업")
+    commit_all(git_repo)
+
+    result = run_init(git_repo, intent)
+
+    assert result.returncode == 0, result.stderr
+    assert manifest_from(result)["branch"] == "intent/Demo-INT-001"
+
+
+def test_first_init_marks_in_dev_and_commits(git_repo: Path):
+    intent = write_intent(git_repo)
+    commit_all(git_repo)
+
+    result = run_init(git_repo, intent)
+
     assert result.returncode == 0, result.stderr
     manifest = manifest_from(result)
-    assert manifest["input_kind"] == "TASK"
-    assert manifest["work_packet"] is None
-    assert manifest["task_doc"] == str(task.resolve())
+    wt_intent = Path(manifest["intent_worktree"])
+    assert "| 상태 | in-dev |" in wt_intent.read_text(encoding="utf-8")
+    subject = subprocess.run(
+        ["git", "-C", str(manifest["worktree"]), "log", "-1", "--format=%s"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    assert subject.stdout.strip() == "chore(Demo-INT-001): 상태 in-dev"
+    assert "| 상태 | approved |" in intent.read_text(encoding="utf-8")
+    assert manifest["created"] is True
+    assert manifest["status_committed"] is True
+    assert manifest["status"] == "in-dev"
+
+
+def test_second_init_resumes_without_status_commit(git_repo: Path):
+    intent = write_intent(git_repo)
+    commit_all(git_repo)
+    first = run_init(git_repo, intent)
+    assert first.returncode == 0, first.stderr
+    wt = Path(manifest_from(first)["worktree"])
+    commits_before = run_git(wt, "rev-list", "--count", "HEAD").stdout.strip()
+
+    second = run_init(git_repo, intent)
+
+    assert second.returncode == 0, second.stderr
+    manifest = manifest_from(second)
+    assert manifest["created"] is False
+    assert manifest["status_committed"] is False
+    assert run_git(wt, "rev-list", "--count", "HEAD").stdout.strip() == commits_before
+    assert "| 상태 | in-dev |" in Path(manifest["intent_worktree"]).read_text(encoding="utf-8")
+
+
+MANIFEST_KEYS = {
+    "root", "worktree", "branch", "slug", "intent", "intent_worktree",
+    "intent_id", "status", "created", "status_committed",
+    "acceptance", "handoff", "copied", "skipped", "submodule_log",
+}
+
+
+def test_manifest_shape_and_no_process_scaffold(git_repo: Path):
+    intent = write_intent(git_repo)
+    commit_all(git_repo)
+
+    result = run_init(git_repo, intent)
+
+    assert result.returncode == 0, result.stderr
+    manifest = manifest_from(result)
+    assert set(manifest) == MANIFEST_KEYS
+    assert manifest["acceptance"][0]["id"] == "A-1"
+    assert set(manifest["handoff"]) == {"repo · app", "base branch", "브랜치명", "손대지 말 영역", "완료 보고 방식"}
+    assert not (Path(manifest["worktree"]) / ".process" / manifest["slug"]).exists()
+
+
+def test_list_includes_intent_worktrees(git_repo: Path):
+    intent = write_intent(git_repo)
+    commit_all(git_repo)
+    assert run_init(git_repo, intent).returncode == 0
+
+    result = run_script(git_repo, "list")
+
+    assert result.returncode == 0, result.stderr
+    entries = json.loads(result.stdout.strip())
+    assert any(e["branch"] == "intent/Demo-INT-001" for e in entries)
+
+
+def test_cancel_removes_intent_worktree_and_branch(git_repo: Path):
+    intent = write_intent(git_repo)
+    commit_all(git_repo)
+    init_result = run_init(git_repo, intent)
+    assert init_result.returncode == 0, init_result.stderr
+    slug = manifest_from(init_result)["slug"]
+
+    result = run_script(git_repo, "cancel", slug)
+
+    assert result.returncode == 0, result.stderr
+    probe = subprocess.run(
+        ["git", "rev-parse", "--verify", "--quiet", "refs/heads/intent/Demo-INT-001"],
+        cwd=git_repo, capture_output=True, text=True,
+    )
+    assert probe.returncode != 0
+    assert not (git_repo / ".worktree" / slug).exists()

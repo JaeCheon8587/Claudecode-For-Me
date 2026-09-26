@@ -2,7 +2,7 @@
 
 > ⚠ **TEMPLATE** — 본 파일은 Intent 문서 템플릿이다. 복사한 뒤 모든 `{...}` placeholder 를 실제 값으로 채우거나 해당 줄을 삭제하고, **이 경고 블록을 삭제**한다. 결과 파일명과 문서 ID 는 `{App}-INT-{NNN}` 형식을 사용한다 (`NNN` = 3자리 0패딩).
 >
-> **Intent 는 작업 단위 계약**: Part 1 은 무엇을·왜(기능 명세), Part 2 는 Part 1 에서 파생한 작업 지시다. 큰 기능은 여러 Intent 로 나누고 메타 표 "관련 Intent" 에 서로의 ID 를 남긴다. **클래스명·파일명·구현 방법은 Part 1·Part 2 어디에도 쓰지 않는다** — 개발 세션 몫이다.
+> **Intent 는 작업 단위 계약**: Part 1 은 무엇을·왜(기능 명세), Part 2 는 Part 1 에서 파생한 작업 지시다. 큰 기능은 여러 Intent 로 나누고 메타 표 "관련 Intent" 에 서로의 ID 를 남긴다. **생성·수정 대상의 클래스명·메서드명·파일 경로·라이브러리 API 는 Handoff 표 밖 어디에도 쓰지 않는다** — 개발 세션 몫이다. 계층·패턴 용어와 손대지 말 경로는 허용.
 
 | 항목 | 값 |
 |---|---|
@@ -12,8 +12,9 @@
 | 작성 | {작성자} · {YYYY-MM-DD} |
 | 승인 | pending |
 | 관련 Intent | none |
+| 검증 | pending |
 
-<!-- 유형: 기능개발 · 리팩토링 중 하나만 남긴다. 상태 허용값: draft | approved | in-dev | in-review | done. 승인: approved 시 `{승인자} · {YYYY-MM-DD}`. 관련 Intent: 큰 기능을 여러 Intent 로 나눴을 때 해당 ID 를 나열, 없으면 none. -->
+<!-- 유형: 기능개발 · 리팩토링 중 하나만 남긴다. 상태 허용값: draft | approved | in-dev | in-review | done. 승인: approved 시 `{승인자} · {YYYY-MM-DD}`. 관련 Intent: 큰 기능을 여러 Intent 로 나눴을 때 해당 ID 를 나열, 없으면 none. 검증: 검증 루프 결과. `pending` 또는 `<총평> — code <상태> · llm <상태> · <회차>/3`, 총평 ∈ PASS | FAIL | OVERRIDE | SKIPPED (예 `PASS — code PASS · llm PASS · 2/3`, `SKIPPED — --no-gate`, `SKIPPED — pre-3.60`). -->
 
 ## Part 1 — 기능 명세
 
@@ -32,8 +33,8 @@
 {영향 범위}
 
 ### Constraints
-<!-- 지켜야 할 제약 — 호환성·성능·일정·정책 등. -->
-- {제약}
+<!-- 지켜야 할 제약 — 호환성·성능·일정·정책 등. 항목은 `C1.` 부터 번호를 붙인다. -->
+- C1. {제약}
 
 ### Decisions
 <!-- 되돌리기 어려운 결정과 근거·기각 대안. ADR 은 별도 파일 없이 이 섹션에 남긴다. -->
@@ -45,25 +46,25 @@ none
 
 ---
 
-<!-- 이 선 아래는 작업 지시. 클래스·파일·구현 방법은 쓰지 않는다 — 개발 세션 몫. -->
+<!-- 이 선 아래는 작업 지시. 생성·수정 대상 클래스·파일·API 는 쓰지 않는다 — 개발 세션 몫. -->
 
 ## Part 2 — 작업 지시
 
 ### Functional requirements
-<!-- 테스트 가능한 문장으로 쓴 기능 요구. Part 1 의 Outcome·Decisions·Constraints 에서 추적 가능해야 한다. -->
-- FR-1. {테스트 가능한 요구 문장}
+<!-- 테스트 가능한 문장으로 쓴 기능 요구. Part 1 의 Outcome·Decisions·Constraints 에서 추적 가능해야 한다. 근거는 문장 끝 괄호에 `(D1)` `(C2)` `(D1, C2)` 로 표기한다. -->
+- FR-1. {테스트 가능한 요구 문장} (D1)
 
 ### Edge cases
-<!-- 각 FR 의 경계 상황과 기대 동작. 없으면 none. -->
-- E-1. {상황} → {기대 동작}
+<!-- 각 FR 의 경계 상황과 기대 동작. 없으면 none. 근거는 `(FR-1)` 처럼 표기. -->
+- E-1. {상황} → {기대 동작} (FR-1)
 
 ### Error cases
-<!-- 각 FR 의 오류 상황과 기대 동작. 없으면 none. -->
-- X-1. {오류 상황} → {기대 동작}
+<!-- 각 FR 의 오류 상황과 기대 동작. 없으면 none. 근거는 `(FR-1)` 처럼 표기. -->
+- X-1. {오류 상황} → {기대 동작} (FR-1)
 
 ### Acceptance
-<!-- 기능개발: `- [ ] {완료 조건}` 체크리스트. 리팩토링: `- {보존해야 할 동작}` 목록. -->
-- [ ] {완료 조건}
+<!-- 기능개발: `- [ ] A-n. {완료 조건} (근거)` 체크리스트. 리팩토링: `- A-n. {보존해야 할 동작} (근거)` 목록. 근거는 `(FR-1)` `(D1)` `(C2)` `(OS)` 중 해당하는 것. -->
+- [ ] A-1. {완료 조건} (FR-1)
 
 ### Verification
 <!-- 완료를 확인하는 **방법**. 실행 명령은 쓰지 않는다. -->
@@ -84,7 +85,9 @@ none
 | 완료 보고 방식 | pending |
 
 <!-- 작성 규칙
-1. 클래스명·파일명·구현 방법은 어느 Part 에도 쓰지 않는다.
+1. 생성·수정 대상의 클래스명·메서드명·파일 경로·라이브러리 API 는 Handoff 표 밖 어디에도 쓰지 않는다. 계층·패턴 용어와 손대지 말 경로는 허용.
 2. FR 은 테스트 가능한 문장으로 쓴다.
-3. Part 2 의 모든 항목은 Part 1(Outcome·Decisions·Constraints)에 근거가 있어야 한다.
-4. `상태: approved` 는 Open questions 가 `none` 이고 Handoff 에 `pending` 이 없을 때만 가능하다. -->
+3. Part 2 의 모든 항목은 Part 1(Outcome·Decisions·Constraints·Out of scope)에 근거가 있어야 한다.
+4. `상태: approved` 는 Open questions 가 `none` 이고, Handoff 에 `pending` 이 없고, `유형` 이 한 값이고, `검증` 이 `PASS`·`OVERRIDE`·`SKIPPED` 중 하나로 시작할 때만 가능하다.
+5. FR 은 `(Dn)`·`(Cn)`, E/X/A 는 `(FR-n)`·`(Dn)`·`(Cn)`·`(OS)` 로 근거를 표기한다. 여러 개는 `, ` 로 잇는다. 섹션 값이 `none` 이면 예외.
+6. D/C/FR/E/X/A 항목은 1부터 오름차순 ID 를 갖는다. 항목을 지워도 번호를 재사용하지 않는다(빈 번호 허용). -->

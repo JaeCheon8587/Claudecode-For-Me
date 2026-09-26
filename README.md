@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v3.59.0 · 커스텀 스킬 11종 + 슬래시 커맨드 15종 + 에이전트 9종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v3.61.0 · 커스텀 스킬 11종 + 슬래시 커맨드 15종 + 에이전트 9종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,7 +11,7 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `3.59.0` |
+| 버전 | `3.61.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
@@ -66,6 +66,47 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v3.61.0 — forge-scope 를 오케스트레이터 전용 · Intent 전용으로 재작성 · BREAKING
+
+forge-scope 는 "세션이 직접 코딩하는" 인라인 TDD 로 쓰여 있었고 입력은 폐지된 Work Packet·TASK 였다. 오케스트레이터 세션에서 켜면 설명서와 프로토콜이 부딪히고, Intent 는 TASK 로 오분류돼 `draft` 도 게이트를 통과했으며, 커밋 0 repo 에선 빈 워크트리가 만들어졌다.
+
+- **입력 = 승인된 Intent 만.** Work Packet·TASK 경로는 exit 2 "v3.58 에서 폐지".
+- **승인 게이트 재사용** — `상태 ∈ {approved, in-dev}` + `docs_helpers` Intent 검사(`INT_APPROVED_GATE` 포함) FAIL 0.
+- **시작 조건** — HEAD 존재 + Intent 가 HEAD 에 tracked. `--force` 로 우회 불가.
+- **브랜치** — Handoff `브랜치명`(유효 ref) 또는 `intent/<문서 ID>`. `list` 가 `intent/*` 인식, `cancel` 은 `.worktree/<slug>` 에 붙은 브랜치를 찾아 삭제(워크트리가 이미 없으면 `feat-<slug>` 로 폴백 — 남은 `intent/*` 브랜치는 `git branch -D` 로 직접 정리).
+- **상태 전이** — 신규 init 시 워크트리 Intent `approved → in-dev` 자동 커밋. 재실행 = resume(전이 생략). 가드레일 복사는 없는 파일만.
+- **스캐폴딩 제거** — `.process/<slug>/forge-scope-build.md`·`progress.md` 와 `scripts/forge_templates/` 삭제. 계획·진행은 팀장 ledger.
+- **SKILL 재작성** — F0 입력 → F1 문지기 → F2 개발 플랜 → F3 웨이브(coder RED → coder GREEN → reviewer → 커밋) → F4 A-n 증거 → F5 `in-dev → in-review` + 브랜치 리뷰.
+
+**검증**: `python -m pytest tests/ -q` **270 passed, 3 skipped**.
+
+### v3.60.0 — requirement-spec에 코드 체크리스트 + opus critic 검증 루프 추가
+
+파생한 Part 2가 Part 1에 근거를 두고 있는지 승인 전에 확인할 수단이 없었다. 판정 기준을 세션 추론이 아니라
+**문서 자신의 항목에서 코드가 만든 체크리스트 행**으로 고정하고, 그 행을 fresh opus 서브에이전트가
+행 단위로 판정하는 루프를 Phase 3~5로 넣었다.
+
+- **requirement-spec** — Phase 3 검증 루프: 형식 검사(`check-intent`) → 코드 생성 체크리스트(`intent-checklist`)
+  → fresh opus critic 판정 → `--check-return` 기계 검사. 최대 3회, 심각도 **MAJOR만 차단**, 기각·N/A 수용은
+  CARRY 목록으로 다음 회차에 전달. Phase 4는 `quality.json` + 메타 `검증` 행, Phase 5는 승인 1회(조건 4개,
+  FAIL이면 OVERRIDE 승인 가능, `--no-gate` 로 Phase 3·4 생략).
+- **Intent 템플릿** — 메타 표에 `검증` 행 추가, Constraints `C1.`, Acceptance `A-n.`, 근거 참조
+  `(Dn)`·`(Cn)`·`(FR-n)`·`(OS)`, ID 빈 번호 허용, 누설 규칙 축소(클래스명·파일 경로는 Handoff 표 밖 금지, 계층·패턴 용어는 허용).
+- **`scripts/docs_helpers.py`** — `check-intent`(구조 규칙 24) · `intent-checklist`(행 생성·facts·`[인용]` 표본·
+  `--check-return`·`--oracle`) 신설, `check-instruction` 제거.
+- **인터뷰 전사 기반 오라클** — Phase 1이 인터뷰 원문을 `interview.md` 로 전사하고, Phase 2a에서 그 전사**만**
+  읽는 fresh opus expector가 `expected.md` 를 1회 도출한다(이후 불변). `--oracle` 로 넘기면 체크리스트 맨 앞에
+  `EXP-n` 행이 붙어, (a) 인터뷰 내용이 Intent에 담겼는지 · (b) Part 2 항목으로 내려왔는지를 critic이 판정한다.
+  종류 7값(`요구`·`완료조건`·`결정`·`제약`·`제외`·`프로세스`·`배경`)에 따라 (b) 생성 여부와 심각도가 갈린다.
+  expector 불가·형식 2회 실패면 폴백하고 `검증` 행에 `· oracle SKIPPED` 를 붙인다. critic 반환에는
+  비차단 `IMPROVE:` 줄이 추가됐고, Phase 5는 `인터뷰 반영 <covered>/<expected>` 를 보고한다.
+- **검증 산출물 custody** — expector·critic이 `expected.md`·`critic-round-<n>.txt` 를 **직접 쓴다**(세션 필사·편집 금지,
+  critic은 회차마다 새 에이전트). `--check-return` 은 OK 시 `RETURN-SHA256:` 줄을 내고 세션이 `quality.json` 에 기록한다.
+  critic 반환의 `FAIL: none`·`N/A: 없음` 같은 빈 토큰은 빈 값으로 파싱. 인터뷰 전 발화는 전사 `Q0/A0` 슬롯.
+  재요청은 이원화 — 형식 오류는 파서 줄만 붙여 1회, 내용 문제는 재요청 없이 기각→CARRY.
+
+**검증**: `python -m pytest tests/ -q` **256 passed, 3 skipped** (skip +2 는 실샘플 폴더 부재 환경 skip).
 
 ### v3.59.0 — commit-analysis에 배포 여부 게이트 추가: 배포 커밋은 본문에 `[Deploy]`
 
@@ -1614,7 +1655,7 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `forge-scope` | `/claudecode-for-me:forge-scope <WORK_PACKET-or-TASK-doc-path> [--name <slug>] [--force]` | Work Packet을 우선 입력으로 받아 Ready gate, 연결 TASK, Required SSOT Execution Matrix를 소비해 워크트리에서 고정 계약-TDD 파이프라인(계약+테스트→구현→빌드/유닛테스트)으로 구현. TASK 직접 입력은 legacy 호환. 빌드는 `.csproj` 단위만(솔루션 금지). 정리는 `forge-cancel`. |
 | `grill-me` | `/claudecode-for-me:grill-me [주제]` | 1문 1답으로 요구사항 모호점 추적 |
 | `meta-prompter` | `/claudecode-for-me:meta-prompter [요청]` | 거친 요청 → 구조화된 메타 프롬프트 |
-| `requirement-spec` | `/claudecode-for-me:requirement-spec [--app <App>] [--type 기능개발\|리팩토링]` | grill-me 인터뷰(인라인)로 요구사항을 도출해 Intent Part 1(기능 명세 6섹션)을 쓰고, Part 2(작업 지시 7섹션)를 질문 없이 파생한 뒤 승인 1회로 확정. 산출물은 `docs/<App>/INTENT/<App>-INT-<NNN>.md` 1개 |
+| `requirement-spec` | `/claudecode-for-me:requirement-spec [--app <App>] [--type 기능개발\|리팩토링] [--no-gate]` | grill-me 인터뷰 → Intent Part 1/2 → 코드 체크리스트 + opus critic 검증 루프(≤3회) → 품질 지표 → 승인 1회. 산출물은 `docs/<App>/INTENT/<App>-INT-<NNN>.md` 1개 |
 | `safe-pull` | `/claudecode-for-me:safe-pull [원격/브랜치]` | git pull 전 fetch(비파괴)로 변경·충돌·사이드이펙트 브리핑 후 AskUserQuestion 컨펌 게이트 |
 | `slack-brief` | `/claudecode-for-me:slack-brief [--channels <key,key>] [--dry-run] [--max <N>]` | 대화에서 토픽을 뽑아 다중선택으로 확정받고 타입 5종 양식(기승전결)으로 정리해 Slack 채널 담당 봇을 멘션한 **작업 트리거**로 전송. 토픽 1개 = 메시지 1개, 본문에 작업 지시문 금지(봇이 담당 업무 기준으로 처리), 전송 전 승인 게이트. 단일 에이전트 |
 
@@ -1634,7 +1675,7 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `forge-scope` | forge-scope skill 진입 |
 | `grill-me` | grill-me skill 진입 |
 | `meta-prompter` | meta-prompter skill 진입 |
-| `requirement-spec` | requirement-spec skill 진입. grill-me 인터뷰 → Intent Part 1 → Part 2 파생 → 승인 1회. 산출물은 `docs/<App>/INTENT/<App>-INT-<NNN>.md` 1개 |
+| `requirement-spec` | requirement-spec skill 진입. grill-me 인터뷰 → Intent Part 1 → Part 2 파생 → 코드 체크리스트 + opus critic 검증 루프(≤3회) → 품질 지표 → 승인 1회. 산출물은 `docs/<App>/INTENT/<App>-INT-<NNN>.md` 1개(임시 파일은 `.process/intent-check/<ID>/`). `--no-gate` 로 루프 생략 |
 | `safe-pull` | safe-pull skill 진입. fetch 후 브리핑 → 컨펌 게이트 → pull |
 | `slack-brief` | slack-brief skill 진입. 토픽 모달 → 채널 모달 → 토픽당 메시지 작성 → self-check 8항목 → 프리뷰 승인 게이트 → `channel_id`로 순차 전송. `--dry-run`은 프리뷰까지만 |
 
@@ -1779,35 +1820,40 @@ codenav --root <repo> ui --port 9876
 
 ### 6.3 forge-scope / forge-cancel (harness_framework 임베디드)
 
-`forge-scope`는 Work Packet을 우선 입력으로 받아 워크트리에서 **고정 계약-TDD 파이프라인**으로 구현한다. python(`worktree_setup.py`)은 **셋업·검증·정리만** 하고, 실제 코딩(계약+테스트→구현→빌드/유닛테스트)은 호출 세션이 워크트리 안에서 인라인으로 수행한다. 빌드/테스트는 **솔루션(`*.sln`) 금지, 대상 `.csproj` 단위만**. TASK 직접 입력은 legacy 호환 경로로 유지된다.
+`forge-scope`는 **승인된 Intent**(requirement-spec 산출물) 하나를 입력으로 받아, **오케스트레이터 세션**(opus-orchestrator / fable-orchestrator 를 에이전트 모드로 실행)이 워크트리에서 개발하는 절차다. 세션은 팀장 역할만 한다 — 코드는 coder, 판정은 reviewer, 기록은 팀장 ledger. python(`worktree_setup.py`)은 **게이트·워크트리·상태 전이·정리만** 한다. 빌드/테스트는 **솔루션(`*.sln`) 금지, 대상 `.csproj` 단위만**. Work Packet·TASK 입력은 v3.58 에서 폐지됐다.
+
+#### 흐름 (F0~F5)
+
+| 단계 | 누가 | 무엇 |
+|---|---|---|
+| F0 입력 | 팀장 | Python 3.10+ 확인, 태스크 ledger 생성 — 수용 기준 = Intent `A-1..A-n` 원문 + 대상 test.csproj 전체 green |
+| F1 문지기 | `worktree_setup.py init` | 승인 게이트·시작 조건 → 워크트리·브랜치 → `approved → in-dev` 커밋 → 매니페스트 |
+| F2 개발 플랜 | explorer → (analyst) → 팀장 | 설계 결정 + 웨이브 표. 위험 도메인이면 analyst 감사 의무. Intent 부족 → **멈추고 requirement-spec 으로 되돌린다** |
+| F3 웨이브 | coder ×2 → reviewer → 커밋 | RED(테스트, `Failed` ≥1 · `error CS` 0) → GREEN(최소 구현, exit 0) → review → `feat(<ID>): W<k> …` |
+| F4 통합 | coder · 팀장 | test.csproj 전체 VERIFY, A-n 마다 증거 포인터. 환경 의존 A 는 확인 불가면 "미충족 + 사유" |
+| F5 마감 | scribe · reviewer(opus) · 팀장 | scribe 가 Intent `in-dev → in-review` 1줄, 브랜치 전체 diff 리뷰 → 커밋 → Handoff `완료 보고 방식` 대로 보고 |
 
 #### 전제 조건
 
 | 조건 | 필수 | 비고 |
 |---|---|---|
-| Python 3.10+ (`python` 또는 `py -3`) | **필수** | 미설치 시 즉시 가이드 출력 후 중단 |
-| git repository | **필수** | 워크트리 기반 동작 |
-| Ready Work Packet | **권장 필수** | `Draft = do not implement`. 연결 TASK와 Required SSOT 링크/파일이 없거나 Blocking 이 있으면 exit 2로 중단 |
-| 채워진 TASK 문서 | legacy 호환 | TASK 직접 입력 시 미결 항목(§7 결정·§11 미확인)·placeholder·`**TEMPLATE**` 배너 잔존 시 검증 게이트가 exit 2로 중단. Work Packet 기반 SSOT gate는 없음 |
-
-#### 복사 없음 (플러그인 캐시 직접 실행)
-
-`worktree_setup.py`·템플릿을 프로젝트로 복사하지 않는다 — `${CLAUDE_PLUGIN_ROOT}/scripts/worktree_setup.py`를 직접 실행한다. 프로젝트에는 생성물 `.worktree/`·`.process/`만 `.gitignore`에 추가된다(그 `.gitignore` 변경만 commit).
+| Python 3.10+ (`python` 또는 `py -3`) | **필수** | 미설치 시 가이드 출력 후 중단 |
+| git repository + 커밋 1개 이상 | **필수** | 워크트리는 마지막 커밋의 사본 — 커밋 안 된 소스·테스트는 따라오지 않는다 |
+| Intent 가 마지막 커밋에 있음 | **필수** | `--force` 로도 우회 불가 |
+| Intent `상태` = `approved`(신규) 또는 `in-dev`(재개) | **필수** | `check-intent` FAIL 0 (`INT_APPROVED_GATE` 포함) |
+| 오케스트레이터 세션 | 전제 | 인라인(세션 직접 코딩) 모드는 없다 |
 
 #### 사용 예시
 
 ```bash
-# Work Packet 기준 구현 (워크트리 .worktree/<slug> + feat-<slug> 브랜치)
-/claudecode-for-me:forge-scope docs/Loader/WORK_PACKET/LOADER-WP-007.md
+# 승인된 Intent 로 개발 시작 (워크트리 .worktree/<문서 ID>, 브랜치 = Handoff 브랜치명 또는 intent/<문서 ID>)
+/claudecode-for-me:forge-scope docs/OrderApi/INTENT/OrderApi-INT-001.md
 
-# slug 명시
-/claudecode-for-me:forge-scope docs/App/WORK_PACKET/APP-WP-003.md --name order-api
-
-# legacy: TASK 직접 구현 (Work Packet Required SSOT gate 없음)
-/claudecode-for-me:forge-scope docs/App/TASK/APP-TASK-003.md
+# 같은 명령 재실행 = resume (브랜치·워크트리 존재 → 상태 전이 생략, ledger 에서 이어감)
+/claudecode-for-me:forge-scope docs/OrderApi/INTENT/OrderApi-INT-001.md
 
 # 워크트리·브랜치 정리 (서브모듈 메인 원본 보존). slug 생략 시 목록에서 선택
-/claudecode-for-me:forge-cancel LOADER-TASK-007
+/claudecode-for-me:forge-cancel OrderApi-INT-001
 /claudecode-for-me:forge-cancel
 ```
 
@@ -1815,27 +1861,33 @@ codenav --root <repo> ui --port 9876
 
 | 커맨드 | 인자 | 설명 |
 |---|---|---|
-| `forge-scope` | `<WORK_PACKET-or-TASK-doc-path>` | **필수**. 권장 입력은 Work Packet. TASK 경로는 legacy 호환 |
-| | `--name <slug>` | docName·워크트리·브랜치 이름 명시 (기본: 문서 파일명 stem) |
-| | `--force` | 메인 repo dirty 검사 우회 |
-| `forge-cancel` | `[<slug>]` | 제거할 워크트리 slug. 생략 시 목록에서 선택 |
+| `forge-scope` | `<Intent-doc-path>` | **필수**. `docs/<App>/INTENT/<ID>.md` |
+| | `--name <slug>` | 워크트리 slug 명시 (기본: Intent 문서 ID) |
+| | `--force` | 메인 repo dirty 검사만 우회 (커밋·승인 조건은 우회 불가) |
+| `forge-cancel` | `[<slug>]` | 제거할 워크트리 slug. 생략 시 목록에서 선택. `.worktree/<slug>` 에 붙은 브랜치(`feat-*`·`intent/*`)를 함께 삭제 |
 
-#### 검증 게이트 (forge-scope init)
+#### init 이 하는 일
 
-git repo·입력 문서 존재·**미결 항목 없음**을 검사한다. Work Packet 입력이면 상태가 `Ready`인지, `Execution Gate`가 있는지, `Blocking / Open Questions`가 `none`인지, 연결 TASK와 Required SSOT 링크 파일이 존재하는지 먼저 검사한다. `Draft` 또는 Required SSOT 누락이면 exit 2로 중단하고 워크트리를 만들지 않는다. TASK legacy 입력은 기존 TASK 미결(=`**TEMPLATE**` 배너 / §11 미확인 사항 Open 행 / §7 결정 필요 행 / 미치환 `{...}` placeholder)을 검사한다.
+1. **입력 판별** — 경로에 `INTENT` 폴더가 있거나 파일명이 `<App>-INT-<nnn>` 이면 Intent. 그 밖(Work Packet·TASK)은 exit 2 "v3.58 에서 폐지".
+2. **승인 게이트** — `상태 ∈ {approved, in-dev}` + `docs_helpers` 의 Intent 검사 FAIL 0. 미통과면 exit 2 + 사유, 워크트리를 만들지 않는다.
+3. **시작 조건** — HEAD 존재 + Intent 가 HEAD 에 tracked.
+4. **워크트리** — `.worktree/<slug>`, 브랜치 = Handoff `브랜치명`(유효한 ref 일 때) 아니면 `intent/<문서 ID>`.
+5. **가드레일 복사** — 메인의 `CLAUDE.md`·`.claude/rules`·`Docs`·`docs` 중 워크트리에 **없는 파일만** 복사(덮어쓰지 않음).
+6. **상태 전이** — 신규 생성일 때만 워크트리 Intent `approved → in-dev` + 커밋 `chore(<ID>): 상태 in-dev`. 메인 repo 의 Intent 는 그대로.
+7. **매니페스트** — stdout 마지막 줄 JSON: `worktree`·`branch`·`intent_worktree`·`intent_id`·`status`·`created`·`status_committed`·`acceptance`(A-n)·`handoff`(5행) 등. `.process/<slug>/` 스캐폴딩(build.md·progress.md)은 v3.61.0 에서 제거 — 계획·진행 상태는 팀장 ledger 하나다.
 
 #### 워크트리 서브모듈
 
 `git submodule update`(네트워크) 대신 **메인 repo 서브모듈을 junction(Windows)/symlink(Unix)로 링크** → 오프라인·내부망 동작. `submodule.<name>.ignore=all`로 커밋/상태 무시. 메인 미populate면 skip. **`forge-cancel`은 워크트리 링크만 해제하고 메인 repo 서브모듈 원본은 절대 건드리지 않는다**(링크 미해제 시 `git worktree remove`가 junction 따라 메인 삭제하는 사고 방지).
 
-#### .gitignore 권장
+#### .gitignore
+
+init 이 워크트리의 `.gitignore` 에 아래를 추가한다.
 
 ```gitignore
 .worktree/
 .process/
 ```
-
-Work Packet·TASK 를 생성하던 스킬(`work-packet-write`·`task-write`)이 v3.58.0에서 제거되어, 두 입력 경로는 현재 **재설계 대기 상태**다.
 
 ### 6.4 grill-me
 
@@ -1865,18 +1917,31 @@ Work Packet·TASK 를 생성하던 스킬(`work-packet-write`·`task-write`)이 
 - **채팅 출력 전용**: 마크다운 코드블록 1개로 wrap, `.md` 저장 안 함
 - 개조식 종결 강제, 출력 끝 `[에이전트 행동 규칙]` 4문구 자동 부착
 
-### 6.6 requirement-spec (grill-me 인터뷰 → Intent Part 1 → Part 2 파생 → 승인 1회)
+### 6.6 requirement-spec (grill-me 인터뷰 → Intent Part 1 → Part 2 파생 → 검증 루프 → 승인 1회)
 
 ```
-/claudecode-for-me:requirement-spec [--app <App>] [--type 기능개발|리팩토링]
+/claudecode-for-me:requirement-spec [--app <App>] [--type 기능개발|리팩토링] [--no-gate]
 ```
 
-- **산출물은 Intent 1개** — `docs/<App>/INTENT/<App>-INT-<NNN>.md`. 인터뷰 정리본·별도 지시서·TASK 등 부속 문서는 만들지 않는다
-- **Phase 0 Orient**: App·유형(`기능개발`/`리팩토링`)을 한 턴에 묶어 1회 확인 → 템플릿 경로를 repo → `${CLAUDE_PLUGIN_ROOT}` → 없으면 중단 순 3단으로 해석 → `docs/<App>/INTENT/` 의 `<App>-INT-*.md` 최대 번호 + 1(3자리 0패딩)로 NNN 채번 → 템플릿 복사 후 `상태`=`draft`
-- **Phase 1 grill-me 인터뷰(인라인)**: `grill-me`(6.4) Phase 0~4를 그대로 수행하되 오버라이드 3개 — ① 탐색 영역에 `완료 조건·검증 방법`·`Out of scope`·`결정과 기각 대안` 추가 ② 출력 포맷을 정리본(배경·전개·전환·결론) 대신 **Intent Part 1 6섹션**으로 교체 ③ grill-me Phase 4의 **정리본 파일 자동 저장 단계만 제외**(리뷰 1~3단계는 유지)
-- **Phase 2 Part 2 파생**: 사용자에게 질문하지 않고 **Part 1만 근거로** 7섹션(Functional requirements / Edge cases / Error cases / Acceptance / Verification / Risks / Handoff)을 채운다. FR은 Outcome·Decisions·Constraints에서 추적 가능해야 하고, 해당 없는 섹션은 `none`, 모르는 Handoff 값은 `pending`
-- **Phase 3 승인(1회)**: 경로와 Part 1·2 섹션별 핵심 요약 제시. 승인 조건은 `Open questions`가 `none` ∧ Handoff에 `pending` 없음 ∧ `유형`이 단일값으로 확정. 충족 시 `상태`=`approved`, 거절·중단 시 `draft` 유지
-- **Intent 템플릿**: `docs/.templates/App/INTENT/APP-INT-001-TEMPLATE.md` — Part 1 기능 명세 6섹션(Problem / Outcome / Affected / Constraints / Decisions / Open questions) + Part 2 작업 지시 7섹션
+- **산출물은 Intent 1개** — `docs/<App>/INTENT/<App>-INT-<NNN>.md`. 인터뷰 정리본·별도 지시서·TASK 등 부속 문서는 만들지 않는다. 검증 임시 파일만 `.process/intent-check/<문서 ID>/` 에 남는다(`interview.md`·`expected.md`·`checklist-round-<n>.md`·`round-<n>.md`·`critic-round-<n>.txt`·`quality.json`, gitignore 대상)
+- **Phase 0 Orient**: App·유형(`기능개발`/`리팩토링`)을 한 턴에 묶어 1회 확인 → `--no-gate` 해석 → 템플릿 경로를 repo → `${CLAUDE_PLUGIN_ROOT}` → 없으면 중단 순 3단으로 해석 → `docs/<App>/INTENT/` 의 `<App>-INT-*.md` 최대 번호 + 1(3자리 0패딩)로 NNN 채번 → 템플릿 복사 후 메타 표 7행(`상태`=`draft`, `승인`=`pending`, `검증`=`pending`) 기입 → repo 루트 `.gitignore` 에 `.process/` 줄 보장
+- **Phase 1 grill-me 인터뷰(인라인)**: `grill-me`(6.4) Phase 0~4를 그대로 수행하되 오버라이드 4개 — ① 탐색 영역에 `완료 조건·검증 방법`·`Out of scope`·`결정과 기각 대안` 추가 ② 출력 포맷을 정리본(배경·전개·전환·결론) 대신 **Intent Part 1 6섹션**으로 교체 ③ grill-me Phase 4의 **정리본 파일 자동 저장 단계만 제외**(리뷰 1~3단계는 유지) ④ 인터뷰 원문을 `.process/intent-check/<문서 ID>/interview.md` 에 전사 — 이 파일이 Phase 2 오라클의 유일한 입력이다
+- **Phase 2 오라클 도출 + Part 2 파생**: **2a** — `templates/intent-expector.md` 치환 전문을 opus 서브에이전트(`general-purpose`)에 넘겨 전사만 읽고 오라클을 뽑게 하고, 반환문을 `.process/intent-check/<ID>/expected.md` 로 저장한다(저장 후 불변). **2b** — 세션은 사용자에게 질문하지 않고 **Part 1만 근거로** 7섹션(Functional requirements / Edge cases / Error cases / Acceptance / Verification / Risks / Handoff)을 채운다. 근거는 FR이 `(Dn)`·`(Cn)`, E/X/A가 `(FR-n)`·`(Dn)`·`(Cn)`·`(OS)` 로 표기하고, C/FR/E/X/A 항목은 1부터 오름차순 ID(항목을 지워도 번호 재사용 없음 — 빈 번호 허용), Acceptance는 `A-n.` ID. 해당 없는 섹션은 `none`, 모르는 Handoff 값은 `pending`
+- **Phase 3 검증 루프(LLM 판정 최대 3회)**: ① `docs_helpers.py check-intent` 형식 검사(FAIL이면 인라인 수정 후 재실행 — 회차 미산입, 최대 3번) → ② `docs_helpers.py intent-checklist --round <n> --oracle <expected.md>` 사실표 생성(`EXP-n` 행이 표 맨 앞) → ③ Intent 스냅샷 → ④ `templates/intent-critic.md` 치환 전문을 opus 서브에이전트(`general-purpose`)에 넘겨 판정 → ⑤ `intent-checklist --check-return` 로 반환문 기계 검사(불일치면 finding을 붙여 같은 회차 1회 재요청, 2회째도 불일치면 `llm: FAIL(protocol)`) → ⑥ 처분. FAIL 키 중 **심각도 MAJOR가 0이면 PASS**로 루프 종료, 아니면 finding마다 수정·기각·N/A 수용 중 하나로 처분하고 기각·N/A 수용은 CARRY 목록으로 다음 회차 critic에 전달한다. CARRY를 뺀 FAIL 키 집합이 직전 회차와 같으면 무진전으로 중단
+- **검증 루프가 대조하는 것**: 판정 기준은 세션 추론이 아니라 **문서 자신의 항목에서 코드가 만든 체크리스트 행**(`ID | 대상 | facts | 판정 기준 | 심각도 | N/A | 인용`)이다. critic은 인터뷰 대화·수정 방향·이전 회차 반환문을 받지 않고 Intent와 체크리스트만 Read해 행마다 PASS / FAIL(`<행ID>:<기준문자>` + 원문 인용) / N/A(반영 위치 포함 사유)를 낸다. `--check-return`은 장부의 완전성(모든 행이 정확히 한 번), `[인용]` 표본 행의 원문 일치, N/A의 허용 여부·반영 위치를 기계로 확인한다
+- **기준표와 사실표는 다른 산출물이다**: **기준표(오라클)** 는 `expected.md` — Phase 1의 인터뷰 전사(`interview.md`)**만** 보고 fresh opus 서브에이전트가 1회 도출하며 이후 불변이다. **사실표**는 `checklist-round-<n>.md` — 코드가 **회차마다** 현재 문서에서 생성한 참조·형식 행이고, 기준이 아니라 현재 상태다. critic은 Intent를 이 둘에 대조한다. `EXP-n` 행의 판정 기준은 (a) 인터뷰 내용이 Intent에 담겼나 (b) 종류가 요구·완료조건·결정이면 Part 2 항목(FR/E/X/A)으로 내려왔나 두 가지이고, 종류에 따라 (b)의 생성 여부가 갈린다
+
+  | 종류 | 생성되는 기준 |
+  |---|---|
+  | `요구`·`완료조건`·`결정` | (a) + (b), 둘 다 MAJOR |
+  | `제약`·`제외`·`프로세스` | (a) MAJOR |
+  | `배경` | (a) MINOR |
+
+  EXP 행에는 N/A가 없고(`N/A` 열은 `불가`), `[인용]` 표본에도 들어가지 않는다. 오라클을 만들 수 없으면(서브에이전트 불가·형식 2회 실패) **폴백** — `--oracle` 없이 진행하고 `검증` 행에 `· oracle SKIPPED` 를 붙인 뒤 Phase 5에서 경고한다
+- **Phase 4 품질 지표**: 세션이 `.process/intent-check/<ID>/quality.json` 을 단일 작성(critic은 파일을 쓰지 않는다)하고, 메타 표의 `검증` 행을 `<총평> — code <상태> · llm <상태> · <회차>/3` 로 쓴다(예 `PASS — code PASS · llm PASS · 2/3`). 총평은 code FAIL 0 ∧ llm PASS면 `PASS`, 하나라도 FAIL이면 `FAIL`, `--no-gate` 면 `SKIPPED — --no-gate`, python·서브에이전트 불가면 `SKIPPED — <사유>`
+- **Phase 5 승인(1회)**: `AskUserQuestion` 본문에 Intent 경로·`검증` 행·최종 체크리스트 경로와 `<PASS 행>/<전체 행> PASS`·`인터뷰 반영 <covered>/<expected> · 누락 <EXP 키>`·잔존 MAJOR/MINOR 키·critic의 `IMPROVE` 목록(차단 아님)·Part 1 변경 diff(≤10줄)·SKIPPED 경고를 싣는다. 승인 조건은 `Open questions`가 `none` ∧ Handoff에 `pending` 없음 ∧ `유형`이 단일값 ∧ `검증`이 `PASS`·`OVERRIDE`·`SKIPPED` 중 하나로 시작. 총평이 `FAIL`이면 옵션은 수동 수정 후 재검증 1회 / OVERRIDE 승인 / 중단이고, OVERRIDE 승인 시 `검증` 총평과 `quality.json` 의 `final` 을 `OVERRIDE` 로 쓴다. 충족 시 `상태`=`approved`, 거절·중단 시 `draft` 유지
+- **`--no-gate`**: Phase 3·4를 건너뛰고 `검증` 행을 `SKIPPED — --no-gate` 로 둔 채 Phase 5만 수행
+- **Intent 템플릿**: `docs/.templates/App/INTENT/APP-INT-001-TEMPLATE.md` — 메타 표 7행(`검증` 포함) + Part 1 기능 명세 6섹션(Problem / Outcome / Affected / Constraints / Decisions / Open questions) + Part 2 작업 지시 7섹션
 - **경계**: 클래스명·파일명·구현 방법은 어느 Part에도 쓰지 않는다(개발 세션 몫). 후속 스킬 자동 호출 없음, `ExitPlanMode` 미호출
 
 ### 6.7 commit-analysis
@@ -1980,7 +2045,7 @@ Work Packet·TASK 를 생성하던 스킬(`work-packet-write`·`task-write`)이 
 forge-scope가 워크트리(feat-<slug>)에 기능을 구현한 뒤, ddr-loop은 그 브랜치 변경점을 **Work Packet/TASK/Required SSOT 또는 명시 문서(docs) 기준으로 수렴**시킨다. forge-scope→ddr-loop이 자연스러운 연계다.
 
 - **build-process 방식** — forge-scope처럼 `.process/<docName>/ddr-loop-build.md`(루프 PLAN)·`ddr-loop-progress.md`(회차·일치율 추적)에 기록하며 진행. `ddr_loop.py init`은 `.process/<docName>/`를 지우지 않아 forge-scope 산출물과 공존.
-- **Work Packet 자동 docs** — `--docs`를 생략하면 `.process/<slug>/forge-scope-build.md`의 Work Packet을 읽어 Work Packet + 연결 TASK + Required SSOT 문서를 `doc-driven-review` 입력으로 자동 구성한다. 명시 `--docs`는 override다.
+- **Work Packet 자동 docs** — (v3.61.0 부터 forge-scope 가 `forge-scope-build.md` 를 만들지 않으므로 새 워크트리에선 `--docs` 를 명시한다.) `--docs`를 생략하면 `.process/<slug>/forge-scope-build.md`의 Work Packet을 읽어 Work Packet + 연결 TASK + Required SSOT 문서를 `doc-driven-review` 입력으로 자동 구성한다. 명시 `--docs`는 override다.
 - **reviewer=codex / fixer=세션** — `doc_driven_review.py`(codex)가 `--worktree feat-<slug> --scope branch`로 브랜치 diff↔docs 대조해 `Conformance: N%` 산정. 미달 항목(Top Priorities/Review Comments/Overengineered)을 **현재 세션이 워크트리 안에서 인라인 수정**(자식 spawn 없음).
 - **수렴 조건(고정)** — 최대 **3회**, 일치율 **≥ 99%** 도달 시 정지. 회차마다 빌드/테스트(**대상 `.csproj`만, 솔루션 금지**) 통과 후 `fix(ddr-<slug>): iter N 일치율 N%` 커밋.
 - **문서 자동수정 금지** — 일치율을 올리려 docs/SSOT를 고치지 않는다. 코드를 docs에 맞춘다.
@@ -2141,8 +2206,7 @@ Claudecode-For-Me/
 │   ├── ext_dispatch.py          # ext-scout / ext-coder 외부 위임 디스패치
 │   ├── worktree_setup.py        # forge-scope 워크트리 셋업·검증·cancel
 │   ├── ddr_templates/           # ddr-loop build/progress 템플릿
-│   ├── ext_preambles/           # ext 역할별 프리앰블
-│   └── forge_templates/         # forge-scope build/progress 템플릿 + docs/.templates 시드
+│   └── ext_preambles/           # ext 역할별 프리앰블
 ├── tests/                       # pytest 스위트 (forge·docs·doc-driven-review)
 ├── samples/                     # (gitignored) 로컬 C# 테스트 픽스처 — 미커밋
 ├── .gitattributes
@@ -2158,7 +2222,7 @@ Claudecode-For-Me/
 |---|---|---|
 | install 직후 슬래시 자동완성에 안 보임 | 매니페스트는 세션 시작 시 1회 로드 | 세션 종료 → 재시작 |
 | update 후 신규 스킬 호출 불가 | 동일 — 캐시는 갱신됐으나 세션은 구버전 보유 | 세션 재시작 |
-| `forge-scope` 가 워크트리 안 만들고 종료(exit 2) | Work Packet 이 Draft, Blocking 존재, 연결 TASK/Required SSOT 링크 누락, 또는 TASK 문서 미결 항목(§7 결정·§11 미확인·placeholder·`**TEMPLATE**` 배너) | Work Packet을 Ready로 확정하고 Required SSOT 파일을 생성/연결한 뒤 재시도. TASK legacy 입력이면 문서 완성·미결 해소 |
+| `forge-scope` 가 워크트리 안 만들고 종료(exit 2) | Intent 가 `approved`/`in-dev` 아님, `INT_*` FAIL, 커밋 0 또는 Intent 미커밋, Work Packet·TASK 입력 | requirement-spec 으로 Intent 승인·재검증, Intent 와 프로젝트 골격을 커밋한 뒤 재시도 |
 | `ddr-loop` init exit 2 "forge 워크트리 없음" | 해당 slug 워크트리 미생성 | 먼저 `/forge-scope <WORK_PACKET>` 실행, 또는 forge-cancel에 쓴 slug 확인 (`worktree_setup.py list`) |
 | `ddr-loop` 첫 review exit 2 | codex CLI 미설치 (리뷰는 codex 의존) | `/codex:setup` 후 재시도 |
 | `codenav frontmatter gen` 결과 `generated=0` | `claude` CLI 부재 또는 stdout JSON 키 mismatch | `where claude` 확인. v1.15.0+ 는 `result`/`response` 둘 다 처리 |

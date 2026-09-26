@@ -1,74 +1,90 @@
+import json
 from pathlib import Path
 
-
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def read(rel: str) -> str:
     return (ROOT / rel).read_text(encoding="utf-8")
 
 
-def test_forge_scope_skill_is_work_packet_first():
+def test_skill_is_intent_only_orchestrator_procedure():
     text = read("skills/forge-scope/SKILL.md")
-    for expected in (
-        "<WORK_PACKET-or-TASK-doc-path>",
-        "권장 경로는 `/forge-scope <WORK_PACKET>`",
-        "Work Packet 입력 판별",
-        "Draft = do not implement",
-        "Required SSOT Execution Matrix",
-        "Implementation Output Contract",
-    ):
-        assert expected in text
+    required = (
+        "승인된 Intent",
+        'worktree_setup.py" init --doc <Intent>',
+        "## F0 —",
+        "## F1 —",
+        "## F2 —",
+        "## F3 —",
+        "## F4 —",
+        "## F5 —",
+        "오케스트레이터",
+        "Work Packet·TASK 입력은 v3.58 에서 폐지",
+    )
+    missing = [expected for expected in required if expected not in text]
+    assert not missing, f"SKILL.md is missing required strings: {missing}"
 
 
-def test_forge_scope_skill_documents_ready_gate_and_legacy_task_path():
+def test_skill_wave_loop_is_red_green_review_commit():
     text = read("skills/forge-scope/SKILL.md")
-    for expected in (
-        "상태는 정확히 `Ready`",
-        "`Blocking / Open Questions`는 `none`",
-        "연결 TASK 링크",
-        "`Priority = Required` 행",
-        "TASK legacy 입력 게이트",
-        "Work Packet 기반 Required SSOT gate",
-    ):
-        assert expected in text
+    required = (
+        "**RED**",
+        "**GREEN**",
+        "`error CS` 0개",
+        "reviewer-lite",
+        "UNCOVERED",
+        "feat(<ID>): W<k>",
+        "--repo <worktree>",
+    )
+    missing = [expected for expected in required if expected not in text]
+    assert not missing, f"SKILL.md is missing required strings: {missing}"
 
 
-def test_forge_scope_completion_report_uses_output_contract_fields():
+def test_skill_keeps_guardrails():
     text = read("skills/forge-scope/SKILL.md")
-    for expected in (
-        "Changed files",
-        "Scope match",
-        "Tests run",
-        "Not run",
-        "Deviations",
-    ):
-        assert expected in text
+    required = (
+        "*.sln",
+        "requirement-spec 으로 되돌린다",
+        "in-dev → in-review",
+        "미충족 + 사유",
+        "/forge-cancel",
+    )
+    missing = [expected for expected in required if expected not in text]
+    assert not missing, f"SKILL.md is missing required strings: {missing}"
 
 
-def test_command_and_readme_prefer_work_packet_usage():
-    docs = read("commands/forge-scope.md") + "\n" + read("README.md")
-    for expected in (
-        "<WORK_PACKET-or-TASK-doc-path>",
-        "Work Packet을 우선 입력",
-        "Draft = do not implement",
-        "Required SSOT Execution Matrix",
-        "Implementation Output Contract",
-        "TASK 직접 입력은 legacy",
-        "/claudecode-for-me:forge-scope docs/App/WORK_PACKET/APP-WP-003.md",
-    ):
-        assert expected in docs
+def test_skill_drops_inline_and_legacy_text():
+    text = read("skills/forge-scope/SKILL.md")
+    legacy = (
+        "인라인으로 수행",
+        "run_in_background",
+        "forge-scope-build.md",
+        "forge-scope-progress.md",
+        "Work Packet을 우선",
+        "Ready gate",
+    )
+    leftovers = [expected for expected in legacy if expected in text]
+    assert not leftovers, f"SKILL.md still contains legacy strings: {leftovers}"
 
 
-def test_forge_scope_build_template_separates_work_packet_task_and_ssot_inputs():
-    text = read("scripts/forge_templates/forge-scope-build.md")
-    for expected in (
-        "Work Packet: `{workPacketPath}`",
-        "TASK 문서: `{taskDocPath}`",
-        "Required SSOT",
-        "Work Packet §5 실행 규칙",
-        "Work Packet §8 검증 입력",
-        "Draft Work Packet 구현",
-        "완료 보고 contract 누락",
-    ):
-        assert expected in text
+def test_command_takes_intent_path():
+    text = read("commands/forge-scope.md")
+    assert "<Intent-doc-path>" in text
+    assert "skills/forge-scope/SKILL.md" in text
+    assert "WORK_PACKET" not in text
+
+
+def test_forge_templates_removed():
+    assert not (ROOT / "scripts" / "forge_templates").exists()
+
+
+def test_plugin_version_is_3_61_0():
+    plugin = json.loads(read(".claude-plugin/plugin.json"))
+    assert plugin["version"] == "3.61.0"
+
+    marketplace = json.loads(read(".claude-plugin/marketplace.json"))
+    for entry in marketplace["plugins"]:
+        if entry.get("name") == "claudecode-for-me":
+            assert entry["version"] == "3.61.0"
+

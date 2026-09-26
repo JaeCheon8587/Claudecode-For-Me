@@ -8,7 +8,7 @@
 Subcommands
 -----------
 - ``init``   : 검증 게이트 → 워크트리(.worktree/<slug>) 생성 → 서브모듈 링크 →
-               가드레일 복사 → .process/<docName>/ 스캐폴딩 → JSON 매니페스트 출력.
+               가드레일 복사 → Intent 상태 전이(approved → in-dev) → JSON 매니페스트 출력.
 - ``cancel`` : 서브모듈 링크 해제(메인 타깃 보존) → worktree remove → branch -D.
 
 표준 라이브러리만 사용한다 (Python 3.10+).
@@ -25,6 +25,9 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Optional
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import docs_helpers as _dh  # noqa: E402  (same scripts/ directory)
 
 EXIT_OK = 0
 EXIT_ERR = 1
@@ -92,6 +95,13 @@ def _slugify(stem: str) -> str:
     return s or "task"
 
 
+def _intent_branch(root: Path, intent_id: str, handoff_value: str) -> str:
+    v = handoff_value.strip()
+    if v and _git(root, "check-ref-format", "--branch", v).returncode == 0:
+        return v
+    return f"intent/{intent_id}"
+
+
 def _submodule_entries(root: Path, worktree: Path) -> list[tuple[str, str]]:
     """워크트리 .gitmodules 에서 (submodule name, path) 목록."""
     gm = worktree / ".gitmodules"
@@ -108,205 +118,44 @@ def _submodule_entries(root: Path, worktree: Path) -> list[tuple[str, str]]:
 # ============================================================================
 # 검증 게이트
 # ============================================================================
-def _strip_code(text: str) -> str:
-    """fenced + inline 코드를 제거 — placeholder 오탐 방지."""
-    text = re.sub(r"```.*?```", "", text, flags=re.S)
-    text = re.sub(r"`[^`\n]*`", "", text)
-    return text
-
-
-def _section(text: str, heading_re: str) -> Optional[str]:
-    """`## N. 제목` 헤딩부터 다음 `## ` 헤딩 전까지 본문. 없으면 None."""
-    lines = text.splitlines()
-    start = None
-    for i, ln in enumerate(lines):
-        if re.match(heading_re, ln):
-            start = i
-            break
-    if start is None:
-        return None
-    body: list[str] = []
-    for ln in lines[start + 1:]:
-        if ln.startswith("## "):
-            break
-        body.append(ln)
-    return "\n".join(body)
-
-
-def _split_md_row(line: str) -> list[str]:
-    if not line.strip().startswith("|"):
-        return []
-    return [cell.strip() for cell in line.strip().strip("|").split("|")]
-
-
-def _is_separator_row(cells: list[str]) -> bool:
-    return bool(cells) and all(re.fullmatch(r":?-{3,}:?", c.strip()) for c in cells)
-
-
-def _table_value(text: str, label: str) -> Optional[str]:
-    """문서 전체 markdown 표에서 첫 번째 컬럼이 label 인 행의 두 번째 컬럼."""
-    for line in text.splitlines():
-        cells = _split_md_row(line)
-        if len(cells) >= 2 and cells[0].strip() == label and not _is_separator_row(cells):
-            return cells[1].strip()
-    return None
-
-
-def _markdown_links(text: str) -> list[tuple[str, str]]:
-    return [(m.group(1).strip(), m.group(2).strip()) for m in re.finditer(r"\[([^\]]+)\]\(([^)]+)\)", text)]
-
-
-def _resolve_doc_link(base_doc: Path, href: str) -> Path:
-    href = href.split("#", 1)[0].strip()
-    return (base_doc.parent / href).resolve() if not Path(href).is_absolute() else Path(href)
-
-
-def _markdown_table(section_text: str) -> list[dict[str, str]]:
-    """첫 markdown 표를 header 기반 dict row 로 반환."""
-    header: Optional[list[str]] = None
-    rows: list[dict[str, str]] = []
-    for line in section_text.splitlines():
-        cells = _split_md_row(line)
-        if not cells:
-            if header and rows:
-                break
-            continue
-        if _is_separator_row(cells):
-            continue
-        if header is None:
-            header = cells
-            continue
-        padded = cells + [""] * max(0, len(header) - len(cells))
-        rows.append(dict(zip(header, padded)))
-    return rows
+INTENT_START_STATUSES: tuple[str, ...] = ("approved", "in-dev")
 
 
 def _detect_input_kind(doc: Path, raw: str) -> str:
-    parts = {p.upper() for p in doc.parts}
-    if "WORK_PACKET" in parts:
-        return "WORK_PACKET"
-    if re.search(r"-WP-\d+", doc.stem, flags=re.I):
-        return "WORK_PACKET"
-    if _table_value(raw, "연결 TASK") is not None:
-        return "WORK_PACKET"
-    return "TASK"
+    if any(p.upper() == "INTENT" for p in doc.parts):
+        return "INTENT"
+    if re.fullmatch(r"[A-Za-z][A-Za-z0-9]*-INT-\d{3}", doc.stem):
+        return "INTENT"
+    return "LEGACY"
 
 
-def _blocking_is_none(section_text: str) -> bool:
-    rows = _markdown_table(section_text)
-    if rows:
-        return all(
-            all((value.strip().lower() == "none") for value in row.values() if value.strip())
-            for row in rows
-        )
-    normalized = re.sub(r"\s+", " ", section_text).strip().lower()
-    return normalized == "none"
-
-
-def _gate_work_packet(doc: Path, raw: str) -> tuple[list[str], Optional[Path]]:
-    """Work Packet 전용 실행 게이트. 문제 목록과 연결 TASK 경로를 반환."""
+def _gate_intent(root: Path, doc: Path) -> list[str]:
+    """Intent 승인·형식 게이트. 문제 목록(빈 목록 = 통과)."""
     problems: list[str] = []
 
-    status = (_table_value(raw, "상태") or "").strip()
-    if status != "Ready":
-        problems.append(f"Work Packet 상태가 Ready가 아님: {status or '(없음)'} — Draft = do not implement.")
-
-    execution_gate = _section(raw, r"^##\s*3\.\s*Execution Gate\b")
-    if execution_gate is None:
-        problems.append("Execution Gate 섹션 없음 — Work Packet 실행 판단 불가.")
-
-    blocking = _section(raw, r"^##\s*7\.\s*Blocking\s*/\s*Open Questions\b")
-    if blocking is None:
-        problems.append("Blocking / Open Questions 섹션 없음 — Ready 여부 검증 불가.")
-    elif not _blocking_is_none(blocking):
-        problems.append("Blocking / Open Questions 가 none 이 아님 — 해결 후 재시도.")
-
-    task_doc: Optional[Path] = None
-    task_cell = _table_value(raw, "연결 TASK") or ""
-    task_links = _markdown_links(task_cell)
-    if not task_links:
-        sec2 = _section(raw, r"^##\s*2\.\s*TASK\b") or ""
-        task_links = _markdown_links(sec2)
-    if not task_links:
-        problems.append("연결 TASK 링크 없음 — Scope Authority 를 확인할 수 없음.")
-    else:
-        task_doc = _resolve_doc_link(doc, task_links[0][1])
-        if not task_doc.is_file():
-            problems.append(f"연결 TASK 파일 없음: {task_doc}")
-
-    matrix = _section(raw, r"^##\s*4\.\s*Required SSOT Execution Matrix\b")
-    if matrix is None:
-        problems.append("Required SSOT Execution Matrix 섹션 없음.")
-    else:
-        rows = _markdown_table(matrix)
-        required_rows = [row for row in rows if row.get("Priority", "").strip() == "Required"]
-        if not required_rows:
-            problems.append("Required SSOT Execution Matrix 에 Required 행 없음.")
-        for idx, row in enumerate(required_rows, start=1):
-            doc_cell = row.get("Document", "").strip()
-            links = _markdown_links(doc_cell)
-            if not links:
-                problems.append(f"Required SSOT row {idx}: Document 링크 없음.")
-                continue
-            ssot_doc = _resolve_doc_link(doc, links[0][1])
-            if not ssot_doc.is_file():
-                problems.append(f"Required SSOT row {idx}: 파일 없음: {ssot_doc}")
-
-    return problems, task_doc
-
-
-def _gate(doc: Path) -> list[str]:
-    """미결/미완성 항목 목록. 비어있으면 통과."""
-    problems: list[str] = []
-    if not doc.exists():
-        return [f"문서 없음: {doc}"]
     raw = doc.read_text(encoding="utf-8", errors="replace")
-    if not raw.strip():
-        return [f"문서 비어있음: {doc}"]
+    status = _dh._parse_intent(raw).meta.get("상태", "").strip()
+    if status not in INTENT_START_STATUSES:
+        problems.append(f"Intent 상태가 '{status or '(없음)'}' — approved 여야 개발을 시작한다 (requirement-spec Phase 5 에서 승인).")
 
-    # 1) 원시 템플릿 배너
-    if re.search(r"\*\*TEMPLATE\*\*", raw):
-        problems.append("원시 템플릿 상태 (`**TEMPLATE**` 배너 잔존) — 실제 값으로 채우세요.")
-
-    # 2) §11 미확인 사항 — Open 행 (단, "없음" 행은 무항목 placeholder → 제외)
-    sec11 = _section(raw, r"^##\s*11\.\s*미확인")
-    if sec11 is not None:
-        opens = [
-            ln for ln in sec11.splitlines()
-            if ln.strip().startswith("|") and re.search(r"\bOpen\b", ln) and "없음" not in ln
-        ]
-        if opens:
-            problems.append(f"§11 미확인 사항에 Open 항목 {len(opens)}건 — 해소 후 재시도 (없으면 §11 절 삭제).")
-
-    # 3) §7 결정 필요 사항 — D-T 결정 행 (단, "없음" 행은 빈 placeholder → 제외)
-    sec7 = _section(raw, r"^##\s*7\.\s*결정\s*필요")
-    if sec7 is not None:
-        decisions = [
-            ln for ln in sec7.splitlines()
-            if ln.strip().startswith("|") and "D-T" in ln and "없음" not in ln
-        ]
-        if decisions:
-            problems.append(f"§7 결정 필요 사항에 미결 결정 {len(decisions)}건 — 확정 후 재시도 (없으면 §7 절 삭제).")
-
-    # 4) 잔존 placeholder (코드 제외)
-    body = _strip_code(raw)
-    kor = "가-힣"
-    ph = set()
-    for m in re.finditer(r"\{([^{}\n]{1,80})\}", body):
-        inner = m.group(1).strip()
-        looks_placeholder = (
-            re.search(f"[{kor}]", inner)               # 한글 포함
-            or inner in {"App", "NNN", "..."}
-            or inner.startswith("예:")
-            or re.fullmatch(r"[A-Za-z][A-Za-z0-9]*", inner) and inner[0].isupper()
-        )
-        if looks_placeholder:
-            ph.add(m.group(0))
-    if ph:
-        sample = ", ".join(sorted(ph)[:5])
-        problems.append(f"미치환 placeholder {len(ph)}종 잔존 (예: {sample}).")
+    for r in _dh._check_intent_file(root, doc):
+        if r.level == "FAIL":
+            problems.append(f"{r.code}: {r.message}")
 
     return problems
+
+
+def _gate_start(root: Path, doc: Path) -> list[str]:
+    """워크트리 시작 조건 — HEAD 존재 + Intent 가 HEAD 에 tracked."""
+    if _git(root, "rev-parse", "--verify", "--quiet", "HEAD").returncode != 0:
+        return ["커밋이 하나도 없다 — Intent 와 프로젝트 골격(소스·테스트·솔루션)을 먼저 커밋한다. 워크트리는 마지막 커밋을 복사한다."]
+    try:
+        rel = doc.resolve().relative_to(root.resolve()).as_posix()
+    except ValueError:
+        return [f"Intent 가 이 repo 밖에 있다: {doc}"]
+    if _git(root, "cat-file", "-e", f"HEAD:{rel}").returncode != 0:
+        return [f"Intent 가 마지막 커밋에 없다: {rel} — 먼저 커밋한다."]
+    return []
 
 
 # ============================================================================
@@ -327,8 +176,7 @@ def _registered_worktree_path(root: Path, branch: str) -> Optional[Path]:
     return None
 
 
-def _ensure_worktree(root: Path, slug: str, *, force: bool) -> tuple[Path, str]:
-    branch = f"feat-{slug}"
+def _ensure_worktree(root: Path, slug: str, branch: str, *, force: bool) -> tuple[Path, str, bool]:
     wt = root / ".worktree" / slug
 
     registered = _registered_worktree_path(root, branch)
@@ -339,7 +187,7 @@ def _ensure_worktree(root: Path, slug: str, *, force: bool) -> tuple[Path, str]:
         if not registered.exists():
             _err(f"ERROR: 워크트리 등록됐으나 디렉토리 없음(stale): {registered}\n"
                  "  Hint: `git worktree prune` 후 재실행.")
-        return wt, branch
+        return wt, branch, False
 
     if wt.exists():
         _err(f"ERROR: 디렉토리 존재하나 워크트리 미등록: {wt}\n"
@@ -364,7 +212,7 @@ def _ensure_worktree(root: Path, slug: str, *, force: bool) -> tuple[Path, str]:
         r = _git(root, "worktree", "add", "-b", branch, str(wt))
     if r.returncode != 0:
         _err(f"ERROR: 워크트리 생성 실패 ({wt}).\n  {r.stderr.strip()}")
-    return wt, branch
+    return wt, branch, True
 
 
 def _link_submodules(root: Path, wt: Path, log: list[str]) -> None:
@@ -397,58 +245,48 @@ def _copy_guardrails(root: Path, wt: Path) -> tuple[list[str], list[str]]:
         src = root / rel
         if src.is_file():
             dst = wt / rel
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src, dst)
-            copied.append(rel)
+            if not dst.exists():
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dst)
+                copied.append(rel)
         else:
             skipped.append(rel)
     for rel in GUARDRAIL_DIRS:
         src = root / rel
         if src.is_dir():
-            dst = wt / rel
-            shutil.copytree(src, dst, dirs_exist_ok=True)
-            copied.append(rel + "/")
+            n_copied = 0
+            for f in src.rglob("*"):
+                if not f.is_file():
+                    continue
+                dst = wt / f.relative_to(root)
+                if dst.exists():
+                    continue
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(f, dst)
+                n_copied += 1
+            if n_copied:
+                copied.append(rel + "/")
         else:
             skipped.append(rel + "/")
     return copied, skipped
 
 
-def _scaffold_process(
-    wt: Path,
-    doc_name: str,
-    doc_rel: str,
-    *,
-    task_doc_rel: str,
-    work_packet_rel: str,
-) -> tuple[Path, Path]:
-    proc = wt / ".process" / doc_name
-    if proc.exists():
-        shutil.rmtree(proc, ignore_errors=True)
-    proc.mkdir(parents=True, exist_ok=True)
-
-    tmpl_dir = Path(__file__).resolve().parent / "forge_templates"
-    subs = {
-        "{docName}": doc_name,
-        "{docPath}": doc_rel,
-        "{taskDocPath}": task_doc_rel,
-        "{workPacketPath}": work_packet_rel,
-    }
-
-    def _emit(tmpl_name: str, out_name: str) -> Path:
-        out = proc / out_name
-        src = tmpl_dir / tmpl_name
-        if src.is_file():
-            content = src.read_text(encoding="utf-8", errors="replace")
-            for k, v in subs.items():
-                content = content.replace(k, v)
-        else:
-            content = f"# {out_name} — {doc_name}\n(템플릿 없음: {tmpl_name})\n"
-        out.write_text(content, encoding="utf-8")
-        return out
-
-    build_md = _emit("forge-scope-build.md", "forge-scope-build.md")
-    progress_md = _emit("forge-scope-progress.md", "forge-scope-progress.md")
-    return build_md, progress_md
+def _mark_in_dev(wt: Path, intent_rel: str, intent_id: str) -> bool:
+    p = wt / intent_rel
+    text = p.read_text(encoding="utf-8", errors="replace")
+    new_text, n = re.subn(
+        r"(?m)^\|\s*상태\s*\|\s*approved\s*\|\s*$",
+        "| 상태 | in-dev |",
+        text,
+    )
+    if n == 0:
+        return False
+    p.write_text(new_text, encoding="utf-8")
+    _git(wt, "add", intent_rel)
+    r = _git(wt, "commit", "-m", f"chore({intent_id}): 상태 in-dev")
+    if r.returncode != 0:
+        _err(f"ERROR: 상태 in-dev 커밋 실패 ({intent_rel}).\n  {r.stderr.strip()}")
+    return True
 
 
 def _ensure_gitignore(wt: Path) -> None:
@@ -472,72 +310,61 @@ def cmd_init(args: argparse.Namespace) -> int:
         doc = (Path.cwd() / doc).resolve()
 
     if not doc.exists():
-        problems = _gate(doc)
-        msg = "§F 검증 게이트 미통과 — 문서 미완성/미결 항목:\n" + \
-            "\n".join(f"  - {p}" for p in problems)
-        _err(msg, EXIT_BLOCKED)
+        _err(f"§F 문서 없음: {doc}", EXIT_BLOCKED)
 
     raw = doc.read_text(encoding="utf-8", errors="replace")
     input_kind = _detect_input_kind(doc, raw)
-    task_doc: Optional[Path] = doc if input_kind == "TASK" else None
-    work_packet: Optional[Path] = doc if input_kind == "WORK_PACKET" else None
+    if input_kind != "INTENT":
+        _err(
+            "§F Work Packet·TASK 입력은 v3.58 에서 폐지됐다 — "
+            "requirement-spec 으로 Intent 를 작성·승인한 뒤 그 경로를 넣는다.",
+            EXIT_BLOCKED,
+        )
 
-    if input_kind == "WORK_PACKET":
-        wp_problems, linked_task = _gate_work_packet(doc, raw)
-        if linked_task is not None:
-            task_doc = linked_task
-        if wp_problems:
-            msg = "§F Work Packet 실행 게이트 미통과:\n" + \
-                "\n".join(f"  - {p}" for p in wp_problems)
-            _err(msg, EXIT_BLOCKED)
-
-    problems = _gate(doc)
+    problems = _gate_intent(root, doc) + _gate_start(root, doc)
     if problems:
-        msg = "§F 검증 게이트 미통과 — 문서 미완성/미결 항목:\n" + \
-            "\n".join(f"  - {p}" for p in problems)
-        _err(msg, EXIT_BLOCKED)
+        _err("§F Intent 게이트 미통과:\n" + "\n".join(f"  - {p}" for p in problems), EXIT_BLOCKED)
 
-    doc_name = args.name or _slugify(doc.stem)
-    slug = _slugify(doc_name)
+    intent = _dh._parse_intent(raw)
+    intent_id = intent.meta.get("문서 ID", "").strip() or doc.stem
+    slug = _slugify(args.name or intent_id)
+    branch = _intent_branch(root, intent_id, intent.handoff.get("브랜치명", ""))
 
-    wt, branch = _ensure_worktree(root, slug, force=args.force)
+    wt, branch, created = _ensure_worktree(root, slug, branch, force=args.force)
 
     log: list[str] = []
     _link_submodules(root, wt, log)
     copied, skipped = _copy_guardrails(root, wt)
 
-    try:
-        doc_rel = doc.relative_to(root).as_posix()
-    except ValueError:
-        doc_rel = doc.as_posix()
-    if task_doc is not None:
-        try:
-            task_doc_rel = task_doc.relative_to(root).as_posix()
-        except ValueError:
-            task_doc_rel = task_doc.as_posix()
-    else:
-        task_doc_rel = "(unknown)"
-    work_packet_rel = doc_rel if work_packet is not None else "(legacy TASK direct input - none)"
-    build_md, progress_md = _scaffold_process(
-        wt,
-        doc_name,
-        doc_rel,
-        task_doc_rel=task_doc_rel,
-        work_packet_rel=work_packet_rel,
-    )
+    # _gate_start 와 같은 방식 — 게이트가 repo 내부임을 이미 보장했다.
+    intent_rel = doc.resolve().relative_to(root.resolve()).as_posix()
     _ensure_gitignore(wt)
+
+    status_committed = False
+    if created:
+        status_committed = _mark_in_dev(wt, intent_rel, intent_id)
+
+    wt_intent = _dh._parse_intent(
+        (wt / intent_rel).read_text(encoding="utf-8", errors="replace")
+    )
+    status = wt_intent.meta.get("상태", "")
 
     manifest = {
         "root": str(root),
         "worktree": str(wt),
         "branch": branch,
-        "docName": doc_name,
-        "doc": str(doc),
-        "input_kind": input_kind,
-        "work_packet": str(work_packet) if work_packet is not None else None,
-        "task_doc": str(task_doc) if task_doc is not None else None,
-        "build_md": str(build_md),
-        "progress_md": str(progress_md),
+        "slug": slug,
+        "intent": str(doc),
+        "intent_worktree": str(wt / intent_rel),
+        "intent_id": intent_id,
+        "status": status,
+        "created": created,
+        "status_committed": status_committed,
+        "acceptance": [{"id": it.id, "text": it.text} for it in wt_intent.items["A"]],
+        "handoff": {
+            k: wt_intent.handoff.get(k, "")
+            for k in ("repo · app", "base branch", "브랜치명", "손대지 말 영역", "완료 보고 방식")
+        },
         "copied": copied,
         "skipped": skipped,
         "submodule_log": log,
@@ -545,13 +372,13 @@ def cmd_init(args: argparse.Namespace) -> int:
     if not args.quiet:
         print(f"[forge] worktree: {wt}")
         print(f"[forge] branch:   {branch}")
+        print(f"[forge] status:   {status}")
         if copied:
             print(f"[forge] 복사:     {', '.join(copied)}")
         if skipped:
             print(f"[forge] skip:     {', '.join(skipped)}")
         for l in log:
             print(f"[forge] {l}")
-        print(f"[forge] .process: {build_md.parent}")
     print(json.dumps(manifest, ensure_ascii=False))
     return EXIT_OK
 
@@ -584,8 +411,25 @@ def _unlink_submodule_links(worktree: Path) -> None:
                 pass
 
 
+def _worktree_branch(root: Path, wt: Path) -> Optional[str]:
+    """git worktree list --porcelain 에서 wt 경로에 attach된 브랜치명(없으면 None)."""
+    r = _git(root, "worktree", "list", "--porcelain")
+    current: Optional[Path] = None
+    for line in r.stdout.splitlines():
+        if not line.strip():
+            current = None
+        elif line.startswith("worktree "):
+            current = Path(line[len("worktree "):])
+        elif line.startswith("branch ") and current is not None:
+            if current.resolve() == wt.resolve():
+                ref = line[len("branch "):].strip()
+                return ref[len("refs/heads/"):] if ref.startswith("refs/heads/") else ref
+            current = None
+    return None
+
+
 def cmd_list(args: argparse.Namespace) -> int:
-    """forge 워크트리 나열 — .worktree/ 하위 + feat-<slug> 브랜치인 것만."""
+    """forge 워크트리 나열 — .worktree/ 하위 + feat-<slug>·intent/… 브랜치인 것만."""
     root = _repo_root(Path.cwd())
     if root is None:
         _err("ERROR: git repository가 아닙니다.")
@@ -604,7 +448,7 @@ def cmd_list(args: argparse.Namespace) -> int:
                 under = cur.resolve().parent == wt_base
             except OSError:
                 under = False
-            if under and br.startswith("feat-"):
+            if under and (br.startswith("feat-") or br.startswith("intent/")):
                 out.append({"slug": cur.name, "branch": br, "worktree": str(cur)})
             cur = None
     print(json.dumps(out, ensure_ascii=False))
@@ -617,8 +461,8 @@ def cmd_cancel(args: argparse.Namespace) -> int:
         _err("ERROR: git repository가 아닙니다.")
 
     slug = _slugify(args.slug)
-    branch = f"feat-{slug}"
     wt = root / ".worktree" / slug
+    branch = _worktree_branch(root, wt) or f"feat-{slug}"
     registered = _registered_worktree_path(root, branch)
 
     if registered is not None and not registered.exists():
@@ -679,9 +523,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     p = argparse.ArgumentParser(prog="worktree_setup", description="forge-scope 워크트리 셋업 helper")
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    pi = sub.add_parser("init", help="검증 게이트 + 워크트리 + 링크 + 복사 + .process")
-    pi.add_argument("--doc", required=True, help="Work Packet 또는 TASK 문서 경로")
-    pi.add_argument("--name", default=None, help="docName/slug 명시 (기본: doc 파일명 stem)")
+    pi = sub.add_parser("init", help="검증 게이트 + 워크트리 + 링크 + 복사 + 상태 전이")
+    pi.add_argument("--doc", required=True, help="approved Intent 문서 경로 (docs/<App>/INTENT/<ID>.md)")
+    pi.add_argument("--name", default=None, help="slug 명시 (기본: Intent 문서 ID)")
     pi.add_argument("--force", action="store_true", help="메인 repo dirty 검사 우회")
     pi.add_argument("--quiet", action="store_true", help="진행 로그 억제 (JSON만)")
     pi.set_defaults(func=cmd_init)
