@@ -183,7 +183,9 @@ def _ensure_worktree(root: Path, slug: str, branch: str, *, force: bool) -> tupl
     if registered is not None:
         if registered.resolve() != wt.resolve():
             _err(f"ERROR: branch '{branch}'가 다른 워크트리에 attach됨: {registered}\n"
-                 "  Hint: worktree_setup.py cancel 로 정리하거나 다른 --name 사용.")
+                 "  Hint: 그 워크트리를 정리한 뒤 재실행 — .worktree/ 아래면 "
+                 "`worktree_setup.py cancel <slug>`, 그 밖이면 `git worktree remove <경로>`. "
+                 "브랜치는 Intent Handoff 로 정해지므로 --name 으로는 피할 수 없다.")
         if not registered.exists():
             _err(f"ERROR: 워크트리 등록됐으나 디렉토리 없음(stale): {registered}\n"
                  "  Hint: `git worktree prune` 후 재실행.")

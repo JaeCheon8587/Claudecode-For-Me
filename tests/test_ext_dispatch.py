@@ -322,6 +322,21 @@ def test_quota_signal_is_reported_as_reason(ext, git_repo):
     assert "usage limit" in res["status"]
 
 
+def test_quota_signal_detects_weekly_limit_exhausted(ext):
+    assert ext._detect_quota_signal(
+        "ERROR: stream disconnected before completion: Weekly/Monthly Limit Exhausted. "
+        "Your limit will reset at 2026-09-25 11:51:47"
+    ) == "limit exhausted"
+
+
+def test_quota_signal_detects_limit_reached(ext):
+    assert ext._detect_quota_signal("ERROR: Daily limit reached. Try again tomorrow.") == "limit reached"
+
+
+def test_quota_signal_ignores_generic_exhausted(ext):
+    assert ext._detect_quota_signal("pytest: retries exhausted after 3 attempts") is None
+
+
 def test_auth_signal_is_a_hard_failure(ext, git_repo):
     ext.INVOKERS["codex"] = fake(
         "", stderr="request failed: 401 Unauthorized", rc=1)

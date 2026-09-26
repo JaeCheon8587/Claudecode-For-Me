@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v3.61.0 · 커스텀 스킬 11종 + 슬래시 커맨드 15종 + 에이전트 9종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v3.61.1 · 커스텀 스킬 11종 + 슬래시 커맨드 15종 + 에이전트 9종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,7 +11,7 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `3.61.0` |
+| 버전 | `3.61.1` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
@@ -66,6 +66,17 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v3.61.1 — 후속 정정 3건: 브랜치 충돌 힌트 · ext 쿼터 신호 · 해시 줄 테스트
+
+- **`worktree_setup.py`** — 브랜치가 다른 워크트리에 붙어 있을 때의 힌트가 "다른 --name 사용"을 권했으나 브랜치는 Intent Handoff 로
+  정해져 `--name` 으로는 피할 수 없다. `.worktree/` 아래면 `cancel <slug>`, 그 밖이면 `git worktree remove <경로>` 로 정정.
+- **`ext_dispatch.py`** — `QUOTA_SIGNALS` 에 `limit exhausted`·`limit reached` 추가. Codex 실측 문구 "Weekly/Monthly Limit
+  Exhausted" 가 exit 8(원인 불명)로 오분류되던 것을 exit 6(쿼터 봉인)으로. 단독 `exhausted` 는 오탐("retries exhausted")이라 넣지 않는다.
+- **테스트** — `--check-return` 성공 6곳을 `assert_ok_with_hash`(정확히 2줄 · 64 hex · 2칸 공백)로 강화, 버전 핀 테스트의
+  marketplace 항목 공집합 통과 차단.
+
+**검증**: `python -m pytest tests/ -q` **274 passed, 3 skipped**.
 
 ### v3.61.0 — forge-scope 를 오케스트레이터 전용 · Intent 전용으로 재작성 · BREAKING
 

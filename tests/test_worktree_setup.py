@@ -274,6 +274,21 @@ def test_handoff_branch_name_fallback_when_not_a_ref(git_repo: Path):
     assert manifest_from(result)["branch"] == "intent/Demo-INT-001"
 
 
+def test_branch_attached_elsewhere_hint_has_no_name_option(git_repo: Path, tmp_path: Path):
+    doc = write_intent(git_repo)
+    commit_all(git_repo)
+    run_git(git_repo, "branch", "intent/Demo-INT-001")
+    other = tmp_path / "elsewhere"
+    run_git(git_repo, "worktree", "add", str(other), "intent/Demo-INT-001")
+
+    r = run_init(git_repo, doc)
+
+    assert r.returncode != 0
+    assert "git worktree remove" in r.stderr
+    assert "--name 으로는 피할 수 없다" in r.stderr
+    assert "다른 --name 사용" not in r.stderr
+
+
 def test_first_init_marks_in_dev_and_commits(git_repo: Path):
     intent = write_intent(git_repo)
     commit_all(git_repo)

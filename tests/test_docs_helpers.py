@@ -1,4 +1,5 @@
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -7,6 +8,13 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 import docs_helpers as dh
+
+
+def assert_ok_with_hash(out: str) -> None:
+    lines = out.strip().splitlines()
+    assert len(lines) == 2, lines
+    assert lines[0] == "OK"
+    assert re.fullmatch(r"RETURN-SHA256: [0-9a-f]{64}  \S+", lines[1]), lines[1]
 
 
 SAMPLE_INTENT_PATH = Path(
@@ -595,9 +603,7 @@ class TestIntentChecklist:
     def test_check_return_ok(self, tmp_path, capsys):
         rc, out = self._check(tmp_path, capsys)
         assert rc == 0
-        lines = out.strip().splitlines()
-        assert lines[0] == "OK"
-        assert lines[1].startswith("RETURN-SHA256: ")
+        assert_ok_with_hash(out)
 
     def test_check_return_missing(self, tmp_path, capsys):
         rc, out = self._check(tmp_path, capsys, drop_pass=("FR-3",))
@@ -636,9 +642,7 @@ class TestIntentChecklist:
             tmp_path, capsys, drop_pass=("D1",), na_entries=(("D1:a", "Handoff 완료 보고 방식"),)
         )
         assert rc == 0
-        lines = out.strip().splitlines()
-        assert lines[0] == "OK"
-        assert lines[1].startswith("RETURN-SHA256: ")
+        assert_ok_with_hash(out)
 
     def test_check_return_quote_missing(self, tmp_path, capsys):
         payload = self._payload(tmp_path, capsys)
@@ -673,7 +677,7 @@ class TestIntentChecklist:
         rc = self._run(tmp_path, path, extra=["--check-return", str(ret)])
         out = capsys.readouterr().out
         assert rc == 0
-        assert "OK" in out
+        assert_ok_with_hash(out)
         assert "EXTRA" not in out
 
     def test_check_return_fail_eobseum_na_eobseum_not_extra(self, tmp_path, capsys):
@@ -688,7 +692,7 @@ class TestIntentChecklist:
         rc = self._run(tmp_path, path, extra=["--check-return", str(ret)])
         out = capsys.readouterr().out
         assert rc == 0
-        assert "OK" in out
+        assert_ok_with_hash(out)
         assert "EXTRA" not in out
 
     def test_check_return_quote_none_still_missing(self, tmp_path, capsys):
@@ -721,7 +725,7 @@ class TestIntentChecklist:
         rc = self._run(tmp_path, path, extra=["--check-return", str(ret)])
         out = capsys.readouterr().out
         assert rc == 0
-        assert "OK" in out
+        assert_ok_with_hash(out)
         assert "EXTRA" not in out
 
     def test_check_return_ok_prints_sha256(self, tmp_path, capsys):
@@ -885,9 +889,7 @@ class TestIntentChecklistOracle:
     def test_check_return_with_oracle_ok(self, tmp_path, capsys):
         rc, out = self._check(tmp_path, capsys)
         assert rc == 0
-        lines = out.strip().splitlines()
-        assert lines[0] == "OK"
-        assert lines[1].startswith("RETURN-SHA256: ")
+        assert_ok_with_hash(out)
 
     def test_check_return_missing_exp(self, tmp_path, capsys):
         rc, out = self._check(tmp_path, capsys, drop_pass=("EXP-4",))

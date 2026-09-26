@@ -136,8 +136,9 @@ _SKIP_DIRS = {".git", "node_modules", "dist", "build", "coverage",
 # rc != 0 + 리시트 부재일 때만 스캔하는 원인 추정 시그널 (소문자 부분 매칭).
 # 이 둘에 걸리면 재시도가 무의미하다 (exit 6) — 걸리지 않으면 원인 미상이고,
 # 원인 미상은 대개 일시적 환경 결함이라 봉인이 아니라 probe 대상이다 (exit 8).
+# "limit exhausted" — Codex 실측 2026-09-24 "Weekly/Monthly Limit Exhausted" (exit 8 오분류 사례).
 QUOTA_SIGNALS = ("quota", "usage limit", "credit", "rate limit",
-                 "insufficient", "429")
+                 "insufficient", "429", "limit exhausted", "limit reached")
 # 맨 숫자 코드("401")는 넣지 않는다 — exit 6 은 봉인 지시이고, 파일 내용이나
 # 토큰 수에 우연히 섞인 세 자리가 ext 를 태스크 내내 죽이는 오탐이 된다.
 # 실제 인증 실패는 사실상 항상 단어를 함께 출력한다.
