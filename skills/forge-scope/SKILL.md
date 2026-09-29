@@ -130,9 +130,10 @@ coder 스펙 규칙:
 
 1. **scribe** 1회(상태 in-dev → in-review): 워크트리 Intent 메타 `| 상태 | in-dev |` → `| 상태 | in-review |` 1줄만(그 밖 무변경). 팀장은 Intent 를 직접 고치지 않는다.
 2. reviewer(opus) — 브랜치 전체 diff(`git -C <worktree> diff <base_commit>...HEAD`, 매니페스트의 `base_commit`. 없으면 `base`, 그것도 없으면 Handoff `base branch`) vs Intent: A 커버리지, `손대지 말 영역` 무변경, FR/X 위반 여부. sha 를 우선 쓰는 이유 — base 브랜치가 개발 중 앞으로 나가도 비교 범위가 흔들리지 않는다.
-3. APPROVE → 커밋 `chore(<ID>): 상태 in-review`.
-4. Handoff `완료 보고 방식` 대로 보고: A-n 표(충족/미충족 + 증거) · Deviations(Intent 와 다르게 한 것) · 브랜치명.
-5. ledger `status: done` + retro 3줄.
+3. **카탈로그 재생성**: `python "${CLAUDE_PLUGIN_ROOT}/scripts/docs_helpers.py" intent-catalog --repo <worktree> --app <App> --write`. 카탈로그는 INTENT/ 에서 파생하는 인덱스라 상태 전이 직후 다시 써야 한다 — 손으로 고치지 않는다.
+4. APPROVE → 커밋 `chore(<ID>): 상태 in-review` (Intent + `<App>-INT-CATALOG.md` 2 파일).
+5. Handoff `완료 보고 방식` 대로 보고: A-n 표(충족/미충족 + 증거) · Deviations(Intent 와 다르게 한 것) · 브랜치명.
+6. ledger `status: done` + retro 3줄.
 
 머지·푸시는 사용자 지시가 있을 때만. 작업 공간 정리는 `/forge-cancel <slug>`.
 

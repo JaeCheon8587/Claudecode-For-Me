@@ -318,6 +318,26 @@ def _copy_guardrails(root: Path, wt: Path) -> tuple[list[str], list[str]]:
     return copied, skipped
 
 
+def _refresh_int_catalog(wt: Path, intent_rel: str) -> Optional[str]:
+    """워크트리의 <App>-INT-CATALOG.md 를 INTENT/ 에서 다시 생성한다.
+
+    카탈로그는 파생 인덱스라 상태 전이 직후 반드시 갱신해야 한다. 실패해도 init 을
+    막지 않는다 — docs_helpers.py check --app <App> 이 stale 로 잡는다.
+    """
+    parts = Path(intent_rel).parts
+    if len(parts) < 4 or parts[0] != "docs" or parts[2] != "INTENT":
+        return None
+    app = parts[1]
+    try:
+        rows, _ = _dh._collect_intent_rows(wt, app)
+        text = _dh._render_intent_catalog(app, rows)
+    except Exception:
+        return None
+    rel = f"docs/{app}/{app}-INT-CATALOG.md"
+    (wt / rel).write_text(text, encoding="utf-8", newline="\n")
+    return rel
+
+
 def _mark_in_dev(wt: Path, intent_rel: str, intent_id: str, base: Optional[str] = None) -> bool:
     p = wt / intent_rel
     text = p.read_text(encoding="utf-8", errors="replace")
@@ -340,6 +360,9 @@ def _mark_in_dev(wt: Path, intent_rel: str, intent_id: str, base: Optional[str] 
         )
     p.write_text(new_text, encoding="utf-8")
     _git(wt, "add", intent_rel)
+    cat_rel = _refresh_int_catalog(wt, intent_rel)
+    if cat_rel:
+        _git(wt, "add", cat_rel)
     r = _git(wt, "commit", "-m", f"chore({intent_id}): 상태 in-dev")
     if r.returncode != 0:
         _err(f"ERROR: 상태 in-dev 커밋 실패 ({intent_rel}).\n  {r.stderr.strip()}")

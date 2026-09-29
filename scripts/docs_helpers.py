@@ -1,4 +1,4 @@
-"""docs_helpers — v0.7 per-App docs read-only inspection helper.
+"""docs_helpers — v0.7 per-App docs inspection helper.
 
 Subcommands:
     list-apps   /CLAUDE.md Backend Services Overview 표 + docs/<App>/ 폴더 교차검증
@@ -9,6 +9,9 @@ Subcommands:
     check       v0.7 파일 무결성 검사
     check-intent  Intent 문서(<App>-INT-<NNN>.md) 구조 검증 — rule set A·B
     intent-checklist  Intent 문서 검증 기준표(행·코드 facts·인용 표본) 생성 · critic 반환 검사
+    intent-catalog  docs/<App>/<App>-INT-CATALOG.md 생성·검사 (INTENT/ 에서 파생)
+
+파일을 쓰는 것은 `intent-catalog --write` 뿐이고, 나머지 서브커맨드는 read-only 다.
 
 Standard library only. Windows PowerShell 호환.
 """
@@ -595,6 +598,25 @@ def _check_app(repo: Path, app: str) -> list[CheckResult]:
                 ))
             else:
                 results.append(CheckResult("PASS", "ADR_CATALOG", f"{stem} referenced", catalog_path))
+
+    # INTENT 를 실제로 쓰는 repo 에서만 검사한다 — INTENT/ 가 비어 있으면 카탈로그를 요구하지 않는다.
+    intent_rows, _ = _collect_intent_rows(repo, app)
+    if intent_rows:
+        int_catalog_path = docs_dir / f"{app}-INT-CATALOG.md"
+        expected_catalog = _render_intent_catalog(app, intent_rows)
+        actual_catalog = _read_text(int_catalog_path)
+        if actual_catalog is None:
+            results.append(CheckResult(
+                "FAIL", "INT_CATALOG", "missing — intent-catalog --write 로 생성", int_catalog_path,
+            ))
+        elif actual_catalog != expected_catalog:
+            results.append(CheckResult(
+                "FAIL", "INT_CATALOG", "stale — intent-catalog --write 로 재생성", int_catalog_path,
+            ))
+        else:
+            results.append(CheckResult(
+                "PASS", "INT_CATALOG", f"{len(intent_rows)} intents 최신", int_catalog_path,
+            ))
 
     return results
 
@@ -1770,6 +1792,211 @@ def cmd_intent_checklist(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
+# intent-catalog (docs/<App>/<App>-INT-CATALOG.md 생성 · 검사)
+# ---------------------------------------------------------------------------
+
+
+INTENT_FILENAME_PATTERN = lambda app: re.compile(rf"^{re.escape(app)}-INT-(\d{{3}})\.md$")
+
+INTENT_CATALOG_SUMMARY_MAX = 50
+
+
+@dataclass
+class CatalogRow:
+    """카탈로그 한 행. 값은 전부 Intent 문서에서 파생한다 — 카탈로그 고유 정보는 없다."""
+
+    intent_id: str
+    stem: str
+    title: str
+    kind: str      # 메타 `유형`
+    status: str    # 메타 `상태`
+    gate: str      # 메타 `검증` 축약
+    summary: str   # Outcome 첫 줄
+    fr: int
+    a: int
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.intent_id,
+            "file": f"INTENT/{self.stem}.md",
+            "title": self.title,
+            "type": self.kind,
+            "status": self.status,
+            "gate": self.gate,
+            "summary": self.summary,
+            "fr": self.fr,
+            "a": self.a,
+        }
+
+
+def _intent_gate_short(value: str) -> str:
+    """메타 `검증` 값을 카탈로그 한 칸 폭으로 줄인다. `PASS — code PASS · llm PASS · 2/3` → `PASS 2/3`."""
+    v = value.strip()
+    if not v:
+        return "?"
+    m = re.match(r"^(PASS|FAIL|OVERRIDE|SKIPPED)\b", v)
+    if m is None:
+        return v if len(v) <= 20 else v[:19].rstrip() + "…"
+    verdict = m.group(1)
+    r = re.search(r"(\d+)/(\d+)", v)
+    if r is not None:
+        return f"{verdict} {r.group(1)}/{r.group(2)}"
+    tail = re.sub(r"^[\s—·]+", "", v[len(verdict):]).strip()
+    if tail and len(tail) <= 20:
+        return f"{verdict} — {tail}"
+    return verdict
+
+
+def _intent_short_title(doc: IntentDoc, intent_id: str) -> str:
+    """H1 에서 `<ID> — ` 접두를 뗀 제목."""
+    t = doc.title.strip()
+    if not t:
+        return "?"
+    if intent_id and t.startswith(intent_id):
+        t = t[len(intent_id):].lstrip(" —-").strip()
+    return t or "?"
+
+
+def _intent_summary(doc: IntentDoc) -> str:
+    """Outcome 본문의 첫 실질 줄(주석·Out of scope 제외)을 잘라 쓴다."""
+    for _, line in _intent_live_lines(doc, "Outcome"):
+        text = re.sub(r"^[-*]\s+", "", line.strip()).strip()
+        if not text or line.strip().startswith("- Out of scope:"):
+            continue
+        if len(text) > INTENT_CATALOG_SUMMARY_MAX:
+            text = text[:INTENT_CATALOG_SUMMARY_MAX - 1].rstrip() + "…"
+        return text
+    return "?"
+
+
+def _collect_intent_rows(repo: Path, app: str) -> tuple[list[CatalogRow], list[str]]:
+    """docs/<App>/INTENT/<App>-INT-<NNN>.md 를 파싱해 카탈로그 행으로 만든다."""
+    intent_dir = repo / "docs" / app / "INTENT"
+    rows: list[CatalogRow] = []
+    skipped: list[str] = []
+    if not intent_dir.is_dir():
+        return rows, skipped
+    pat = INTENT_FILENAME_PATTERN(app)
+    for f in sorted(intent_dir.glob("*.md")):
+        if not pat.match(f.name):
+            skipped.append(f.name)
+            continue
+        text = _read_text(f)
+        if text is None:
+            skipped.append(f.name)
+            continue
+        doc = _parse_intent(text)
+        intent_id = (doc.meta.get("문서 ID") or "").strip() or f.stem
+        rows.append(CatalogRow(
+            intent_id=intent_id,
+            stem=f.stem,
+            title=_intent_short_title(doc, intent_id),
+            kind=(doc.meta.get("유형") or "").strip() or "?",
+            status=(doc.meta.get("상태") or "").strip() or "?",
+            gate=_intent_gate_short(doc.meta.get("검증") or ""),
+            summary=_intent_summary(doc),
+            fr=len(doc.items["FR"]),
+            a=len(doc.items["A"]),
+        ))
+    return rows, skipped
+
+
+def _render_intent_catalog(app: str, rows: list[CatalogRow]) -> str:
+    """카탈로그 마크다운 전문. 타임스탬프를 넣지 않는다 — stale 비교가 항상 불일치가 되기 때문."""
+    out = [
+        f"# {app}-INT-CATALOG — {app} Intent Catalog",
+        "",
+        f"> **생성물** — `docs_helpers.py intent-catalog --repo . --app {app} --write` 가 "
+        "`INTENT/` 를 훑어 다시 쓴다. **직접 고치지 않는다** — 값을 바꾸려면 해당 Intent 문서를 "
+        f"고치고 재생성한다. `check --app {app}` 이 불일치를 FAIL 로 잡는다.",
+        "",
+        "| 항목 | 값 |",
+        "|---|---|",
+        f"| 문서 ID | {app}-INT-CATALOG |",
+        "| 생성 | docs_helpers.py intent-catalog |",
+        "| 대상 | [INTENT 폴더](INTENT/) |",
+        "",
+        "| Intent | 제목 | 유형 | 상태 | 검증 | 요약 | 규모 |",
+        "|---|---|---|---|---|---|---|",
+    ]
+    for r in rows:
+        out.append(
+            f"| [{_md_cell(r.intent_id)}](INTENT/{r.stem}.md) | {_md_cell(r.title)} | "
+            f"{_md_cell(r.kind)} | {_md_cell(r.status)} | {_md_cell(r.gate)} | "
+            f"{_md_cell(r.summary)} | FR {r.fr} · A {r.a} |"
+        )
+    out += ["", f"intents: {len(rows)}", ""]
+    return "\n".join(out)
+
+
+def _catalog_row_index(text: str) -> dict[str, str]:
+    idx: dict[str, str] = {}
+    for line in text.split("\n"):
+        m = re.match(r"^\|\s*\[([^\]]+)\]\(INTENT/", line)
+        if m is not None:
+            idx[m.group(1)] = line.strip()
+    return idx
+
+
+def _catalog_diff(actual: str, expected: str) -> list[str]:
+    a = _catalog_row_index(actual)
+    e = _catalog_row_index(expected)
+    out = [f"MISSING {k}" for k in sorted(set(e) - set(a))]
+    out += [f"EXTRA {k}" for k in sorted(set(a) - set(e))]
+    out += [f"CHANGED {k}" for k in sorted(set(a) & set(e)) if a[k] != e[k]]
+    if not out:
+        out.append("CHANGED (헤더 또는 intents 줄)")
+    return out
+
+
+def cmd_intent_catalog(repo: Path, args: argparse.Namespace) -> int:
+    app = args.app
+    if args.write and args.check:
+        print("FAIL ARGS --write 와 --check 는 함께 쓸 수 없다", file=sys.stderr)
+        return 2
+    docs_dir = repo / "docs" / app
+    if not docs_dir.is_dir():
+        print(f"FAIL ARGS not a directory: {docs_dir}", file=sys.stderr)
+        return 2
+    rows, skipped = _collect_intent_rows(repo, app)
+    text = _render_intent_catalog(app, rows)
+    catalog_path = docs_dir / f"{app}-INT-CATALOG.md"
+    rel = _relpath_for(catalog_path, repo)
+
+    if args.json:
+        print(json.dumps({
+            "app": app,
+            "catalog": rel,
+            "count": len(rows),
+            "intents": [r.to_dict() for r in rows],
+            "skipped": skipped,
+        }, ensure_ascii=False, indent=2))
+        return 0
+
+    if args.check:
+        actual = _read_text(catalog_path)
+        if actual is None:
+            print(f"STALE missing: {rel}")
+            return 1
+        if actual != text:
+            for line in _catalog_diff(actual, text):
+                print(line)
+            print(f"STALE {rel}")
+            return 1
+        print("OK")
+        print(f"intents: {len(rows)}")
+        return 0
+
+    if args.write:
+        catalog_path.write_text(text, encoding="utf-8", newline="\n")
+        print(f"WROTE {rel} · intents: {len(rows)}")
+        return 0
+
+    print(text, end="")
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # Entry
 # ---------------------------------------------------------------------------
 
@@ -1780,7 +2007,7 @@ def main(argv: list[str] | None = None) -> int:
         sys.stderr.reconfigure(encoding="utf-8")
     except (AttributeError, OSError):
         pass
-    parser = argparse.ArgumentParser(description="v0.7 docs read-only helper.")
+    parser = argparse.ArgumentParser(description="v0.7 docs helper (intent-catalog --write 외 read-only).")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     sp_list = sub.add_parser("list-apps")
@@ -1821,6 +2048,13 @@ def main(argv: list[str] | None = None) -> int:
     sp_checklist.add_argument("--check-return", dest="check_return", default=None)
     sp_checklist.add_argument("--oracle", dest="oracle", default=None, metavar="PATH", help="인터뷰 오라클 파일(expected.md). 각 줄은 '- EXP-1. <문장> — 출처: Q3/A3 — 종류: 요구' 형식이며 종류는 요구·완료조건·결정·제약·제외·프로세스·배경 중 하나. 주면 EXP 행이 체크리스트 맨 앞에 생성된다.")
 
+    sp_catalog = sub.add_parser("intent-catalog")
+    sp_catalog.add_argument("--repo", required=True)
+    sp_catalog.add_argument("--app", required=True)
+    sp_catalog.add_argument("--write", action="store_true", help="docs/<App>/<App>-INT-CATALOG.md 에 기록한다. 없으면 stdout 으로만 낸다.")
+    sp_catalog.add_argument("--check", action="store_true", help="기존 카탈로그가 재생성 결과와 같은지 검사한다. 다르면 exit 1 + 차이 줄.")
+    sp_catalog.add_argument("--json", action="store_true")
+
     try:
         args = parser.parse_args(argv)
     except SystemExit as e:
@@ -1844,6 +2078,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_check_intent(args)
     if args.cmd == "intent-checklist":
         return cmd_intent_checklist(args)
+    if args.cmd == "intent-catalog":
+        return cmd_intent_catalog(repo, args)
     print(f"FAIL ARGS unknown cmd: {args.cmd}", file=sys.stderr)
     return 2
 

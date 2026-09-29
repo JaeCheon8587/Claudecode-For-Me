@@ -182,7 +182,8 @@ Acceptance·Verification·Risks·Handoff 도출) → **Phase 3** 승인 1회(`Op
 `docs/<App>/INTENT/<App>-INT-<NNN>.md` **1개**, 인자는 `[--app <App>] [--type 기능개발|리팩토링]`.
 
 **신설 템플릿**: `docs/.templates/App/INTENT/APP-INT-001-TEMPLATE.md` — Part 1 기능 명세
-6섹션 + Part 2 작업 지시 7섹션.
+6섹션 + Part 2 작업 지시 7섹션. 인덱스는 `docs/<App>/<App>-INT-CATALOG.md`(파생 생성물,
+양식은 `docs/.templates/App/APP-INT-CATALOG-TEMPLATE.md`).
 
 **`scripts/docs_helpers.py` 정리.** `check-task` 서브커맨드, `TASK_SECTION*`·
 `TASK_SUBSECTION`·`TASK_OPTIONAL_SECTION_PLACEHOLDER_WORDS` 상수, `next-id`의 WORK_PACKET
@@ -1958,8 +1959,8 @@ init 이 워크트리의 `.gitignore` 에 아래를 추가한다.
 /claudecode-for-me:requirement-spec [--app <App>] [--type 기능개발|리팩토링] [--no-gate]
 ```
 
-- **산출물은 Intent 1개** — `docs/<App>/INTENT/<App>-INT-<NNN>.md`. 인터뷰 정리본·별도 지시서·TASK 등 부속 문서는 만들지 않는다. 검증 임시 파일만 `.process/intent-check/<문서 ID>/` 에 남는다(`interview.md`·`expected.md`·`checklist-round-<n>.md`·`round-<n>.md`·`critic-round-<n>.txt`·`quality.json`, gitignore 대상)
-- **Phase 0 Orient**: App·유형(`기능개발`/`리팩토링`)을 한 턴에 묶어 1회 확인 → `--no-gate` 해석 → 템플릿 경로를 repo → `${CLAUDE_PLUGIN_ROOT}` → 없으면 중단 순 3단으로 해석 → `docs/<App>/INTENT/` 의 `<App>-INT-*.md` 최대 번호 + 1(3자리 0패딩)로 NNN 채번 → 템플릿 복사 후 메타 표 7행(`상태`=`draft`, `승인`=`pending`, `검증`=`pending`) 기입 → repo 루트 `.gitignore` 에 `.process/` 줄 보장
+- **산출물은 Intent 1개** — `docs/<App>/INTENT/<App>-INT-<NNN>.md` + 파생 카탈로그 `docs/<App>/<App>-INT-CATALOG.md`(생성물, 세션이 손으로 쓰지 않는다). 인터뷰 정리본·별도 지시서·TASK 등 부속 문서는 만들지 않는다. 검증 임시 파일만 `.process/intent-check/<문서 ID>/` 에 남는다(`interview.md`·`expected.md`·`checklist-round-<n>.md`·`round-<n>.md`·`critic-round-<n>.txt`·`quality.json`, gitignore 대상)
+- **Phase 0 Orient**: App·유형(`기능개발`/`리팩토링`)을 한 턴에 묶어 1회 확인 → `--no-gate` 해석 → 템플릿 경로를 repo → `${CLAUDE_PLUGIN_ROOT}` → 없으면 중단 순 3단으로 해석 → `docs/<App>/INTENT/` 의 `<App>-INT-*.md` 최대 번호 + 1(3자리 0패딩)로 NNN 채번 → 템플릿 복사 후 메타 표 7행(`상태`=`draft`, `승인`=`pending`, `검증`=`pending`) 기입 → `intent-catalog --write` 로 `<App>-INT-CATALOG.md` 재생성 → repo 루트 `.gitignore` 에 `.process/` 줄 보장
 - **Phase 1 grill-me 인터뷰(인라인)**: `grill-me`(6.4) Phase 0~4를 그대로 수행하되 오버라이드 4개 — ① 탐색 영역에 `완료 조건·검증 방법`·`Out of scope`·`결정과 기각 대안` 추가 ② 출력 포맷을 정리본(배경·전개·전환·결론) 대신 **Intent Part 1 6섹션**으로 교체 ③ grill-me Phase 4의 **정리본 파일 자동 저장 단계만 제외**(리뷰 1~3단계는 유지) ④ 인터뷰 원문을 `.process/intent-check/<문서 ID>/interview.md` 에 전사 — 이 파일이 Phase 2 오라클의 유일한 입력이다
 - **Phase 2 오라클 도출 + Part 2 파생**: **2a** — `templates/intent-expector.md` 치환 전문을 opus 서브에이전트(`general-purpose`)에 넘겨 전사만 읽고 오라클을 뽑게 하고, 반환문을 `.process/intent-check/<ID>/expected.md` 로 저장한다(저장 후 불변). **2b** — 세션은 사용자에게 질문하지 않고 **Part 1만 근거로** 7섹션(Functional requirements / Edge cases / Error cases / Acceptance / Verification / Risks / Handoff)을 채운다. 근거는 FR이 `(Dn)`·`(Cn)`, E/X/A가 `(FR-n)`·`(Dn)`·`(Cn)`·`(OS)` 로 표기하고, C/FR/E/X/A 항목은 1부터 오름차순 ID(항목을 지워도 번호 재사용 없음 — 빈 번호 허용), Acceptance는 `A-n.` ID. 해당 없는 섹션은 `none`, 모르는 Handoff 값은 `pending`
 - **Phase 3 검증 루프(LLM 판정 최대 3회)**: ① `docs_helpers.py check-intent` 형식 검사(FAIL이면 인라인 수정 후 재실행 — 회차 미산입, 최대 3번) → ② `docs_helpers.py intent-checklist --round <n> --oracle <expected.md>` 사실표 생성(`EXP-n` 행이 표 맨 앞) → ③ Intent 스냅샷 → ④ `templates/intent-critic.md` 치환 전문을 opus 서브에이전트(`general-purpose`)에 넘겨 판정 → ⑤ `intent-checklist --check-return` 로 반환문 기계 검사(불일치면 finding을 붙여 같은 회차 1회 재요청, 2회째도 불일치면 `llm: FAIL(protocol)`) → ⑥ 처분. FAIL 키 중 **심각도 MAJOR가 0이면 PASS**로 루프 종료, 아니면 finding마다 수정·기각·N/A 수용 중 하나로 처분하고 기각·N/A 수용은 CARRY 목록으로 다음 회차 critic에 전달한다. CARRY를 뺀 FAIL 키 집합이 직전 회차와 같으면 무진전으로 중단
@@ -1977,6 +1978,7 @@ init 이 워크트리의 `.gitignore` 에 아래를 추가한다.
 - **Phase 5 승인(1회)**: `AskUserQuestion` 본문에 Intent 경로·`검증` 행·최종 체크리스트 경로와 `<PASS 행>/<전체 행> PASS`·`인터뷰 반영 <covered>/<expected> · 누락 <EXP 키>`·잔존 MAJOR/MINOR 키·critic의 `IMPROVE` 목록(차단 아님)·Part 1 변경 diff(≤10줄)·SKIPPED 경고를 싣는다. 승인 조건은 `Open questions`가 `none` ∧ Handoff에 `pending` 없음 ∧ `유형`이 단일값 ∧ `검증`이 `PASS`·`OVERRIDE`·`SKIPPED` 중 하나로 시작. 총평이 `FAIL`이면 옵션은 수동 수정 후 재검증 1회 / OVERRIDE 승인 / 중단이고, OVERRIDE 승인 시 `검증` 총평과 `quality.json` 의 `final` 을 `OVERRIDE` 로 쓴다. 충족 시 `상태`=`approved`, 거절·중단 시 `draft` 유지
 - **`--no-gate`**: Phase 3·4를 건너뛰고 `검증` 행을 `SKIPPED — --no-gate` 로 둔 채 Phase 5만 수행
 - **Intent 템플릿**: `docs/.templates/App/INTENT/APP-INT-001-TEMPLATE.md` — 메타 표 7행(`검증` 포함) + Part 1 기능 명세 6섹션(Problem / Outcome / Affected / Constraints / Decisions / Open questions) + Part 2 작업 지시 7섹션
+- **Intent 카탈로그**: `docs/<App>/<App>-INT-CATALOG.md` — `INTENT/` 를 훑어 `docs_helpers.py intent-catalog --app <App> --write` 가 생성하는 **파생 인덱스**. 행은 `Intent · 제목 · 유형 · 상태 · 검증 · 요약 · 규모`(요약 = Outcome 첫 줄 50자, 규모 = FR·A 개수). ADR-CATALOG 와 달리 고유 정보가 0 이라 손으로 쓰지 않는다 — 상태 전이 4 지점(Phase 0 생성 · Phase 5 승인 · `worktree_setup init` 의 in-dev · forge-scope F5 의 in-review)에서 재생성하고, 빠뜨리면 `check --app <App>` 이 `INT_CATALOG stale` FAIL 로 잡는다. 참고 양식은 `docs/.templates/App/APP-INT-CATALOG-TEMPLATE.md`
 - **경계**: 클래스명·파일명·구현 방법은 어느 Part에도 쓰지 않는다(개발 세션 몫). 후속 스킬 자동 호출 없음, `ExitPlanMode` 미호출
 
 ### 6.7 commit-analysis
@@ -2232,7 +2234,7 @@ Claudecode-For-Me/
 │   ├── safe-pull.md
 │   └── slack-brief.md
 ├── docs/                       # v0.7 문서 시스템 자산
-│   └── .templates/             # PRD/FC/FRD/ADR/ARCHITECTURE/CLAUDE/README 양식 + App/ (ADR·INTENT·FRD·PRD·FC·ARCHITECTURE·ADR-CATALOG) + .rules/ (코드 룰 3종)
+│   └── .templates/             # PRD/FC/FRD/ADR/ARCHITECTURE/CLAUDE/README 양식 + App/ (ADR·INTENT·FRD·PRD·FC·ARCHITECTURE·ADR-CATALOG·INT-CATALOG) + .rules/ (코드 룰 3종)
 ├── scripts/                     # Python deterministic helper
 │   ├── branch_review_chunk_plan.py  # branch-review diff 크기측정·모드판정·청크분할·patch 생성
 │   ├── ddr_loop.py              # ddr-loop 워크트리·docs 검증 + .process 스캐폴딩 (init)
