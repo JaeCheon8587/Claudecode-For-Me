@@ -13,6 +13,7 @@ SCRIPT = ROOT / "scripts" / "worktree_setup.py"
 
 sys.path.insert(0, str(ROOT / "scripts"))
 import docs_helpers as _dh  # noqa: E402  (script 와 같은 scripts/ 디렉토리)
+import worktree_setup as _ws  # noqa: E402  (단위 테스트용 — CLI 는 SCRIPT 로 띄운다)
 
 
 def run_git(repo: Path, *args: str) -> subprocess.CompletedProcess:
@@ -384,6 +385,15 @@ def test_cancel_removes_intent_worktree_and_branch(git_repo: Path):
 # base 브랜치 선택 (branches 서브커맨드 · init --base)
 # ============================================================================
 INTENT_REL = "docs/Demo/INTENT/Demo-INT-001.md"
+CATALOG_REL = "docs/Demo/Demo-INT-CATALOG.md"
+
+
+def catalog_row(text: str, intent_id: str) -> str:
+    """카탈로그 본문에서 해당 Intent 의 행 1줄을 뽑는다 (없으면 빈 문자열)."""
+    for line in text.splitlines():
+        if line.startswith(f"| [{intent_id}](INTENT/"):
+            return line
+    return ""
 
 
 def current_branch(repo: Path) -> str:
@@ -610,10 +620,22 @@ def test_init_base_written_into_handoff_commit(git_repo: Path):
     assert "| base branch | develop |" in text
     assert "| 상태 | in-dev |" in text
     assert manifest["handoff"]["base branch"] == "develop"
-    # 전이 커밋 1개에 Intent 만 동봉된다 (.gitignore 는 의도적으로 미커밋)
+    # V6 — 전이 커밋 1개에 Intent + 파생 카탈로그 2파일이 동봉된다
+    # (.gitignore 는 의도적으로 미커밋).
     assert int(run_git(wt, "rev-list", "--count", "HEAD").stdout.strip()) == base_commits + 1
     changed = run_git(wt, "show", "--pretty=", "--name-only", "HEAD").stdout.split()
-    assert changed == [INTENT_REL]
+    assert sorted(changed) == sorted([INTENT_REL, CATALOG_REL])
+    subject = subprocess.run(   # 한글 subject — run_git 의 기본 인코딩으로는 못 읽는다
+        ["git", "-C", str(wt), "log", "-1", "--format=%s"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    assert subject.stdout.strip() == "chore(Demo-INT-001): 상태 in-dev"
+    # 카탈로그가 실제로 in-dev 를 담고 끝줄이 intents 집계다
+    catalog = (wt / CATALOG_REL).read_text(encoding="utf-8")
+    row = catalog_row(catalog, "Demo-INT-001")
+    assert row, catalog
+    assert "| in-dev |" in row, row
+    assert re.fullmatch(r"intents: \d+", catalog.strip().splitlines()[-1]), catalog
 
 
 def test_init_existing_branch_ignores_base(git_repo: Path):
@@ -647,3 +669,28 @@ def test_init_remote_base_has_no_upstream(git_repo: Path):
         cwd=Path(manifest["worktree"]), capture_output=True, text=True,
     )
     assert probe.returncode != 0, "--no-track 이 적용돼 upstream 이 없어야 한다"
+
+
+# ============================================================================
+# _refresh_int_catalog (파생 카탈로그 재생성 · 경로 가드)
+# ============================================================================
+@pytest.mark.parametrize("bad_rel", [
+    "docs/Demo/Demo-INT-001.md",          # 세그먼트 부족 (INTENT/ 없음)
+    "docs/Demo/TASK/Demo-INT-001.md",     # 세번째 세그먼트가 INTENT 가 아님
+])
+def test_refresh_int_catalog_rejects_non_intent_path(tmp_path: Path, bad_rel: str):
+    write_intent(tmp_path)
+
+    assert _ws._refresh_int_catalog(tmp_path, bad_rel) is None
+    assert not (tmp_path / CATALOG_REL).exists()
+
+
+def test_refresh_int_catalog_writes_catalog_for_intent_path(tmp_path: Path):
+    write_intent(tmp_path)
+
+    rel = _ws._refresh_int_catalog(tmp_path, INTENT_REL)
+
+    assert rel == CATALOG_REL
+    catalog = (tmp_path / rel).read_text(encoding="utf-8")
+    assert catalog_row(catalog, "Demo-INT-001"), catalog
+    assert catalog.strip().splitlines()[-1] == "intents: 1"

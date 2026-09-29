@@ -915,3 +915,425 @@ class TestIntentChecklistOracle:
             "FR-1", "FR-2", "FR-3", "E-1", "E-2", "X-1",
             "A-1", "A-2", "A-3", "G-1", "G-2", "G-3", "G-4", "G-5",
         ]
+
+
+# ---------------------------------------------------------------------------
+# intent-catalog — 파생 인덱스 docs/<App>/<App>-INT-CATALOG.md
+# ---------------------------------------------------------------------------
+
+
+CATALOG_HEADER = "| Intent | 제목 | 유형 | 상태 | 검증 | 요약 | 규모 |"
+CATALOG_SEPARATOR = "|---|---|---|---|---|---|---|"
+
+
+def make_app_docs(tmp_path: Path, app: str = "Demo") -> Path:
+    """docs/<App>/INTENT/ 골격만 만든다 — Intent 문서는 넣지 않는다."""
+    (tmp_path / "docs" / app / "INTENT").mkdir(parents=True, exist_ok=True)
+    return tmp_path / "docs" / app
+
+
+def catalog_path(tmp_path: Path, app: str = "Demo") -> Path:
+    return tmp_path / "docs" / app / f"{app}-INT-CATALOG.md"
+
+
+def catalog_rows(text: str) -> list[str]:
+    """카탈로그 표의 Intent 행(링크로 시작하는 줄)만 돌려준다."""
+    return [line.strip() for line in text.split("\n") if line.startswith("| [")]
+
+
+def catalog_cells(text: str, intent_id: str = "Demo-INT-001") -> list[str]:
+    r"""해당 Intent 행을 셀 목록으로 쪼갠다. 이스케이프된 `\|` 는 셀 경계가 아니다."""
+    for line in catalog_rows(text):
+        if line.startswith(f"| [{intent_id}]("):
+            cells = re.split(r"(?<!\\)\|", line)
+            return [c.strip() for c in cells[1:-1]]
+    raise AssertionError(f"row not found: {intent_id}\n{text}")
+
+
+class TestIntentCatalog:
+    def _run(self, repo: Path, app: str = "Demo", extra: list[str] | None = None) -> int:
+        argv = ["intent-catalog", "--repo", str(repo), "--app", app]
+        if extra:
+            argv += extra
+        return dh.main(argv)
+
+    def _write(self, tmp_path: Path, capsys, app: str = "Demo") -> str:
+        """--write 로 카탈로그를 만들고 그 본문을 돌려준다(출력은 버린다)."""
+        rc = self._run(tmp_path, app, extra=["--write"])
+        capsys.readouterr()
+        assert rc == 0
+        return catalog_path(tmp_path, app).read_text(encoding="utf-8")
+
+    # --- V1 · 빈 INTENT ------------------------------------------------------
+
+    def test_empty_intent_dir_renders_zero(self, tmp_path, capsys):
+        make_app_docs(tmp_path)
+        rc = self._run(tmp_path)
+        out = capsys.readouterr().out
+        assert rc == 0
+        assert out.strip().splitlines()[-1] == "intents: 0"
+        assert catalog_rows(out) == []
+
+    def test_missing_intent_dir_renders_zero(self, tmp_path, capsys):
+        (tmp_path / "docs" / "Demo").mkdir(parents=True)
+        rc = self._run(tmp_path)
+        out = capsys.readouterr().out
+        assert rc == 0
+        assert out.strip().splitlines()[-1] == "intents: 0"
+
+    def test_unknown_app_exit_2(self, tmp_path, capsys):
+        rc = self._run(tmp_path, app="NoSuch")
+        capsys.readouterr()
+        assert rc == 2
+
+    def test_write_and_check_are_exclusive(self, tmp_path, capsys):
+        write_intent(tmp_path)
+        rc = self._run(tmp_path, extra=["--write", "--check"])
+        capsys.readouterr()
+        assert rc == 2
+        assert not catalog_path(tmp_path).exists()
+
+    # --- V2 · --write 직후 --check 는 OK --------------------------------------
+
+    def test_write_then_check_ok(self, tmp_path, capsys):
+        write_intent(tmp_path)
+        rc = self._run(tmp_path, extra=["--write"])
+        out = capsys.readouterr().out
+        assert rc == 0
+        assert out.startswith("WROTE ")
+        assert "intents: 1" in out
+        assert catalog_path(tmp_path).is_file()
+
+        rc = self._run(tmp_path, extra=["--check"])
+        out = capsys.readouterr().out
+        assert rc == 0
+        assert out.splitlines() == ["OK", "intents: 1"]
+
+    def test_check_without_catalog_is_stale(self, tmp_path, capsys):
+        write_intent(tmp_path)
+        rc = self._run(tmp_path, extra=["--check"])
+        out = capsys.readouterr().out
+        assert rc == 1
+        assert out.startswith("STALE missing:")
+        assert "Demo-INT-CATALOG.md" in out
+
+    # --- V3 · 손으로 고친 카탈로그는 stale ------------------------------------
+
+    def test_check_detects_hand_edited_status_cell(self, tmp_path, capsys):
+        write_intent(tmp_path)
+        text = self._write(tmp_path, capsys)
+        assert "| draft |" in text
+        catalog_path(tmp_path).write_text(
+            text.replace("| draft |", "| approved |"), encoding="utf-8"
+        )
+        rc = self._run(tmp_path, extra=["--check"])
+        out = capsys.readouterr().out
+        assert rc == 1
+        assert "CHANGED Demo-INT-001" in out
+        assert "STALE" in out
+
+    def test_check_detects_deleted_row(self, tmp_path, capsys):
+        write_intent(tmp_path, nnn="001")
+        write_intent(tmp_path, nnn="002")
+        text = self._write(tmp_path, capsys)
+        kept = "\n".join(
+            line for line in text.split("\n") if not line.startswith("| [Demo-INT-002](")
+        )
+        catalog_path(tmp_path).write_text(kept, encoding="utf-8")
+        rc = self._run(tmp_path, extra=["--check"])
+        out = capsys.readouterr().out
+        assert rc == 1
+        assert "MISSING Demo-INT-002" in out
+        assert "CHANGED Demo-INT-002" not in out
+
+    def test_check_detects_extra_row(self, tmp_path, capsys):
+        write_intent(tmp_path, nnn="001")
+        text = self._write(tmp_path, capsys)
+        ghost = (
+            "| [Demo-INT-009](INTENT/Demo-INT-009.md) | 유령 | 기능개발 | draft | "
+            "pending | ? | FR 0 · A 0 |"
+        )
+        catalog_path(tmp_path).write_text(
+            text.replace("\nintents: 1", f"{ghost}\n\nintents: 1"), encoding="utf-8"
+        )
+        rc = self._run(tmp_path, extra=["--check"])
+        out = capsys.readouterr().out
+        assert rc == 1
+        assert "EXTRA Demo-INT-009" in out
+
+    def test_check_detects_tail_line_tamper(self, tmp_path, capsys):
+        write_intent(tmp_path)
+        text = self._write(tmp_path, capsys)
+        catalog_path(tmp_path).write_text(
+            text.replace("intents: 1", "intents: 7"), encoding="utf-8"
+        )
+        rc = self._run(tmp_path, extra=["--check"])
+        out = capsys.readouterr().out
+        assert rc == 1
+        assert "CHANGED (헤더 또는 intents 줄)" in out
+
+    # --- --json 은 출력 포맷 플래그일 뿐 동작·exit code 를 바꾸지 않는다 -------
+
+    def test_check_json_keeps_exit_1_when_stale(self, tmp_path, capsys):
+        write_intent(tmp_path)
+        text = self._write(tmp_path, capsys)
+        catalog_path(tmp_path).write_text(
+            text.replace("| draft |", "| approved |"), encoding="utf-8"
+        )
+        rc = self._run(tmp_path, extra=["--check", "--json"])
+        payload = json.loads(capsys.readouterr().out)
+        assert rc == 1
+        assert payload["check"]["exists"] is True
+        assert payload["check"]["stale"] is True
+        assert "CHANGED Demo-INT-001" in payload["check"]["diff"]
+
+    def test_check_json_exit_0_when_fresh(self, tmp_path, capsys):
+        write_intent(tmp_path)
+        self._write(tmp_path, capsys)
+        rc = self._run(tmp_path, extra=["--check", "--json"])
+        payload = json.loads(capsys.readouterr().out)
+        assert rc == 0
+        assert payload["check"] == {"exists": True, "stale": False, "diff": []}
+
+    def test_check_json_missing_catalog_exit_1(self, tmp_path, capsys):
+        write_intent(tmp_path)
+        rc = self._run(tmp_path, extra=["--check", "--json"])
+        payload = json.loads(capsys.readouterr().out)
+        assert rc == 1
+        assert payload["check"]["exists"] is False
+        assert payload["check"]["stale"] is True
+
+    def test_write_json_actually_writes_file(self, tmp_path, capsys):
+        write_intent(tmp_path)
+        rc = self._run(tmp_path, extra=["--write", "--json"])
+        payload = json.loads(capsys.readouterr().out)
+        assert rc == 0
+        assert payload["write"]["written"] is True
+        assert catalog_path(tmp_path).is_file()
+        assert catalog_rows(catalog_path(tmp_path).read_text(encoding="utf-8"))
+        rc = self._run(tmp_path, extra=["--check"])
+        capsys.readouterr()
+        assert rc == 0
+
+    def test_plain_json_payload_shape(self, tmp_path, capsys):
+        write_intent(tmp_path)
+        rc = self._run(tmp_path, extra=["--json"])
+        payload = json.loads(capsys.readouterr().out)
+        assert rc == 0
+        assert set(payload) == {"app", "catalog", "count", "intents", "skipped"}
+        assert payload["app"] == "Demo"
+        assert payload["catalog"] == "docs/Demo/Demo-INT-CATALOG.md"
+        assert payload["count"] == 1
+        assert set(payload["intents"][0]) == {
+            "id", "file", "title", "type", "status", "gate", "summary", "fr", "a",
+        }
+        assert payload["intents"][0]["id"] == "Demo-INT-001"
+        assert payload["intents"][0]["file"] == "INTENT/Demo-INT-001.md"
+        assert payload["intents"][0]["fr"] == 1
+        assert payload["intents"][0]["a"] == 1
+        assert not catalog_path(tmp_path).exists()
+
+    # --- 렌더링 계약 (다른 도구가 이 출력에 의존한다) -------------------------
+
+    def test_header_is_seven_columns(self, tmp_path, capsys):
+        write_intent(tmp_path)
+        rc = self._run(tmp_path)
+        out = capsys.readouterr().out
+        assert rc == 0
+        lines = out.split("\n")
+        assert CATALOG_HEADER in lines
+        assert lines[lines.index(CATALOG_HEADER) + 1] == CATALOG_SEPARATOR
+        assert len(catalog_cells(out)) == 7
+
+    def test_last_line_is_intent_count(self, tmp_path, capsys):
+        write_intent(tmp_path, nnn="001")
+        write_intent(tmp_path, nnn="002")
+        rc = self._run(tmp_path)
+        out = capsys.readouterr().out
+        assert rc == 0
+        assert out.strip().splitlines()[-1] == "intents: 2"
+        assert len(catalog_rows(out)) == 2
+
+    def test_scale_cell_format(self, tmp_path, capsys):
+        write_intent_rich(tmp_path)
+        rc = self._run(tmp_path)
+        out = capsys.readouterr().out
+        assert rc == 0
+        assert catalog_cells(out)[6] == "FR 3 · A 3"
+
+    def test_render_has_no_timestamp_and_is_byte_stable(self, tmp_path, capsys):
+        write_intent(tmp_path)
+        first = self._write(tmp_path, capsys).encode("utf-8")
+        second = self._write(tmp_path, capsys).encode("utf-8")
+        assert first == second, "같은 입력에 두 번 렌더하면 바이트가 같아야 한다"
+        text = first.decode("utf-8")
+        assert re.search(r"\d{4}-\d{2}-\d{2}", text) is None, "날짜가 들어가면 stale 비교가 항상 틀어진다"
+        assert re.search(r"\d{2}:\d{2}", text) is None
+
+    def test_pipe_in_title_and_summary_is_escaped(self, tmp_path, capsys):
+        write_intent(
+            tmp_path,
+            **{"샘플 기능 Intent": "제목 | 파이프", "결과 설명.": "요약 | 파이프"},
+        )
+        rc = self._run(tmp_path)
+        out = capsys.readouterr().out
+        assert rc == 0
+        cells = catalog_cells(out)
+        assert len(cells) == 7
+        assert cells[1] == r"제목 \| 파이프"
+        assert cells[5] == r"요약 \| 파이프"
+
+    @pytest.mark.parametrize(
+        ("gate_value", "expected"),
+        [
+            ("PASS — code PASS · llm PASS · 2/3", "PASS 2/3"),
+            ("FAIL — code FAIL · llm PASS · 1/3", "FAIL 1/3"),
+            ("OVERRIDE — code FAIL · 사람 승인 · 3/3", "OVERRIDE 3/3"),
+            ("SKIPPED — --no-gate", "SKIPPED — --no-gate"),
+            ("SKIPPED — pre-3.60", "SKIPPED — pre-3.60"),
+            ("pending", "pending"),
+        ],
+    )
+    def test_gate_cell_abbreviation(self, tmp_path, capsys, gate_value, expected):
+        write_intent(tmp_path, **{"| 검증 | pending |": f"| 검증 | {gate_value} |"})
+        rc = self._run(tmp_path)
+        out = capsys.readouterr().out
+        assert rc == 0
+        assert catalog_cells(out)[4] == expected
+
+    def test_gate_skipped_keeps_leading_double_dash(self, tmp_path, capsys):
+        """회귀: `SKIPPED — --no-gate` 의 앞 `--` 가 깎여 `-no-gate` 가 되면 안 된다."""
+        write_intent(tmp_path, **{"| 검증 | pending |": "| 검증 | SKIPPED — --no-gate |"})
+        rc = self._run(tmp_path)
+        out = capsys.readouterr().out
+        assert rc == 0
+        cell = catalog_cells(out)[4]
+        assert cell.endswith("--no-gate")
+        assert "— -no-gate" not in cell
+
+    def test_summary_longer_than_50_is_truncated(self, tmp_path, capsys):
+        write_intent(tmp_path, **{"결과 설명.": "가" * 60})
+        rc = self._run(tmp_path)
+        out = capsys.readouterr().out
+        assert rc == 0
+        summary = catalog_cells(out)[5]
+        assert summary == "가" * (dh.INTENT_CATALOG_SUMMARY_MAX - 1) + "…"
+        assert len(summary) == dh.INTENT_CATALOG_SUMMARY_MAX
+
+    def test_summary_exactly_50_is_kept(self, tmp_path, capsys):
+        write_intent(tmp_path, **{"결과 설명.": "나" * 50})
+        rc = self._run(tmp_path)
+        out = capsys.readouterr().out
+        assert rc == 0
+        assert catalog_cells(out)[5] == "나" * 50
+
+    def test_non_matching_filename_is_skipped(self, tmp_path, capsys):
+        write_intent(tmp_path, nnn="001")
+        intent_dir = tmp_path / "docs" / "Demo" / "INTENT"
+        (intent_dir / "Demo-INT-TEMPLATE.md").write_text("# Demo-INT-TEMPLATE — 템플릿\n", encoding="utf-8")
+        (intent_dir / "README.md").write_text("# 안내\n", encoding="utf-8")
+        rc = self._run(tmp_path, extra=["--json"])
+        payload = json.loads(capsys.readouterr().out)
+        assert rc == 0
+        assert payload["count"] == 1
+        assert [r["id"] for r in payload["intents"]] == ["Demo-INT-001"]
+        assert sorted(payload["skipped"]) == ["Demo-INT-TEMPLATE.md", "README.md"]
+
+    # --- V5 · 깨진 Intent 파일 -----------------------------------------------
+
+    def test_broken_intent_without_meta_table_fills_question_marks(self, tmp_path, capsys):
+        write_intent(tmp_path, nnn="001")
+        broken = tmp_path / "docs" / "Demo" / "INTENT" / "Demo-INT-002.md"
+        broken.write_text("메타 표도 제목도 없는 본문뿐인 파일.\n", encoding="utf-8")
+        rc = self._run(tmp_path)
+        out = capsys.readouterr().out
+        assert rc == 0
+        cells = catalog_cells(out, "Demo-INT-002")
+        assert cells[0] == "[Demo-INT-002](INTENT/Demo-INT-002.md)"
+        assert cells[1:6] == ["?"] * 5
+        assert cells[6] == "FR 0 · A 0"
+        assert out.strip().splitlines()[-1] == "intents: 2"
+
+    def test_broken_intent_with_title_only(self, tmp_path, capsys):
+        broken = tmp_path / "docs" / "Demo" / "INTENT" / "Demo-INT-003.md"
+        broken.parent.mkdir(parents=True, exist_ok=True)
+        broken.write_text("# Demo-INT-003 — 제목만 있다\n\n본문.\n", encoding="utf-8")
+        rc = self._run(tmp_path)
+        out = capsys.readouterr().out
+        assert rc == 0
+        cells = catalog_cells(out, "Demo-INT-003")
+        assert cells[1] == "제목만 있다"
+        assert cells[2:6] == ["?"] * 4
+        assert cells[6] == "FR 0 · A 0"
+
+
+class TestCheckAppIntentCatalog:
+    """check --app 의 INT_CATALOG 규칙 — 카탈로그와 INTENT/ 의 불일치를 FAIL 로 잡는다."""
+
+    def _lines(self, tmp_path: Path, capsys, app: str = "Demo") -> tuple[int, list[str]]:
+        rc = dh.main(["check", "--repo", str(tmp_path), "--app", app])
+        out = capsys.readouterr().out
+        return rc, [line for line in out.split("\n") if " INT_CATALOG " in line]
+
+    def _write_catalog(self, tmp_path: Path, capsys, app: str = "Demo") -> Path:
+        rc = dh.main(["intent-catalog", "--repo", str(tmp_path), "--app", app, "--write"])
+        capsys.readouterr()
+        assert rc == 0
+        return catalog_path(tmp_path, app)
+
+    def test_missing_catalog_fails(self, tmp_path, capsys):
+        write_intent(tmp_path)
+        rc, lines = self._lines(tmp_path, capsys)
+        assert rc == 1
+        assert len(lines) == 1
+        assert lines[0].startswith("FAIL INT_CATALOG docs/Demo/Demo-INT-CATALOG.md")
+        assert "missing" in lines[0]
+
+    def test_stale_catalog_fails(self, tmp_path, capsys):
+        write_intent(tmp_path)
+        path = self._write_catalog(tmp_path, capsys)
+        path.write_text(
+            path.read_text(encoding="utf-8").replace("| draft |", "| approved |"),
+            encoding="utf-8",
+        )
+        rc, lines = self._lines(tmp_path, capsys)
+        assert rc == 1
+        assert len(lines) == 1
+        assert lines[0].startswith("FAIL INT_CATALOG")
+        assert "stale" in lines[0]
+
+    def test_fresh_catalog_passes(self, tmp_path, capsys):
+        write_intent(tmp_path, nnn="001")
+        write_intent(tmp_path, nnn="002")
+        self._write_catalog(tmp_path, capsys)
+        _, lines = self._lines(tmp_path, capsys)
+        assert len(lines) == 1
+        assert lines[0].startswith("PASS INT_CATALOG")
+        assert "2 intents 최신" in lines[0]
+
+    def test_new_intent_without_regeneration_goes_stale(self, tmp_path, capsys):
+        write_intent(tmp_path, nnn="001")
+        self._write_catalog(tmp_path, capsys)
+        write_intent(tmp_path, nnn="002")
+        _, lines = self._lines(tmp_path, capsys)
+        assert len(lines) == 1
+        assert lines[0].startswith("FAIL INT_CATALOG")
+        assert "stale" in lines[0]
+
+    def test_app_without_intent_docs_has_no_int_catalog_result(self, tmp_path, capsys):
+        make_app_docs(tmp_path)
+        _, lines = self._lines(tmp_path, capsys)
+        assert lines == []
+
+    def test_app_without_intent_dir_has_no_int_catalog_result(self, tmp_path, capsys):
+        (tmp_path / "docs" / "Demo").mkdir(parents=True)
+        _, lines = self._lines(tmp_path, capsys)
+        assert lines == []
+
+    def test_only_template_file_has_no_int_catalog_result(self, tmp_path, capsys):
+        make_app_docs(tmp_path)
+        (tmp_path / "docs" / "Demo" / "INTENT" / "Demo-INT-TEMPLATE.md").write_text(
+            "# Demo-INT-TEMPLATE — 템플릿\n", encoding="utf-8"
+        )
+        _, lines = self._lines(tmp_path, capsys)
+        assert lines == []

@@ -32,9 +32,8 @@ argument-hint: "[--app <App>] [--type 기능개발|리팩토링] [--no-gate]"
 4. **디렉터리 준비**: `docs/<App>/INTENT/` 가 없으면 생성한다.
 5. **NNN 산정**: 그 디렉터리의 `<App>-INT-*.md` 중 최대 번호 + 1, 3자리 0패딩. 파일이 없으면 `001`.
 6. **문서 생성**: 템플릿을 `docs/<App>/INTENT/<App>-INT-<NNN>.md` 로 복사한 뒤 TEMPLATE 경고 블록을 삭제하고, 메타 표 7행을 채운다 — `문서 ID`·`작성` 을 채우고, `상태` = `draft`, `승인` = `pending`, `검증` = `pending`, `관련 Intent` 는 해당 없으면 `none` 으로 두고, `유형` 행에는 Phase 0에서 확정된 값 하나만 남긴다. 1행의 제목은 Phase 1 종료 시 확정해 기록한다.
-7. **카탈로그 재생성**: `python "${CLAUDE_PLUGIN_ROOT}/scripts/docs_helpers.py" intent-catalog --repo . --app <App> --write` 를 실행한다. `docs/<App>/<App>-INT-CATALOG.md` 가 새 Intent 를 포함해 다시 쓰인다. **카탈로그를 손으로 쓰지 않는다** — 모든 열이 Intent 문서에서 파생되므로 직접 고치면 상태 전이에서 어긋난다. python 실행 불가면 건너뛰고 Phase 5 에서 1줄 고지한다.
-8. **작업 폴더 생성**: `.process/intent-check/<문서 ID>/` 를 만든다. Phase 1 의 전사부터 여기에 쓴다.
-9. **`.gitignore` 보장**: 대상 repo 루트 `.gitignore` 에 `.process/` 줄이 없으면 추가한다(파일이 없으면 생성). 추가했으면 1줄로 고지한다 — "`.process/` 를 .gitignore 에 추가했다 — 검증 임시 파일용".
+7. **작업 폴더 생성**: `.process/intent-check/<문서 ID>/` 를 만든다. Phase 1 의 전사부터 여기에 쓴다.
+8. **`.gitignore` 보장**: 대상 repo 루트 `.gitignore` 에 `.process/` 줄이 없으면 추가한다(파일이 없으면 생성). 추가했으면 1줄로 고지한다 — "`.process/` 를 .gitignore 에 추가했다 — 검증 임시 파일용".
 
 **전이 조건**: App 확정 + Intent 파일 생성 완료.
 
@@ -207,7 +206,8 @@ critic 이 쓴 `critic-round-<n>.txt` 가 있는지 확인한 뒤:
 
 <!-- 대응표: 이 승인 조건 문장은 템플릿 작성 규칙 4 · docs_helpers.py INT_APPROVED_GATE 와 동일해야 한다 -->
 
-1. **`AskUserQuestion` 1회**로 확정을 묻는다. 본문에 반드시 넣는다:
+1. **카탈로그 재생성**: `python "${CLAUDE_PLUGIN_ROOT}/scripts/docs_helpers.py" intent-catalog --repo . --app <App> --write` 를 실행한다. 승인 여부와 무관하게 **Phase 5 에 들어오면 무조건 한 번** 실행한다 — 카탈로그 열의 원천인 1행 제목(Phase 1 확정)·`검증` 행(Phase 3·4 확정)·FR/A 항목 수(Phase 2 확정)가 이 시점에 모두 확정돼 있다. **카탈로그를 손으로 쓰지 않는다** — 모든 열이 Intent 문서에서 파생되므로 직접 고치면 상태 전이에서 어긋난다. python 실행 불가면 건너뛰고 종료 보고에서 1줄 고지한다.
+2. **`AskUserQuestion` 1회**로 확정을 묻는다. 본문에 반드시 넣는다:
    - Intent 경로
    - 메타 `검증` 행 값
    - 최종 체크리스트 경로 + `<PASS 행>/<전체 행> PASS`
@@ -217,18 +217,18 @@ critic 이 쓴 `critic-round-<n>.txt` 가 있는지 확인한 뒤:
    - Part 1 변경 줄 diff(≤10줄, 초과하면 스냅샷 경로만)
    - SKIPPED 경고(있으면)
    - `llm.judge` 가 `self`·`skipped` 면 "판정이 독립 서브에이전트가 아니다" 경고
-2. **옵션**: 총평이 `PASS`·`SKIPPED` 면 `승인 / 수정 요청 / 중단`, `FAIL` 이면 `수동 수정 후 재검증 1회 / OVERRIDE 승인 / 중단`.
-3. 사용자가 수정을 요청하면 반영하고 다시 제시한다 — 승인 또는 중단까지 반복한다.
-4. **승인 조건**: `상태: approved` 는 Open questions 가 `none` 이고, Handoff 에 `pending` 이 없고, `유형` 이 한 값이고, `검증` 이 `PASS`·`OVERRIDE`·`SKIPPED` 중 하나로 시작할 때만 가능하다. 미충족이면 승인할 수 없다고 알리고, **해당 항목만** 사용자에게 물어 채운다.
-5. **승인 시**: 메타 표의 `상태` = `approved`, `승인` = `<사용자> · <YYYY-MM-DD>` 로 갱신한다. OVERRIDE 승인이면 `검증` 행의 총평을 `OVERRIDE` 로 바꾸고 quality.json 의 `final` 을 `OVERRIDE` 로 쓴다. 메타 표를 고친 **직후** `intent-catalog --repo . --app <App> --write` 를 다시 실행한다 — 상태·승인·검증이 카탈로그 열이다.
-6. **거절·중단 시**: `상태` = `draft` 를 유지한다.
-7. **종료 보고**: Intent 경로, 카탈로그 경로(`docs/<App>/<App>-INT-CATALOG.md`), 상태, `검증` 행, Handoff 요약을 보고한다. 후속(개발 세션 위임)은 **사용자가** 진행한다 — 이 스킬은 실행하지 않는다.
+3. **옵션**: 총평이 `PASS`·`SKIPPED` 면 `승인 / 수정 요청 / 중단`, `FAIL` 이면 `수동 수정 후 재검증 1회 / OVERRIDE 승인 / 중단`.
+4. 사용자가 수정을 요청하면 반영하고 다시 제시한다 — 승인 또는 중단까지 반복한다.
+5. **승인 조건**: `상태: approved` 는 Open questions 가 `none` 이고, Handoff 에 `pending` 이 없고, `유형` 이 한 값이고, `검증` 이 `PASS`·`OVERRIDE`·`SKIPPED` 중 하나로 시작할 때만 가능하다. 미충족이면 승인할 수 없다고 알리고, **해당 항목만** 사용자에게 물어 채운다.
+6. **승인 시**: 메타 표의 `상태` = `approved`, `승인` = `<사용자> · <YYYY-MM-DD>` 로 갱신한다. OVERRIDE 승인이면 `검증` 행의 총평을 `OVERRIDE` 로 바꾸고 quality.json 의 `final` 을 `OVERRIDE` 로 쓴다. 메타 표를 고친 **직후** `intent-catalog --repo . --app <App> --write` 를 **한 번 더** 실행한다 — 1번에서 쓴 뒤 `상태`·`승인` 행이 또 바뀌었고, 둘 다 카탈로그 열이다.
+7. **거절·중단 시**: `상태` = `draft` 를 유지한다. 카탈로그는 **1번에서 이미 최신 상태**이므로 여기서 다시 쓰지 않는다 — 바뀐 메타 행이 없다.
+8. **종료 보고**: Intent 경로, 카탈로그 경로(`docs/<App>/<App>-INT-CATALOG.md`), 상태, `검증` 행, Handoff 요약을 보고한다. 후속(개발 세션 위임)은 **사용자가** 진행한다 — 이 스킬은 실행하지 않는다.
 
 ---
 
 ## 산출물 경계
 
-- **만드는 것**: Intent 문서 1개 (`docs/<App>/INTENT/<App>-INT-<NNN>.md`) + 파생 카탈로그 `docs/<App>/<App>-INT-CATALOG.md`(생성물 — 세션이 쓰지 않고 `intent-catalog --write` 가 쓴다) + 검증 임시 파일 `.process/intent-check/<ID>/{interview.md, expected.md, checklist-round-<n>.md, checklist-round-<n>.json, round-<n>.md, critic-round-<n>.txt, quality.json}` (gitignore 대상). 쓰는 주체: `expected.md` = expector, `critic-round-<n>.txt` = critic, 나머지 = 세션.
+- **만드는 것**: Intent 문서 1개 (`docs/<App>/INTENT/<App>-INT-<NNN>.md`) + 파생 카탈로그 `docs/<App>/<App>-INT-CATALOG.md`(생성물 — 세션이 쓰지 않고 `intent-catalog --write` 가 쓴다. Phase 5 진입 시 1회, 승인하면 1회 더 — 그 전에는 쓰지 않는다) + 검증 임시 파일 `.process/intent-check/<ID>/{interview.md, expected.md, checklist-round-<n>.md, checklist-round-<n>.json, round-<n>.md, critic-round-<n>.txt, quality.json}` (gitignore 대상). 쓰는 주체: `expected.md` = expector, `critic-round-<n>.txt` = critic, 나머지 = 세션.
 - **만들지 않는 것**: 인터뷰 정리본·별도 지시서·TASK·기타 부속 문서, 구현 코드, 브랜치·워크트리.
 - 후속 스킬을 자동으로 호출하지 않는다. `ExitPlanMode` 를 호출하지 않는다.
 
@@ -238,7 +238,7 @@ critic 이 쓴 `critic-round-<n>.txt` 가 있는지 확인한 뒤:
 |---|---|
 | 템플릿을 두 경로 모두에서 못 찾음 | 중단, 찾은 경로 후보를 보고 (문서 생성 안 함) |
 | App 이 1회 질문 후에도 미정 | 중단, 사유 보고 (디렉터리·문서 생성 안 함) |
-| grill-me 인터뷰가 사용자 중단으로 종결 | Part 1 까지 기록된 상태로 `draft` 유지, Phase 2 진행 안 함 |
+| grill-me 인터뷰가 사용자 중단으로 종결 | Part 1 까지 기록된 상태로 `draft` 유지, Phase 2 진행 안 함. Phase 5 에 닿지 않았으므로 카탈로그는 재생성하지 않는다 — 다음 실행 때 반영된다 |
 | expector 사용 불가 (`general-purpose` 불가) | 오라클 없음 폴백 — `--oracle` 없이 진행, `검증` 행에 `· oracle SKIPPED` 접미, Phase 5 본문에 경고 |
 | `expected.md` 형식 2회 실패 (stdout `ORACLE:`) · 경로 읽기 2회 실패 (stderr `FAIL READ_TEXT`) | 오라클 없음 폴백 — `--oracle` 없이 진행, `검증` 행에 `· oracle SKIPPED` 접미, Phase 5 본문에 경고 |
 | 형식 FAIL 이 인라인 수정 3번으로 안 잡힘 | 루프 종료, `검증` = `FAIL — code FAIL · llm <상태> · <회차>/3`, `stopped_early: format_cap`, Phase 5 에서 잔존 FAIL 코드 제시 |
@@ -248,7 +248,7 @@ critic 이 쓴 `critic-round-<n>.txt` 가 있는지 확인한 뒤:
 | critic 이 `critic-round-<n>.txt` 를 쓰지 않음 | `--check-return` 의 stderr `FAIL READ_TEXT cannot read: <경로>` 한 줄만 붙여 1회 재요청 → 그래도 없으면 `llm: FAIL(protocol)`, `stopped_early: return_mismatch` |
 | 반환 불일치 2회 | `llm: FAIL(protocol)`, `검증` = `FAIL — code <상태> · llm FAIL · <회차>/3`, `stopped_early: return_mismatch`, Phase 5 에서 finding 줄 제시 |
 | `general-purpose` 서브에이전트 사용 불가 | `llm: SKIPPED`, `검증` = `SKIPPED — general-purpose 불가`, Phase 5 본문에 미검증 경고 |
-| python 실행 불가 | `code: SKIPPED` + `llm: SKIPPED`, `검증` = `SKIPPED — python 불가`, Phase 5 본문에 미검증 경고. 카탈로그도 생성되지 않으므로 그 사실을 함께 고지한다 |
+| python 실행 불가 | `code: SKIPPED` + `llm: SKIPPED`, `검증` = `SKIPPED — python 불가`, Phase 5 본문에 미검증 경고. Phase 5 의 카탈로그 재생성(1번·6번)도 실행되지 않으므로 그 사실을 함께 고지한다 |
 | 승인 조건 미충족 (Open questions 잔존 · Handoff `pending` · `유형` 미확정 · `검증` 미충족) | 승인 불가 사유를 알리고 해당 항목만 질문, 채워지면 재제시 |
 | 사용자가 OVERRIDE 승인 | `상태` = `approved`, `검증` 총평 `OVERRIDE`, quality.json `final: OVERRIDE`, 보고에 OVERRIDE 명시 |
 | 사용자가 승인을 거절 | `draft` 유지, 경로만 보고하고 종료 |

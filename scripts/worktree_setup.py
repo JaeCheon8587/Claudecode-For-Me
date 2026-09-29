@@ -328,13 +328,18 @@ def _refresh_int_catalog(wt: Path, intent_rel: str) -> Optional[str]:
     if len(parts) < 4 or parts[0] != "docs" or parts[2] != "INTENT":
         return None
     app = parts[1]
-    try:
+    rel = f"docs/{app}/{app}-INT-CATALOG.md"
+    try:   # 게이트가 아니다 — 문서 문제로 죽지 않는다 (쓰기 실패 포함)
         rows, _ = _dh._collect_intent_rows(wt, app)
         text = _dh._render_intent_catalog(app, rows)
-    except Exception:
+        (wt / rel).write_text(text, encoding="utf-8", newline="\n")
+    except Exception as e:
+        # None 을 돌려주면 호출측이 카탈로그를 git add 하지 않고 넘어간다 —
+        # 커밋이 조용히 1파일로 줄어들지 않도록 경고 1줄을 남긴다 (init 은 막지 않는다).
+        print(f"WARN: {rel} 갱신 실패 — 상태 전이 커밋에 동봉되지 않는다 "
+              f"({type(e).__name__}: {e}). docs_helpers.py check --app {app} 로 확인할 것.",
+              file=sys.stderr)
         return None
-    rel = f"docs/{app}/{app}-INT-CATALOG.md"
-    (wt / rel).write_text(text, encoding="utf-8", newline="\n")
     return rel
 
 

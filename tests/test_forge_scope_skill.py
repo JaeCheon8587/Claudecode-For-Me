@@ -83,14 +83,14 @@ def test_forge_templates_removed():
     assert not (ROOT / "scripts" / "forge_templates").exists()
 
 
-def test_plugin_version_is_3_62_0():
+def test_plugin_version_is_3_63_0():
     plugin = json.loads(read(".claude-plugin/plugin.json"))
-    assert plugin["version"] == "3.62.0"
+    assert plugin["version"] == "3.63.0"
 
     marketplace = json.loads(read(".claude-plugin/marketplace.json"))
     matched = 0
     for entry in marketplace["plugins"]:
         if entry.get("name") == "claudecode-for-me":
-            assert entry["version"] == "3.62.0"
+            assert entry["version"] == "3.63.0"
             matched += 1
     assert matched >= 1

@@ -2,7 +2,7 @@
 
 > ⚠ **TEMPLATE** — 이 파일은 **참고용 예시**다. 실제 `docs/{App}/{App}-INT-CATALOG.md` 는 손으로 만들지 않는다 — `python scripts/docs_helpers.py intent-catalog --repo . --app {App} --write` 가 `INTENT/` 폴더를 훑어 생성한다.
 >
-> ADR-CATALOG 와 성격이 다르다. ADR-CATALOG 는 `영향 범위`·`반영 문서` 처럼 ADR 본문에 없는 값을 들고 있는 **수기 SSOT** 지만, INT-CATALOG 의 모든 열은 Intent 문서의 메타 표·H1·Outcome·항목 수에서 **파생**된다. 고유 정보가 0 이므로 손으로 고치면 상태 전이(`draft`→`approved`→`in-dev`→`in-review`) 3 곳에서 반드시 어긋난다.
+> ADR-CATALOG 와 성격이 다르다. ADR-CATALOG 는 `영향 범위`·`반영 문서` 처럼 ADR 본문에 없는 값을 들고 있는 **수기 SSOT** 지만, INT-CATALOG 의 모든 열은 Intent 문서의 메타 표·H1·Outcome·항목 수에서 **파생**된다. 고유 정보가 0 이므로 손으로 고치면 아래 `## 재생성 시점` 의 **4 곳**(Phase 5 진입 · `draft`→`approved` · `approved`→`in-dev` · `in-dev`→`in-review`)에서 반드시 어긋난다.
 >
 > 값을 바꾸려면 **해당 Intent 문서를 고치고 재생성**한다. `docs_helpers.py check --app {App}` 이 불일치를 `INT_CATALOG` FAIL 로 잡는다.
 >
@@ -46,12 +46,12 @@ intents: 3
 
 ## 재생성 시점
 
-카탈로그는 Intent 의 메타 표가 바뀌는 **모든 지점**에서 다시 쓴다.
+카탈로그는 Intent 의 메타 표가 **확정되는 모든 지점**에서 다시 쓴다. Intent 파일이 갓 생성된 `draft` 시점에는 쓰지 않는다 — 제목·`검증`·항목 수가 아직 비어 있어 쓰는 순간부터 stale 이다.
 
 | 시점 | 주체 | 커밋 |
 |---|---|---|
-| Intent 파일 신규 생성 (`draft`) | requirement-spec Phase 0 | 없음 (승인 전) |
-| `draft` → `approved` | requirement-spec Phase 5 | 없음 (사용자 몫) |
+| Phase 5 진입 (승인 질의 전 · `draft`) | requirement-spec Phase 5 1번 | 없음 (승인 전) |
+| `draft` → `approved` | requirement-spec Phase 5 6번 | 없음 (사용자 몫) |
 | `approved` → `in-dev` | `worktree_setup.py init` | `chore({App}-INT-{NNN}): 상태 in-dev` 에 동봉 |
 | `in-dev` → `in-review` | forge-scope F5 | `chore({App}-INT-{NNN}): 상태 in-review` 에 동봉 |
 

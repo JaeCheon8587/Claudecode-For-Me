@@ -39,6 +39,7 @@ APP_CODE_PATTERN = re.compile(r"^[A-Z][A-Z0-9]*$")
 FRD_FILENAME_PATTERN = lambda app: re.compile(rf"^{re.escape(app)}-FRD-(\d{{3}})\.md$")
 TASK_FILENAME_PATTERN = lambda app: re.compile(rf"^{re.escape(app)}-TASK-(\d{{3}})\.md$")
 ADR_FILENAME_PATTERN = lambda app: re.compile(rf"^{re.escape(app)}-ADR-(\d{{3}})\.md$")
+INTENT_FILENAME_PATTERN = lambda app: re.compile(rf"^{re.escape(app)}-INT-(\d{{3}})\.md$")
 
 FRD_V07_SECTION_TITLES = (
     (1, "기능 요약"),
@@ -1796,8 +1797,6 @@ def cmd_intent_checklist(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 
 
-INTENT_FILENAME_PATTERN = lambda app: re.compile(rf"^{re.escape(app)}-INT-(\d{{3}})\.md$")
-
 INTENT_CATALOG_SUMMARY_MAX = 50
 
 
@@ -1950,49 +1949,69 @@ def _catalog_diff(actual: str, expected: str) -> list[str]:
 
 
 def cmd_intent_catalog(repo: Path, args: argparse.Namespace) -> int:
+    """`--json` 은 **출력 포맷 플래그**다 — 동작과 exit code 는 `--check`/`--write` 가 정하고,
+    `--json` 은 사람이 읽는 출력 대신 같은 결과를 JSON 으로 낼 뿐이다.
+    (cmd_intent_checklist 가 `--check-return` 을 `--json` 보다 먼저 처리하고, cmd_check_intent 가
+    `--json` 출력에서도 실패 exit code 를 유지하는 것과 같은 관례.)"""
     app = args.app
     if args.write and args.check:
         print("FAIL ARGS --write 와 --check 는 함께 쓸 수 없다", file=sys.stderr)
         return 2
     docs_dir = repo / "docs" / app
     if not docs_dir.is_dir():
-        print(f"FAIL ARGS not a directory: {docs_dir}", file=sys.stderr)
+        print(f"FAIL ARGS --app not a directory: {docs_dir}", file=sys.stderr)
         return 2
     rows, skipped = _collect_intent_rows(repo, app)
-    text = _render_intent_catalog(app, rows)
     catalog_path = docs_dir / f"{app}-INT-CATALOG.md"
     rel = _relpath_for(catalog_path, repo)
-
-    if args.json:
-        print(json.dumps({
-            "app": app,
-            "catalog": rel,
-            "count": len(rows),
-            "intents": [r.to_dict() for r in rows],
-            "skipped": skipped,
-        }, ensure_ascii=False, indent=2))
-        return 0
+    # 모든 모드가 공유하는 파생 내용. 마크다운 전문은 실제로 필요한 분기에서만 렌더한다.
+    payload = {
+        "app": app,
+        "catalog": rel,
+        "count": len(rows),
+        "intents": [r.to_dict() for r in rows],
+        "skipped": skipped,
+    }
 
     if args.check:
+        text = _render_intent_catalog(app, rows)
         actual = _read_text(catalog_path)
-        if actual is None:
+        exists = actual is not None
+        if not exists:
+            stale, diff = True, []
+        elif actual != text:
+            stale, diff = True, _catalog_diff(actual, text)
+        else:
+            stale, diff = False, []
+        if args.json:
+            payload["check"] = {"exists": exists, "stale": stale, "diff": diff}
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
+        elif not exists:
             print(f"STALE missing: {rel}")
-            return 1
-        if actual != text:
-            for line in _catalog_diff(actual, text):
+        elif stale:
+            for line in diff:
                 print(line)
             print(f"STALE {rel}")
-            return 1
-        print("OK")
-        print(f"intents: {len(rows)}")
-        return 0
+        else:
+            print("OK")
+            print(f"intents: {len(rows)}")
+        return 1 if stale else 0
 
     if args.write:
+        text = _render_intent_catalog(app, rows)
         catalog_path.write_text(text, encoding="utf-8", newline="\n")
-        print(f"WROTE {rel} · intents: {len(rows)}")
+        if args.json:
+            payload["write"] = {"written": True, "path": rel}
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
+        else:
+            print(f"WROTE {rel} · intents: {len(rows)}")
         return 0
 
-    print(text, end="")
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return 0
+
+    print(_render_intent_catalog(app, rows), end="")
     return 0
 
 
@@ -2053,7 +2072,7 @@ def main(argv: list[str] | None = None) -> int:
     sp_catalog.add_argument("--app", required=True)
     sp_catalog.add_argument("--write", action="store_true", help="docs/<App>/<App>-INT-CATALOG.md 에 기록한다. 없으면 stdout 으로만 낸다.")
     sp_catalog.add_argument("--check", action="store_true", help="기존 카탈로그가 재생성 결과와 같은지 검사한다. 다르면 exit 1 + 차이 줄.")
-    sp_catalog.add_argument("--json", action="store_true")
+    sp_catalog.add_argument("--json", action="store_true", help="출력 포맷만 JSON 으로 바꾼다. --check/--write 의 동작과 exit code 는 그대로다.")
 
     try:
         args = parser.parse_args(argv)
