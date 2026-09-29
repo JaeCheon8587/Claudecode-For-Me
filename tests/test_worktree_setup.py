@@ -329,7 +329,8 @@ def test_second_init_resumes_without_status_commit(git_repo: Path):
 
 
 MANIFEST_KEYS = {
-    "root", "worktree", "branch", "slug", "intent", "intent_worktree",
+    "root", "worktree", "branch", "base", "base_commit", "base_applied",
+    "slug", "intent", "intent_worktree",
     "intent_id", "status", "created", "status_committed",
     "acceptance", "handoff", "copied", "skipped", "submodule_log",
 }
@@ -377,3 +378,272 @@ def test_cancel_removes_intent_worktree_and_branch(git_repo: Path):
     )
     assert probe.returncode != 0
     assert not (git_repo / ".worktree" / slug).exists()
+
+
+# ============================================================================
+# base 브랜치 선택 (branches 서브커맨드 · init --base)
+# ============================================================================
+INTENT_REL = "docs/Demo/INTENT/Demo-INT-001.md"
+
+
+def current_branch(repo: Path) -> str:
+    return run_git(repo, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+
+
+def make_branch_with_extra_commit(repo: Path, name: str, filename: str) -> str:
+    """현재 HEAD 에서 name 브랜치를 만들고 전용 커밋 1개를 얹은 뒤 원래 브랜치로 돌아온다."""
+    origin_branch = current_branch(repo)
+    run_git(repo, "checkout", "-q", "-b", name)
+    (repo / filename).write_text(f"only on {name}\n", encoding="utf-8")
+    run_git(repo, "add", filename)
+    run_git(repo, "commit", "-q", "-m", f"{name} only")
+    sha = run_git(repo, "rev-parse", "HEAD").stdout.strip()
+    run_git(repo, "checkout", "-q", origin_branch)
+    return sha
+
+
+def branches_of(result: subprocess.CompletedProcess) -> dict:
+    return json.loads(result.stdout.strip().splitlines()[-1])
+
+
+def set_handoff(intent: Path, key: str, value: str) -> None:
+    intent.write_text(_meta_row(intent.read_text(encoding="utf-8"), key, value), encoding="utf-8")
+
+
+def test_branches_lists_local_and_remote(git_repo: Path):
+    write_intent(git_repo)
+    commit_all(git_repo)
+    make_branch_with_extra_commit(git_repo, "develop", "develop-only.txt")
+    poc_sha = make_branch_with_extra_commit(git_repo, "poc", "poc-only.txt")
+    run_git(git_repo, "update-ref", "refs/remotes/origin/poc-remote", poc_sha)
+
+    result = run_script(git_repo, "branches")
+
+    assert result.returncode == 0, result.stderr
+    by_ref = {c["ref"]: c for c in branches_of(result)["candidates"]}
+    assert by_ref["develop"]["kind"] == "local"
+    assert by_ref["origin/poc-remote"]["kind"] == "remote"
+    assert by_ref["develop"]["sha"] and by_ref["develop"]["date"]
+    assert "origin" not in by_ref, "origin/HEAD 가 short name 'origin' 으로 새면 안 된다"
+
+
+def test_branches_dedupes_identical_remote(git_repo: Path):
+    write_intent(git_repo)
+    commit_all(git_repo)
+    head = run_git(git_repo, "rev-parse", "HEAD").stdout.strip()
+    main = current_branch(git_repo)
+    run_git(git_repo, "update-ref", f"refs/remotes/origin/{main}", head)
+
+    result = run_script(git_repo, "branches")
+
+    refs = [c["ref"] for c in branches_of(result)["candidates"]]
+    assert main in refs
+    assert f"origin/{main}" not in refs
+
+
+def test_branches_recommends_handoff_base(git_repo: Path):
+    intent = write_intent(git_repo)
+    set_handoff(intent, "base branch", "develop")
+    commit_all(git_repo)
+    run_git(git_repo, "branch", "develop")
+
+    result = run_script(git_repo, "branches", "--doc", str(intent))
+
+    assert result.returncode == 0, result.stderr
+    data = branches_of(result)
+    assert data["recommended"] == "develop"
+    assert data["recommended_source"] == "handoff"
+    assert data["recommended_exists"] is True
+    assert data["candidates"][0]["ref"] == "develop", "추천이 맨 앞이어야 한다"
+    assert data["target_branch"] == "intent/Demo-INT-001"
+
+
+def test_branches_recommended_missing_is_flagged(git_repo: Path):
+    intent = write_intent(git_repo)
+    set_handoff(intent, "base branch", "no-such-branch")
+    commit_all(git_repo)
+
+    result = run_script(git_repo, "branches", "--doc", str(intent))
+
+    assert result.returncode == 0, result.stderr
+    data = branches_of(result)
+    assert data["recommended"] == "no-such-branch"
+    assert data["recommended_exists"] is False
+
+
+def test_branches_reports_target_branch_exists(git_repo: Path):
+    intent = write_intent(git_repo)
+    commit_all(git_repo)
+    run_git(git_repo, "branch", "intent/Demo-INT-001")
+
+    result = run_script(git_repo, "branches", "--doc", str(intent))
+
+    assert branches_of(result)["target_branch_exists"] is True
+
+
+def test_branches_without_doc_falls_back_to_head(git_repo: Path):
+    write_intent(git_repo)
+    commit_all(git_repo)
+
+    result = run_script(git_repo, "branches")
+
+    assert result.returncode == 0, result.stderr
+    data = branches_of(result)
+    assert data["recommended_source"] == "head"
+    assert data["recommended"] == current_branch(git_repo)
+    assert data["target_branch"] == ""
+
+
+def test_branches_is_read_only(git_repo: Path):
+    intent = write_intent(git_repo)
+    commit_all(git_repo)
+    before = (
+        run_git(git_repo, "status", "--porcelain").stdout,
+        run_git(git_repo, "worktree", "list", "--porcelain").stdout,
+        run_git(git_repo, "rev-parse", "HEAD").stdout,
+    )
+
+    assert run_script(git_repo, "branches", "--doc", str(intent)).returncode == 0
+
+    after = (
+        run_git(git_repo, "status", "--porcelain").stdout,
+        run_git(git_repo, "worktree", "list", "--porcelain").stdout,
+        run_git(git_repo, "rev-parse", "HEAD").stdout,
+    )
+    assert before == after
+
+
+def test_init_base_forks_selected_branch(git_repo: Path):
+    intent = write_intent(git_repo)
+    commit_all(git_repo)
+    develop_sha = make_branch_with_extra_commit(git_repo, "develop", "develop-only.txt")
+
+    result = run_init(git_repo, intent, "--base", "develop")
+
+    assert result.returncode == 0, result.stderr
+    manifest = manifest_from(result)
+    wt = Path(manifest["worktree"])
+    assert (wt / "develop-only.txt").exists()
+    assert manifest["base"] == "develop"
+    assert manifest["base_commit"] == develop_sha
+    assert manifest["base_applied"] is True
+    probe = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", "develop", "HEAD"],
+        cwd=wt, capture_output=True, text=True,
+    )
+    assert probe.returncode == 0
+
+
+def test_init_without_base_keeps_head_behavior(git_repo: Path):
+    intent = write_intent(git_repo)
+    commit_all(git_repo)
+    make_branch_with_extra_commit(git_repo, "develop", "develop-only.txt")
+
+    result = run_init(git_repo, intent)
+
+    assert result.returncode == 0, result.stderr
+    manifest = manifest_from(result)
+    assert manifest["base"] == ""
+    assert manifest["base_commit"] == ""
+    assert manifest["base_applied"] is False
+    assert not (Path(manifest["worktree"]) / "develop-only.txt").exists()
+
+
+def test_init_base_unknown_ref_exits_1(git_repo: Path):
+    intent = write_intent(git_repo)
+    commit_all(git_repo)
+
+    result = run_init(git_repo, intent, "--base", "no-such-branch")
+
+    assert result.returncode == 1, result.stderr
+    assert "no-such-branch" in result.stderr
+    assert not (git_repo / ".worktree").exists()
+
+
+def test_init_base_rejects_pipe_char(git_repo: Path):
+    intent = write_intent(git_repo)
+    commit_all(git_repo)
+
+    result = run_init(git_repo, intent, "--base", "a|b")
+
+    assert result.returncode == 1, result.stderr
+    assert not (git_repo / ".worktree").exists()
+
+
+def test_init_base_without_intent_exits_2(git_repo: Path):
+    run_git(git_repo, "branch", "pre")   # Intent 커밋 이전 분기점
+    intent = write_intent(git_repo)
+    commit_all(git_repo)
+
+    result = run_init(git_repo, intent, "--base", "pre")
+
+    assert result.returncode == 2, result.stderr
+    assert "pre" in result.stderr and INTENT_REL in result.stderr
+    assert not (git_repo / ".worktree").exists()
+
+
+def test_init_base_with_divergent_intent_exits_2(git_repo: Path):
+    intent = write_intent(git_repo, status="draft")
+    commit_all(git_repo)
+    run_git(git_repo, "branch", "develop")    # develop 사본 = draft
+    write_intent(git_repo)                    # 디스크 = approved, 커밋하지 않음
+
+    result = run_init(git_repo, intent, "--base", "develop", "--force")
+
+    assert result.returncode == 2, result.stderr
+    assert "사본과 다르다" in result.stderr
+    assert not (git_repo / ".worktree").exists()
+
+
+def test_init_base_written_into_handoff_commit(git_repo: Path):
+    intent = write_intent(git_repo)
+    commit_all(git_repo)
+    make_branch_with_extra_commit(git_repo, "develop", "develop-only.txt")
+    base_commits = int(run_git(git_repo, "rev-list", "--count", "develop").stdout.strip())
+
+    result = run_init(git_repo, intent, "--base", "develop")
+
+    assert result.returncode == 0, result.stderr
+    manifest = manifest_from(result)
+    wt = Path(manifest["worktree"])
+    text = Path(manifest["intent_worktree"]).read_text(encoding="utf-8")
+    assert "| base branch | develop |" in text
+    assert "| 상태 | in-dev |" in text
+    assert manifest["handoff"]["base branch"] == "develop"
+    # 전이 커밋 1개에 Intent 만 동봉된다 (.gitignore 는 의도적으로 미커밋)
+    assert int(run_git(wt, "rev-list", "--count", "HEAD").stdout.strip()) == base_commits + 1
+    changed = run_git(wt, "show", "--pretty=", "--name-only", "HEAD").stdout.split()
+    assert changed == [INTENT_REL]
+
+
+def test_init_existing_branch_ignores_base(git_repo: Path):
+    intent = write_intent(git_repo)
+    commit_all(git_repo)
+    make_branch_with_extra_commit(git_repo, "develop", "develop-only.txt")
+    run_git(git_repo, "branch", "intent/Demo-INT-001")   # 브랜치 선점
+
+    result = run_init(git_repo, intent, "--base", "develop")
+
+    assert result.returncode == 0, result.stderr
+    manifest = manifest_from(result)
+    assert manifest["base"] == "develop"
+    assert manifest["base_applied"] is False
+    assert not (Path(manifest["worktree"]) / "develop-only.txt").exists()
+
+
+def test_init_remote_base_has_no_upstream(git_repo: Path):
+    intent = write_intent(git_repo)
+    commit_all(git_repo)
+    head = run_git(git_repo, "rev-parse", "HEAD").stdout.strip()
+    run_git(git_repo, "update-ref", "refs/remotes/origin/poc", head)
+
+    result = run_init(git_repo, intent, "--base", "origin/poc")
+
+    assert result.returncode == 0, result.stderr
+    manifest = manifest_from(result)
+    assert manifest["base_applied"] is True
+    probe = subprocess.run(
+        ["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
+        cwd=Path(manifest["worktree"]), capture_output=True, text=True,
+    )
+    assert probe.returncode != 0, "--no-track 이 적용돼 upstream 이 없어야 한다"

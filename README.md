@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v3.61.1 · 커스텀 스킬 11종 + 슬래시 커맨드 15종 + 에이전트 9종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v3.62.0 · 커스텀 스킬 11종 + 슬래시 커맨드 15종 + 에이전트 9종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,7 +11,7 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `3.61.1` |
+| 버전 | `3.62.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
@@ -66,6 +66,29 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v3.62.0 — forge-scope 워크트리 base 브랜치 선택
+
+`worktree_setup.py init` 은 `git worktree add -b <branch> <path>` 를 **start-point 없이** 불러 언제나 메인 repo 의
+현재 HEAD 에서 분기했다. Intent Handoff 의 `base branch` 행은 매니페스트에 담기기만 할 뿐 git 명령에 전달된 적이 없어,
+"Intent 는 develop 기반이라 선언했는데 실제로는 main 위에서 개발" 이 조용히 일어났다.
+
+- **`branches` 서브커맨드(신규)** — 로컬 + `origin/*` 후보를 `ref · kind · sha · date · subject` 로 나열(JSON, 읽기 전용).
+  `--doc` 을 주면 Handoff `base branch` 를 `recommended` 로, 대상 브랜치 존재 여부를 `target_branch_exists` 로 알려준다.
+  `origin/HEAD` 는 short name 이 `origin` 이라 full refname 으로 거른다. 로컬과 같은 sha 인 `origin/<x>` 는 중복 제거.
+- **`init --base <ref>`** — 새 브랜치를 만들 때만 분기점으로 쓴다. 브랜치가 이미 있으면(resume) 무시하고
+  `base_applied: false` 로 알린다. 원격 ref 에서 분기하면 `--no-track` 으로 upstream 을 끊는다(forge 는 push 하지 않는다).
+  미지정이면 **기존 동작 그대로** HEAD 분기.
+- **시작 조건 게이트 강화** — `_gate_start` 가 이제 분기점 기준으로 검사한다. Intent 가 base 에 없으면 exit 2
+  (전엔 워크트리 생성 후 `FileNotFoundError`), base 사본이 디스크 Intent 와 다르면 exit 2
+  (전엔 게이트 통과 후 상태 전이가 조용히 실패해 **resume 으로 오판**됐다).
+- **선택값 기록** — 워크트리 Intent 의 Handoff `base branch` 를 실제 분기점으로 치환해 `chore(<ID>): 상태 in-dev`
+  **같은 커밋에** 동봉. 매니페스트에 `base`·`base_commit`·`base_applied` 추가 —
+  `base` 는 `skills/ddr-loop/SKILL.md` 가 이미 기대하던(그러나 존재하지 않던) 키다.
+- **SKILL** — F1 을 `F1-a base 선택`(표 제시 + `AskUserQuestion` 3지선다, `Other` 로 임의 ref) / `F1-b 워크트리 생성` 으로 분리.
+  F5 reviewer 의 브랜치 diff 기준점을 매니페스트 `base_commit` sha 로 고정.
+
+**검증**: `python -m pytest tests/ -q` **290 passed, 3 skipped** (base 선택 테스트 16종 신설).
 
 ### v3.61.1 — 후속 정정 3건: 브랜치 충돌 힌트 · ext 쿼터 신호 · 해시 줄 테스트
 
@@ -1663,7 +1686,7 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `codenav-frontmatter-gen` | `/claudecode-for-me:codenav-frontmatter-gen [--limit N] [--apply]` | C# 클래스 description 빈칸을 AI로 일괄 채워 `// ---` frontmatter 블록 삽입 |
 | `doc-driven-review` | `/claudecode-for-me:doc-driven-review <doc-path>... [--worktree <ref>] [--commit <ref>]` | 첨부 문서 기준 working-tree/커밋 변경을 Codex CLI로 검증. Missing/Improve/Overengineered + Conformance(%) + 인용검증 보고. linked worktree·커밋 노드 지목 지원 |
 | `ddr-loop` | `/claudecode-for-me:ddr-loop <slug> [--docs <doc>...]` | forge 워크트리 브랜치를 Work Packet/TASK/Required SSOT 또는 명시 docs와 codex로 대조(일치율%), 미달분을 세션이 워크트리 안에서 인라인 수정·재검. `--docs` 생략 시 forge-scope Work Packet에서 자동 구성. 최대 3회·99% 정지. 빌드는 `.csproj`만. 정리는 forge-cancel |
-| `forge-scope` | `/claudecode-for-me:forge-scope <WORK_PACKET-or-TASK-doc-path> [--name <slug>] [--force]` | Work Packet을 우선 입력으로 받아 Ready gate, 연결 TASK, Required SSOT Execution Matrix를 소비해 워크트리에서 고정 계약-TDD 파이프라인(계약+테스트→구현→빌드/유닛테스트)으로 구현. TASK 직접 입력은 legacy 호환. 빌드는 `.csproj` 단위만(솔루션 금지). 정리는 `forge-cancel`. |
+| `forge-scope` | `/claudecode-for-me:forge-scope <Intent-doc-path> [--name <slug>] [--base <ref>] [--force]` | **승인된 Intent 하나**를 오케스트레이터 세션(opus/fable-orchestrator)이 워크트리에서 개발. `worktree_setup.py init` 이 승인 게이트·시작 조건·워크트리/브랜치·`approved→in-dev` 전이를 맡고, 웨이브마다 coder RED → GREEN → reviewer → 커밋, A-n 증거로 마감. 분기점은 `branches` 로 후보(로컬 + `origin/*`)를 뽑아 `--base` 로 고른다(미지정 시 현재 HEAD). Work Packet·TASK 입력은 v3.58 에서 폐지. 빌드는 `.csproj` 단위만(솔루션 금지). 정리는 `forge-cancel`. |
 | `grill-me` | `/claudecode-for-me:grill-me [주제]` | 1문 1답으로 요구사항 모호점 추적 |
 | `meta-prompter` | `/claudecode-for-me:meta-prompter [요청]` | 거친 요청 → 구조화된 메타 프롬프트 |
 | `requirement-spec` | `/claudecode-for-me:requirement-spec [--app <App>] [--type 기능개발\|리팩토링] [--no-gate]` | grill-me 인터뷰 → Intent Part 1/2 → 코드 체크리스트 + opus critic 검증 루프(≤3회) → 품질 지표 → 승인 1회. 산출물은 `docs/<App>/INTENT/<App>-INT-<NNN>.md` 1개 |
@@ -1682,7 +1705,7 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `doc-driven-review` | doc-driven-review skill 진입. Codex CLI 위임 read-only 리뷰. `--worktree <branch\|path>` linked worktree / `--commit <ref>` 커밋 노드 지목 지원 |
 | `ddr-loop` | ddr-loop skill 진입. forge 워크트리 브랜치↔docs 수렴 루프(codex reviewer + 세션 fixer, 최대 3회·99%) |
 | `commit-analysis` | 배포 여부 확인 후 `[ADD]`/`[MOD]`/`[FIX]` 자동 판단 한글 커밋 생성 (배포 시 본문에 `[Deploy]`) |
-| `forge-cancel` | forge-scope 워크트리·`feat-<slug>` 브랜치 제거 (서브모듈 메인 원본 보존). `<slug>` 지정 또는 생략 시 목록에서 선택. 스킬 없이 커맨드 단독 |
+| `forge-cancel` | forge-scope 워크트리와 거기 붙은 브랜치(`feat-*`·`intent/*`) 제거 (서브모듈 메인 원본 보존). `<slug>` 지정 또는 생략 시 목록에서 선택. 스킬 없이 커맨드 단독 |
 | `forge-scope` | forge-scope skill 진입 |
 | `grill-me` | grill-me skill 진입 |
 | `meta-prompter` | meta-prompter skill 진입 |
@@ -1838,7 +1861,7 @@ codenav --root <repo> ui --port 9876
 | 단계 | 누가 | 무엇 |
 |---|---|---|
 | F0 입력 | 팀장 | Python 3.10+ 확인, 태스크 ledger 생성 — 수용 기준 = Intent `A-1..A-n` 원문 + 대상 test.csproj 전체 green |
-| F1 문지기 | `worktree_setup.py init` | 승인 게이트·시작 조건 → 워크트리·브랜치 → `approved → in-dev` 커밋 → 매니페스트 |
+| F1 문지기 | `worktree_setup.py branches` → `init` | F1-a base 후보 나열 → 사용자가 분기점 선택 · F1-b 승인 게이트·시작 조건 → 워크트리·브랜치(고른 base 에서 분기) → `approved → in-dev` 커밋(Handoff `base branch` 동봉) → 매니페스트 |
 | F2 개발 플랜 | explorer → (analyst) → 팀장 | 설계 결정 + 웨이브 표. 위험 도메인이면 analyst 감사 의무. Intent 부족 → **멈추고 requirement-spec 으로 되돌린다** |
 | F3 웨이브 | coder ×2 → reviewer → 커밋 | RED(테스트, `Failed` ≥1 · `error CS` 0) → GREEN(최소 구현, exit 0) → review → `feat(<ID>): W<k> …` |
 | F4 통합 | coder · 팀장 | test.csproj 전체 VERIFY, A-n 마다 증거 포인터. 환경 의존 A 는 확인 불가면 "미충족 + 사유" |
@@ -1849,8 +1872,8 @@ codenav --root <repo> ui --port 9876
 | 조건 | 필수 | 비고 |
 |---|---|---|
 | Python 3.10+ (`python` 또는 `py -3`) | **필수** | 미설치 시 가이드 출력 후 중단 |
-| git repository + 커밋 1개 이상 | **필수** | 워크트리는 마지막 커밋의 사본 — 커밋 안 된 소스·테스트는 따라오지 않는다 |
-| Intent 가 마지막 커밋에 있음 | **필수** | `--force` 로도 우회 불가 |
+| git repository + 커밋 1개 이상 | **필수** | 워크트리는 **분기점(base) 커밋**의 사본 — 커밋 안 된 소스·테스트는 따라오지 않는다 |
+| Intent 가 분기점에 있고 그 사본이 디스크와 동일 | **필수** | 분기점 = `--base <ref>`, 미지정 시 현재 HEAD. 사본이 다르면 워크트리에 승인 상태가 반영되지 않으므로 차단. `--force` 로도 우회 불가 |
 | Intent `상태` = `approved`(신규) 또는 `in-dev`(재개) | **필수** | `check-intent` FAIL 0 (`INT_APPROVED_GATE` 포함) |
 | 오케스트레이터 세션 | 전제 | 인라인(세션 직접 코딩) 모드는 없다 |
 
@@ -1874,6 +1897,7 @@ codenav --root <repo> ui --port 9876
 |---|---|---|
 | `forge-scope` | `<Intent-doc-path>` | **필수**. `docs/<App>/INTENT/<ID>.md` |
 | | `--name <slug>` | 워크트리 slug 명시 (기본: Intent 문서 ID) |
+| | `--base <ref>` | 워크트리 분기점 (기본: 현재 HEAD). 로컬·`origin/*` 모두 가능. 브랜치가 이미 있으면 무시되고 `base_applied: false` |
 | | `--force` | 메인 repo dirty 검사만 우회 (커밋·승인 조건은 우회 불가) |
 | `forge-cancel` | `[<slug>]` | 제거할 워크트리 slug. 생략 시 목록에서 선택. `.worktree/<slug>` 에 붙은 브랜치(`feat-*`·`intent/*`)를 함께 삭제 |
 
@@ -1881,11 +1905,11 @@ codenav --root <repo> ui --port 9876
 
 1. **입력 판별** — 경로에 `INTENT` 폴더가 있거나 파일명이 `<App>-INT-<nnn>` 이면 Intent. 그 밖(Work Packet·TASK)은 exit 2 "v3.58 에서 폐지".
 2. **승인 게이트** — `상태 ∈ {approved, in-dev}` + `docs_helpers` 의 Intent 검사 FAIL 0. 미통과면 exit 2 + 사유, 워크트리를 만들지 않는다.
-3. **시작 조건** — HEAD 존재 + Intent 가 HEAD 에 tracked.
-4. **워크트리** — `.worktree/<slug>`, 브랜치 = Handoff `브랜치명`(유효한 ref 일 때) 아니면 `intent/<문서 ID>`.
+3. **시작 조건** — 분기점(`--base`, 기본 HEAD) 존재 + Intent 가 그 분기점에 tracked + **그 사본이 디스크 Intent 와 동일** (다르면 워크트리에 승인 상태가 반영되지 않으므로 exit 2).
+4. **워크트리** — `.worktree/<slug>`, 브랜치 = Handoff `브랜치명`(유효한 ref 일 때) 아니면 `intent/<문서 ID>`. 분기점은 `--base` 로 고른 ref — 브랜치 이름과 별개다. 후보는 `branches` 서브커맨드로 나열한다.
 5. **가드레일 복사** — 메인의 `CLAUDE.md`·`.claude/rules`·`Docs`·`docs` 중 워크트리에 **없는 파일만** 복사(덮어쓰지 않음).
 6. **상태 전이** — 신규 생성일 때만 워크트리 Intent `approved → in-dev` + 커밋 `chore(<ID>): 상태 in-dev`. 메인 repo 의 Intent 는 그대로.
-7. **매니페스트** — stdout 마지막 줄 JSON: `worktree`·`branch`·`intent_worktree`·`intent_id`·`status`·`created`·`status_committed`·`acceptance`(A-n)·`handoff`(5행) 등. `.process/<slug>/` 스캐폴딩(build.md·progress.md)은 v3.61.0 에서 제거 — 계획·진행 상태는 팀장 ledger 하나다.
+7. **매니페스트** — stdout 마지막 줄 JSON: `worktree`·`branch`·`base`·`base_commit`·`base_applied`·`intent_worktree`·`intent_id`·`status`·`created`·`status_committed`·`acceptance`(A-n)·`handoff`(5행) 등. `.process/<slug>/` 스캐폴딩(build.md·progress.md)은 v3.61.0 에서 제거 — 계획·진행 상태는 팀장 ledger 하나다.
 
 #### 워크트리 서브모듈
 
@@ -2234,7 +2258,7 @@ Claudecode-For-Me/
 | install 직후 슬래시 자동완성에 안 보임 | 매니페스트는 세션 시작 시 1회 로드 | 세션 종료 → 재시작 |
 | update 후 신규 스킬 호출 불가 | 동일 — 캐시는 갱신됐으나 세션은 구버전 보유 | 세션 재시작 |
 | `forge-scope` 가 워크트리 안 만들고 종료(exit 2) | Intent 가 `approved`/`in-dev` 아님, `INT_*` FAIL, 커밋 0 또는 Intent 미커밋, Work Packet·TASK 입력 | requirement-spec 으로 Intent 승인·재검증, Intent 와 프로젝트 골격을 커밋한 뒤 재시도 |
-| `ddr-loop` init exit 2 "forge 워크트리 없음" | 해당 slug 워크트리 미생성 | 먼저 `/forge-scope <WORK_PACKET>` 실행, 또는 forge-cancel에 쓴 slug 확인 (`worktree_setup.py list`) |
+| `ddr-loop` init exit 2 "forge 워크트리 없음" | 해당 slug 워크트리 미생성 | 먼저 `/forge-scope <Intent-doc-path>` 실행, 또는 forge-cancel에 쓴 slug 확인 (`worktree_setup.py list`) |
 | `ddr-loop` 첫 review exit 2 | codex CLI 미설치 (리뷰는 codex 의존) | `/codex:setup` 후 재시도 |
 | `codenav frontmatter gen` 결과 `generated=0` | `claude` CLI 부재 또는 stdout JSON 키 mismatch | `where claude` 확인. v1.15.0+ 는 `result`/`response` 둘 다 처리 |
 | `codenav frontmatter gen` "git working tree is dirty" 거부 | 안전장치 | commit/stash 또는 `--allow-dirty` |

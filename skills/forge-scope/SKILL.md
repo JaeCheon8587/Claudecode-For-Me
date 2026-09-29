@@ -31,7 +31,7 @@ description: 승인된 Intent 문서(requirement-spec 산출물)를 오케스트
 
 ## F0 — 입력과 ledger
 
-1. `$ARGUMENTS` 첫 인자 = Intent 경로. `--name <slug>` · `--force` 는 F1 에 그대로 넘긴다.
+1. `$ARGUMENTS` 첫 인자 = Intent 경로. `--name <slug>` · `--base <ref>` · `--force` 는 F1 에 그대로 넘긴다 (`--base` 가 이미 있으면 F1-a 의 질문을 건너뛴다).
 2. Python 3.10+ 확인: `python --version`(없으면 `py -3 --version`). 없으면 중단 + 설치 안내.
 3. 태스크 ledger 생성 `.orchestration/ledgers/<yyyymmdd>-<ID>.md`:
    - `status: active`, goal = Intent 제목.
@@ -39,26 +39,57 @@ description: 승인된 Intent 문서(requirement-spec 산출물)를 오케스트
 
 ## F1 — 문지기 · 작업 공간
 
+### F1-a — base 브랜치 선택
+
 ```bash
-python "${CLAUDE_PLUGIN_ROOT}/scripts/worktree_setup.py" init --doc <Intent> --quiet [--name <slug>] [--force]
+python "${CLAUDE_PLUGIN_ROOT}/scripts/worktree_setup.py" branches --doc <Intent>
+```
+
+읽기 전용이다. stdout 마지막 줄 JSON 을 파싱한다.
+
+- `$ARGUMENTS` 에 `--base <ref>` 가 이미 있으면 **이 단계를 건너뛴다.**
+- `target_branch_exists: true` → 브랜치가 이미 있어 분기점을 바꿀 수 없다. **묻지 않고** F1-b 로 가되
+  "resume — base 선택은 적용되지 않는다" 를 한 줄 보고한다.
+- `candidates` 가 비어 있으면(커밋 없는 repo) 그대로 F1-b 로 가서 init 게이트 메시지를 받게 한다.
+- `recommended_exists: false` → "Intent 가 선언한 base `<x>` 가 로컬·원격에 없다" 를 **먼저 보고**한 뒤 고르게 한다.
+- `candidates` 를 표로 보여준다(최대 10행: `ref · kind · sha · date · subject`). 그 뒤 `AskUserQuestion` 1문항
+  "워크트리를 어느 브랜치에서 분기할까요?" — 옵션 **최대 3개**(도구 상한이 4, `Other` 는 자동 제공):
+  1. `recommended`(존재할 때) — 맨 앞 = 기본, 라벨에 `(Intent Handoff)`
+  2. `current` HEAD 브랜치 (1번과 같으면 건너뛴다)
+  3. 남은 candidates 중 최근 커밋 1개
+  - ref 가 길면 라벨은 축약하고 **전체 ref 는 description 에** 적는다.
+  - 목록에 더 있으면 "그 밖은 `Other` 로 ref 직접 입력(`origin/*` 포함)" 을 description 에 명시한다.
+- 사용자가 고르기 전에는 `--base` 를 붙이지 않는다. 임의 선택 금지.
+
+### F1-b — 워크트리 생성
+
+```bash
+python "${CLAUDE_PLUGIN_ROOT}/scripts/worktree_setup.py" init --doc <Intent> --quiet --base <선택한 ref> [--name <slug>] [--force]
 ```
 
 - **exit 1** → 작업 공간 상태 문제. stderr 를 그대로 사용자에게 전하고 **중단**, 사용자 결정을 받는다:
   - `메인 repo 작업트리가 dirty` → 사용자가 커밋·stash. `--force` 는 dirty 파일이 이 Intent 와 무관하다고 **사용자가 명시**했을 때만 붙인다(워크트리는 마지막 커밋 사본이라 dirty 변경은 어차피 따라가지 않는다).
   - 브랜치가 다른 워크트리에 붙어 있음 → 그 워크트리를 `/forge-cancel <그 slug>` 로 정리(브랜치는 Handoff 로 정해지므로 `--name` 으로는 피할 수 없다. Intent 는 고치지 않는다).
+  - `base '<ref>' 를 찾을 수 없다` / `쓸 수 없는 문자` → **F1-a 로 돌아가 재선택**. Intent 는 고치지 않는다.
   - stale 워크트리 → `git worktree prune` 후 재실행.
   - 등록 안 된 `.worktree/<slug>` 디렉터리 → 사용자가 확인 후 수동 삭제하거나 `git worktree prune` 후 재실행.
 - **exit 2** → stderr 사유를 그대로 사용자에게 전하고 **중단**. 게이트를 통과시키려고 Intent 를 고치지 않는다. 흔한 사유:
   - `Intent 상태가 'draft'` → requirement-spec Phase 5 에서 승인.
   - `INT_*` FAIL → requirement-spec 으로 돌아가 수정·재검증.
   - `커밋이 하나도 없다` / `마지막 커밋에 없다` → 사용자가 Intent 와 프로젝트 골격(소스·테스트·솔루션)을 커밋. 워크트리는 마지막 커밋의 사본이라 커밋 안 된 파일은 따라오지 않는다. `--force` 로도 우회되지 않는다.
+  - `Intent 가 base '<ref>' 에 없다` → 그 브랜치에 Intent 를 커밋하게 하거나 다른 base 를 고른다.
+  - `Intent 가 base 의 사본과 다르다` → 워크트리에 들어가는 건 base 사본이라 승인 상태가 반영되지 않는다. 디스크 수정본을 먼저 커밋하게 하거나 다른 base 를 고른다. `--force` 로 우회되지 않는다.
   - `Work Packet·TASK 입력은 … 폐지` → requirement-spec 으로 Intent 작성.
 - **exit 0** → stdout 마지막 줄 매니페스트 JSON 을 ledger 에 기록. 쓰는 키:
   - `worktree`(이후 모든 경로의 뿌리) · `branch` · `intent_worktree`(워크트리 안 Intent)
+  - `base`(고른 분기점 ref) · `base_commit`(그 시점 sha — 마감 diff 는 이걸 쓴다) · `base_applied`. `base_applied: false` 면 브랜치가 이미 있어 분기점이 적용되지 않은 것이므로 **한 줄 보고**하고 진행한다.
   - `status_committed` — `true` 면 신규 시작(F2 부터). `false` 면 **resume** — Intent 는 이미 `in-dev` 다. `created` 는 워크트리를 이번에 붙였는지일 뿐(브랜치만 남아 있던 경우 `true`)이라 판단에 쓰지 않는다. 태스크 ledger 가 있으면 웨이브 표에서 이어가고, 없으면 F2 부터 다시 세운다(`git -C <worktree> log --oneline` 으로 기존 웨이브 커밋 확인).
   - init 의 `chore(<ID>): 상태 in-dev` 커밋은 스크립트의 결정적 전이라 reviewer 없이 허용되는 **유일한** 커밋이다. 그 밖의 모든 커밋은 reviewer APPROVE 뒤.
   - `acceptance`(A-n 목록) · `handoff`(5행: repo·app / base branch / 브랜치명 / 손대지 말 영역 / 완료 보고 방식)
+  - `submodule_log` — base 마다 `.gitmodules` 가 다를 수 있고, 메인 repo 에 populate 안 된 서브모듈은 링크되지 않고 로그만 남는다. 비어 있지 않으면 사용자에게 보고한다.
 - 브랜치는 Handoff `브랜치명`(유효한 ref 일 때), 아니면 `intent/<문서 ID>`.
+- **분기점(base)은 브랜치 이름과 별개다** — F1-a 에서 고른 ref 다. init 이 워크트리 Intent 의 Handoff `base branch` 행을 그 값으로 치환해 `in-dev` 전이 커밋에 함께 넣는다.
+- 가드레일 복사(`CLAUDE.md`·`.claude/rules`·`Docs`·`docs`)는 base 와 무관하게 **메인 repo 작업트리**에서 온다(작업 공간 수준 가드레일이라 의도된 동작).
 
 ## F2 — 개발 플랜
 
@@ -98,7 +129,7 @@ coder 스펙 규칙:
 ## F5 — 마감
 
 1. **scribe** 1회(상태 in-dev → in-review): 워크트리 Intent 메타 `| 상태 | in-dev |` → `| 상태 | in-review |` 1줄만(그 밖 무변경). 팀장은 Intent 를 직접 고치지 않는다.
-2. reviewer(opus) — 브랜치 전체 diff(`<base branch>...HEAD`) vs Intent: A 커버리지, `손대지 말 영역` 무변경, FR/X 위반 여부.
+2. reviewer(opus) — 브랜치 전체 diff(`git -C <worktree> diff <base_commit>...HEAD`, 매니페스트의 `base_commit`. 없으면 `base`, 그것도 없으면 Handoff `base branch`) vs Intent: A 커버리지, `손대지 말 영역` 무변경, FR/X 위반 여부. sha 를 우선 쓰는 이유 — base 브랜치가 개발 중 앞으로 나가도 비교 범위가 흔들리지 않는다.
 3. APPROVE → 커밋 `chore(<ID>): 상태 in-review`.
 4. Handoff `완료 보고 방식` 대로 보고: A-n 표(충족/미충족 + 증거) · Deviations(Intent 와 다르게 한 것) · 브랜치명.
 5. ledger `status: done` + retro 3줄.

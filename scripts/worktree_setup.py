@@ -9,6 +9,8 @@ Subcommands
 -----------
 - ``init``   : 검증 게이트 → 워크트리(.worktree/<slug>) 생성 → 서브모듈 링크 →
                가드레일 복사 → Intent 상태 전이(approved → in-dev) → JSON 매니페스트 출력.
+- ``branches``: base 후보 브랜치 나열 (로컬 + origin/*, JSON). 읽기 전용.
+- ``list``   : forge 워크트리 나열 (JSON).
 - ``cancel`` : 서브모듈 링크 해제(메인 타깃 보존) → worktree remove → branch -D.
 
 표준 라이브러리만 사용한다 (Python 3.10+).
@@ -102,6 +104,22 @@ def _intent_branch(root: Path, intent_id: str, handoff_value: str) -> str:
     return f"intent/{intent_id}"
 
 
+def _resolve_commit(root: Path, ref: str) -> Optional[str]:
+    """ref 가 가리키는 커밋 sha (없으면 None). 로컬·원격·태그·sha 모두 허용."""
+    r = _git(root, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}")
+    return r.stdout.strip() or None
+
+
+def _is_remote_ref(root: Path, ref: str) -> bool:
+    """원격 추적 ref 인가. 문자열 휴리스틱(슬래시 포함 여부) 금지 — feat/foo 같은 로컬을 오인한다."""
+    return _git(root, "rev-parse", "--verify", "--quiet", f"refs/remotes/{ref}").returncode == 0
+
+
+def _norm(text: str) -> str:
+    """CRLF·양끝 공백 차이를 흡수한 비교용 정규화."""
+    return text.replace("\r\n", "\n").strip()
+
+
 def _submodule_entries(root: Path, worktree: Path) -> list[tuple[str, str]]:
     """워크트리 .gitmodules 에서 (submodule name, path) 목록."""
     gm = worktree / ".gitmodules"
@@ -145,16 +163,27 @@ def _gate_intent(root: Path, doc: Path) -> list[str]:
     return problems
 
 
-def _gate_start(root: Path, doc: Path) -> list[str]:
-    """워크트리 시작 조건 — HEAD 존재 + Intent 가 HEAD 에 tracked."""
-    if _git(root, "rev-parse", "--verify", "--quiet", "HEAD").returncode != 0:
-        return ["커밋이 하나도 없다 — Intent 와 프로젝트 골격(소스·테스트·솔루션)을 먼저 커밋한다. 워크트리는 마지막 커밋을 복사한다."]
+def _gate_start(root: Path, doc: Path, start_ref: str = "HEAD") -> list[str]:
+    """워크트리 시작 조건 — 분기점(start_ref) 존재 + 그 사본이 디스크 Intent 와 같음.
+
+    워크트리에 들어가는 건 디스크 파일이 아니라 start_ref 의 사본이다. 사본이 다르면
+    승인 상태가 워크트리에 반영되지 않고 `_mark_in_dev` 가 조용히 실패해 resume 으로 오판된다.
+    """
+    if _resolve_commit(root, start_ref) is None:
+        if start_ref == "HEAD":
+            return ["커밋이 하나도 없다 — Intent 와 프로젝트 골격(소스·테스트·솔루션)을 먼저 커밋한다. 워크트리는 마지막 커밋을 복사한다."]
+        return [f"base '{start_ref}' 가 커밋을 가리키지 않는다."]
     try:
         rel = doc.resolve().relative_to(root.resolve()).as_posix()
     except ValueError:
         return [f"Intent 가 이 repo 밖에 있다: {doc}"]
-    if _git(root, "cat-file", "-e", f"HEAD:{rel}").returncode != 0:
-        return [f"Intent 가 마지막 커밋에 없다: {rel} — 먼저 커밋한다."]
+    where = "마지막 커밋" if start_ref == "HEAD" else f"base '{start_ref}'"
+    show = _git(root, "show", f"{start_ref}:{rel}")
+    if show.returncode != 0:
+        return [f"Intent 가 {where}에 없다: {rel} — 먼저 그 브랜치에 커밋하거나 다른 base 를 고른다."]
+    if _norm(show.stdout) != _norm(doc.read_text(encoding="utf-8", errors="replace")):
+        return [f"Intent 가 {where}의 사본과 다르다: {rel} — 워크트리에는 그 사본이 들어가므로 "
+                "승인 상태가 반영되지 않는다. 먼저 커밋하거나 다른 base 를 고른다."]
     return []
 
 
@@ -176,7 +205,14 @@ def _registered_worktree_path(root: Path, branch: str) -> Optional[Path]:
     return None
 
 
-def _ensure_worktree(root: Path, slug: str, branch: str, *, force: bool) -> tuple[Path, str, bool]:
+def _ensure_worktree(
+    root: Path, slug: str, branch: str, *, force: bool, base: Optional[str] = None,
+) -> tuple[Path, str, bool, bool]:
+    """(worktree, branch, created, base_applied).
+
+    base 는 브랜치를 **새로 만들 때만** 분기점으로 쓰인다. 브랜치가 이미 있으면
+    물리적으로 적용할 수 없으므로 무시하고 base_applied=False 로 알린다.
+    """
     wt = root / ".worktree" / slug
 
     registered = _registered_worktree_path(root, branch)
@@ -189,7 +225,7 @@ def _ensure_worktree(root: Path, slug: str, branch: str, *, force: bool) -> tupl
         if not registered.exists():
             _err(f"ERROR: 워크트리 등록됐으나 디렉토리 없음(stale): {registered}\n"
                  "  Hint: `git worktree prune` 후 재실행.")
-        return wt, branch, False
+        return wt, branch, False, False
 
     if wt.exists():
         _err(f"ERROR: 디렉토리 존재하나 워크트리 미등록: {wt}\n"
@@ -208,13 +244,22 @@ def _ensure_worktree(root: Path, slug: str, branch: str, *, force: bool) -> tupl
 
     wt.parent.mkdir(parents=True, exist_ok=True)
     exists = _git(root, "rev-parse", "--verify", "--quiet", branch).returncode == 0
+    base_applied = False
     if exists:
+        if base:
+            print(f"NOTE: 브랜치 '{branch}' 가 이미 있어 base '{base}' 는 적용되지 않는다 (resume).",
+                  file=sys.stderr)
         r = _git(root, "worktree", "add", str(wt), branch)
+    elif base:
+        # 원격 ref 에서 분기하면 git 이 upstream 을 잡는다. forge 는 push 하지 않으므로 끊는다.
+        extra = ["--no-track"] if _is_remote_ref(root, base) else []
+        r = _git(root, "worktree", "add", *extra, "-b", branch, str(wt), base)
+        base_applied = True
     else:
         r = _git(root, "worktree", "add", "-b", branch, str(wt))
     if r.returncode != 0:
         _err(f"ERROR: 워크트리 생성 실패 ({wt}).\n  {r.stderr.strip()}")
-    return wt, branch, True
+    return wt, branch, True, base_applied
 
 
 def _link_submodules(root: Path, wt: Path, log: list[str]) -> None:
@@ -273,7 +318,7 @@ def _copy_guardrails(root: Path, wt: Path) -> tuple[list[str], list[str]]:
     return copied, skipped
 
 
-def _mark_in_dev(wt: Path, intent_rel: str, intent_id: str) -> bool:
+def _mark_in_dev(wt: Path, intent_rel: str, intent_id: str, base: Optional[str] = None) -> bool:
     p = wt / intent_rel
     text = p.read_text(encoding="utf-8", errors="replace")
     new_text, n = re.subn(
@@ -283,6 +328,16 @@ def _mark_in_dev(wt: Path, intent_rel: str, intent_id: str) -> bool:
     )
     if n == 0:
         return False
+    if base:
+        # Handoff `base branch` 를 실제 분기점으로 치환해 상태 전이와 같은 커밋에 동봉한다.
+        # INT_HANDOFF_ROWS 가 5행 존재를 강제하므로 게이트를 통과한 Intent 에는 항상 이 행이 있다.
+        # lambda: base 안의 백슬래시가 치환 escape 로 해석되는 것을 막는다.
+        new_text = re.sub(
+            r"(?m)^\|\s*base branch\s*\|\s*.*\|\s*$",
+            lambda _m: f"| base branch | {base} |",
+            new_text,
+            count=1,
+        )
     p.write_text(new_text, encoding="utf-8")
     _git(wt, "add", intent_rel)
     r = _git(wt, "commit", "-m", f"chore({intent_id}): 상태 in-dev")
@@ -300,6 +355,87 @@ def _ensure_gitignore(wt: Path) -> None:
         prefix = "" if have.endswith("\n") or not have else "\n"
         with gi.open("a", encoding="utf-8") as f:
             f.write(prefix + "\n".join(add) + "\n")
+
+
+def _branch_rows(root: Path) -> list[dict]:
+    """base 후보 — 로컬 브랜치 + origin/* 추적 브랜치, 최근 커밋 순."""
+    fmt = ("%(refname)%09%(refname:short)%09%(objectname:short)"
+           "%09%(committerdate:short)%09%(contents:subject)")
+    rows: list[dict] = []
+    local_sha: dict[str, str] = {}
+    for scope, kind in (("refs/heads", "local"), ("refs/remotes/origin", "remote")):
+        r = _git(root, "for-each-ref", "--sort=-committerdate", f"--format={fmt}", scope)
+        for line in r.stdout.splitlines():
+            if not line.strip():
+                continue
+            parts = line.split("\t", 4)   # subject 안의 탭은 subject 에 남긴다
+            if len(parts) < 4:
+                continue
+            full, ref, sha, date = parts[0], parts[1], parts[2], parts[3]
+            subject = parts[4] if len(parts) > 4 else ""
+            if kind == "local":
+                local_sha[ref] = sha
+            else:
+                # origin/HEAD 는 short name 이 'origin' 이라 short 이름으론 못 거른다.
+                if full == "refs/remotes/origin/HEAD":
+                    continue
+                # 로컬과 같은 커밋이면 중복 — 다르면(로컬이 뒤처짐) 남긴다.
+                if local_sha.get(ref[len("origin/"):]) == sha:
+                    continue
+            rows.append({"ref": ref, "kind": kind, "sha": sha, "date": date, "subject": subject})
+    return rows
+
+
+def cmd_branches(args: argparse.Namespace) -> int:
+    """읽기 전용 — 세션이 base 선택지를 사용자에게 제시하기 위한 목록."""
+    root = _repo_root(Path.cwd())
+    if root is None:
+        _err("ERROR: git repository가 아닙니다.", EXIT_BLOCKED)
+
+    r = _git(root, "symbolic-ref", "--quiet", "--short", "HEAD")
+    current = r.stdout.strip() if r.returncode == 0 else ""
+
+    recommended = ""
+    recommended_source = "head"
+    target_branch = ""
+    if args.doc:
+        doc = Path(args.doc)
+        if not doc.is_absolute():
+            doc = (Path.cwd() / doc).resolve()
+        try:   # 게이트가 아니다 — 문서 문제로 죽지 않는다
+            intent = _dh._parse_intent(doc.read_text(encoding="utf-8", errors="replace"))
+            intent_id = intent.meta.get("문서 ID", "").strip() or doc.stem
+            target_branch = _intent_branch(root, intent_id, intent.handoff.get("브랜치명", ""))
+            handoff_base = intent.handoff.get("base branch", "").strip()
+            if handoff_base:
+                recommended = handoff_base
+                recommended_source = "handoff"
+        except Exception:
+            pass
+    if not recommended:
+        recommended = current
+        recommended_source = "head"
+
+    rows = _branch_rows(root)
+    for row in rows:
+        row["is_current"] = row["kind"] == "local" and row["ref"] == current
+        row["is_recommended"] = row["ref"] == recommended
+    rows.sort(key=lambda row: not row["is_recommended"])   # stable — 추천만 맨 앞으로
+
+    target_exists = bool(target_branch) and _git(
+        root, "rev-parse", "--verify", "--quiet", f"refs/heads/{target_branch}"
+    ).returncode == 0
+
+    print(json.dumps({
+        "recommended": recommended,
+        "recommended_source": recommended_source,
+        "recommended_exists": bool(recommended) and _resolve_commit(root, recommended) is not None,
+        "current": current,
+        "target_branch": target_branch,
+        "target_branch_exists": target_exists,
+        "candidates": rows,
+    }, ensure_ascii=False))
+    return EXIT_OK
 
 
 def cmd_init(args: argparse.Namespace) -> int:
@@ -323,7 +459,17 @@ def cmd_init(args: argparse.Namespace) -> int:
             EXIT_BLOCKED,
         )
 
-    problems = _gate_intent(root, doc) + _gate_start(root, doc)
+    base = (args.base or "").strip() or None
+    base_commit = None
+    if base:
+        if "|" in base or "\r" in base or "\n" in base:
+            _err(f"ERROR: base '{base}' 에 쓸 수 없는 문자(| 또는 개행)가 있다 — Handoff 표를 깨뜨린다.")
+        base_commit = _resolve_commit(root, base)
+        if base_commit is None:
+            _err(f"ERROR: base '{base}' 를 찾을 수 없다 — "
+                 "`worktree_setup.py branches` 로 목록을 확인하고 다시 고른다.")
+
+    problems = _gate_intent(root, doc) + _gate_start(root, doc, base or "HEAD")
     if problems:
         _err("§F Intent 게이트 미통과:\n" + "\n".join(f"  - {p}" for p in problems), EXIT_BLOCKED)
 
@@ -332,7 +478,9 @@ def cmd_init(args: argparse.Namespace) -> int:
     slug = _slugify(args.name or intent_id)
     branch = _intent_branch(root, intent_id, intent.handoff.get("브랜치명", ""))
 
-    wt, branch, created = _ensure_worktree(root, slug, branch, force=args.force)
+    wt, branch, created, base_applied = _ensure_worktree(
+        root, slug, branch, force=args.force, base=base,
+    )
 
     log: list[str] = []
     _link_submodules(root, wt, log)
@@ -344,7 +492,7 @@ def cmd_init(args: argparse.Namespace) -> int:
 
     status_committed = False
     if created:
-        status_committed = _mark_in_dev(wt, intent_rel, intent_id)
+        status_committed = _mark_in_dev(wt, intent_rel, intent_id, base)
 
     wt_intent = _dh._parse_intent(
         (wt / intent_rel).read_text(encoding="utf-8", errors="replace")
@@ -355,6 +503,9 @@ def cmd_init(args: argparse.Namespace) -> int:
         "root": str(root),
         "worktree": str(wt),
         "branch": branch,
+        "base": base or "",                 # 사용자가 고른 분기점 ref
+        "base_commit": base_commit or "",   # 그 시점 sha — 마감 diff 는 이걸 쓰는 게 안전
+        "base_applied": base_applied,       # False = 브랜치가 이미 있어 분기점을 못 바꿨다
         "slug": slug,
         "intent": str(doc),
         "intent_worktree": str(wt / intent_rel),
@@ -374,6 +525,9 @@ def cmd_init(args: argparse.Namespace) -> int:
     if not args.quiet:
         print(f"[forge] worktree: {wt}")
         print(f"[forge] branch:   {branch}")
+        if base:
+            mark = "" if base_applied else " (무시됨 — 브랜치 기존재)"
+            print(f"[forge] base:     {base} ({(base_commit or '')[:7]}){mark}")
         print(f"[forge] status:   {status}")
         if copied:
             print(f"[forge] 복사:     {', '.join(copied)}")
@@ -528,9 +682,15 @@ def main(argv: Optional[list[str]] = None) -> int:
     pi = sub.add_parser("init", help="검증 게이트 + 워크트리 + 링크 + 복사 + 상태 전이")
     pi.add_argument("--doc", required=True, help="approved Intent 문서 경로 (docs/<App>/INTENT/<ID>.md)")
     pi.add_argument("--name", default=None, help="slug 명시 (기본: Intent 문서 ID)")
+    pi.add_argument("--base", default=None,
+                    help="워크트리 분기점 ref (기본: 현재 HEAD). 예: main, develop, origin/develop")
     pi.add_argument("--force", action="store_true", help="메인 repo dirty 검사 우회")
     pi.add_argument("--quiet", action="store_true", help="진행 로그 억제 (JSON만)")
     pi.set_defaults(func=cmd_init)
+
+    pb = sub.add_parser("branches", help="base 후보 브랜치 나열 (로컬 + origin/*, JSON)")
+    pb.add_argument("--doc", default=None, help="Intent 경로 (추천 base·대상 브랜치 계산용)")
+    pb.set_defaults(func=cmd_branches)
 
     pl = sub.add_parser("list", help="forge 워크트리 나열 (JSON)")
     pl.set_defaults(func=cmd_list)

@@ -13,6 +13,9 @@ def test_skill_is_intent_only_orchestrator_procedure():
     required = (
         "승인된 Intent",
         'worktree_setup.py" init --doc <Intent>',
+        'worktree_setup.py" branches --doc <Intent>',
+        "--base <선택한 ref>",
+        "### F1-a — base 브랜치 선택",
         "## F0 —",
         "## F1 —",
         "## F2 —",
@@ -71,6 +74,7 @@ def test_skill_drops_inline_and_legacy_text():
 def test_command_takes_intent_path():
     text = read("commands/forge-scope.md")
     assert "<Intent-doc-path>" in text
+    assert "--base <ref>" in text
     assert "skills/forge-scope/SKILL.md" in text
     assert "WORK_PACKET" not in text
 
@@ -79,14 +83,14 @@ def test_forge_templates_removed():
     assert not (ROOT / "scripts" / "forge_templates").exists()
 
 
-def test_plugin_version_is_3_61_1():
+def test_plugin_version_is_3_62_0():
     plugin = json.loads(read(".claude-plugin/plugin.json"))
-    assert plugin["version"] == "3.61.1"
+    assert plugin["version"] == "3.62.0"
 
     marketplace = json.loads(read(".claude-plugin/marketplace.json"))
     matched = 0
     for entry in marketplace["plugins"]:
         if entry.get("name") == "claudecode-for-me":
-            assert entry["version"] == "3.61.1"
+            assert entry["version"] == "3.62.0"
             matched += 1
     assert matched >= 1
