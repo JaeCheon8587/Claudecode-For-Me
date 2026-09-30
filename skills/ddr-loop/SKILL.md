@@ -36,7 +36,7 @@ WT="${CLAUDE_PLUGIN_ROOT}/scripts/worktree_setup.py"
 
 `$ARGUMENTS` 파싱:
 - 첫 토큰이 `--`로 시작하지 않으면 **slug**(positional). `--docs` 뒤 토큰들(다음 `--`flag 전까지)은 **명시 비교 문서 경로**. 생략하면 forge-scope Work Packet에서 자동 구성한다. `--base`/`--model`/`--effort`는 1토큰 옵션.
-- **slug 없음** → `python "$WT" list` → 마지막 줄 JSON 배열 파싱. 빈 배열(`[]`)이면 "forge 워크트리 없음 — 먼저 /forge-scope 실행" 보고 후 중단. 아니면 표로 보여주고 `AskUserQuestion`으로 1개 선택.
+- **slug 없음** → `python "$WT" list` → 마지막 줄 JSON 배열 파싱. 빈 배열(`[]`)이면 "forge 워크트리 없음 — 먼저 /forge-init 실행" 보고 후 중단. 아니면 표로 보여주고 `AskUserQuestion`으로 1개 선택.
 - **`--docs` 없음** → `.process/<slug>/forge-scope-build.md`의 Work Packet 경로를 읽고, Work Packet + 연결 TASK + Required SSOT Execution Matrix의 Required 문서를 비교 docs로 자동 구성한다. Work Packet이 없거나 legacy TASK 기반 forge-scope라 자동 구성이 불가능하면 `--docs <doc...>` 필요 메시지로 중단.
 
 ```bash

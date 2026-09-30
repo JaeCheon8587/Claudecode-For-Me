@@ -237,13 +237,25 @@ def cmd_init(args: argparse.Namespace) -> int:
         _err("ERROR: git repository가 아닙니다. forge 메인 repo 루트에서 실행하세요.", EXIT_BLOCKED)
 
     slug = _slugify(args.slug)
+
+    # 브랜치 이름은 Intent Handoff 로 정해지므로 slug 에서 유도할 수 없다
+    # (forge 기본값은 intent/<문서 ID>). forge-init 매니페스트가 있으면 거기서 읽고,
+    # 없을 때만 예전 feat-<slug> 관례로 폴백한다.
     branch = f"feat-{slug}"
+    mf = root / ".process" / "forge" / f"{slug}.json"
+    if mf.is_file():
+        try:
+            data = json.loads(mf.read_text(encoding="utf-8", errors="replace"))
+            if isinstance(data, dict) and data.get("branch"):
+                branch = data["branch"]
+        except (OSError, ValueError):
+            pass
 
     registered = _registered_worktree_path(root, branch)
     if registered is None or not registered.exists():
         _err(
             f"ERROR: forge 워크트리 없음: branch={branch}, dir={root / '.worktree' / slug}\n"
-            "  Hint: 먼저 `/forge-scope <WORK_PACKET>`로 워크트리를 만들거나 slug를 확인하세요.\n"
+            "  Hint: 먼저 `/forge-init <Intent 경로>`로 워크트리를 만들거나 slug를 확인하세요.\n"
             "  목록: `python worktree_setup.py list`",
             EXIT_BLOCKED,
         )

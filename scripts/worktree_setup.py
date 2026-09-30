@@ -35,9 +35,17 @@ EXIT_OK = 0
 EXIT_ERR = 1
 EXIT_BLOCKED = 2  # 검증 게이트 미통과 (미결 항목 / 미완성 문서)
 
-# 가드레일 복사 대상: .claude 전체가 아니라 .claude/rules 만.
-GUARDRAIL_FILES = ["CLAUDE.md"]
+# 가드레일 복사 대상: .claude 전체가 아니라 .claude/rules + settings.json 만.
+# settings.json 은 base 커밋에 없을 수 있는데(로컬 미커밋), 없으면 워크트리 세션이
+# 권한 allowlist·훅 없이 부팅해 첫 bash 호출부터 프롬프트가 뜬다.
+# settings.local.json 은 기계 로컬이라 제외한다.
+GUARDRAIL_FILES = ["CLAUDE.md", ".claude/settings.json"]
 GUARDRAIL_DIRS = [".claude/rules", "Docs", "docs"]
+
+# init 이 남기는 매니페스트. 워크트리 사본은 개발 세션 인수인계용,
+# 메인 repo 사본은 cancel·list 조회용이다. 둘 다 .process/ 아래라 gitignore.
+MANIFEST_DIR = ".process/forge"
+HANDOFF_NAME = "handoff.json"
 
 
 # ============================================================================
@@ -85,9 +93,35 @@ def _make_dir_link(src: Path, dst: Path) -> None:
         os.symlink(src, dst, target_is_directory=True)
 
 
+def _abs_git_path(start: Path, which: str) -> Optional[Path]:
+    """`git rev-parse <which>` 를 절대경로로. git < 2.31 은 --path-format 이 없다."""
+    r = _git(start, "rev-parse", "--path-format=absolute", which)
+    if r.returncode != 0 or not r.stdout.strip():
+        r = _git(start, "rev-parse", which)
+    if r.returncode != 0 or not r.stdout.strip():
+        return None
+    p = Path(r.stdout.strip())
+    return p if p.is_absolute() else (start / p).resolve()
+
+
 def _repo_root(start: Path) -> Optional[Path]:
+    """메인 repo 루트. linked worktree 안에서 호출해도 메인을 가리킨다.
+
+    `--show-toplevel` 만 쓰면 워크트리 안에서 그 워크트리 자신을 돌려줘
+    `.worktree/<slug>` 계산이 전부 어긋난다 — list 가 항상 빈 배열이 되고
+    cancel 이 브랜치를 추측하게 된다.
+
+    다만 `--git-common-dir` 의 부모를 무조건 쓰면 **서브모듈**에서 깨진다
+    (common-dir 이 `<super>/.git/modules/<name>` 이라 부모가 루트가 아니다).
+    그래서 linked worktree 일 때만 올라간다 — 그때만 git-dir 과 common-dir 이 다르다.
+    """
+    git_dir = _abs_git_path(start, "--git-dir")
+    common_dir = _abs_git_path(start, "--git-common-dir")
+    if git_dir is not None and common_dir is not None and git_dir != common_dir:
+        return common_dir.parent  # linked worktree → 메인 repo
+
     r = _git(start, "rev-parse", "--show-toplevel")
-    if r.returncode != 0:
+    if r.returncode != 0 or not r.stdout.strip():
         return None
     return Path(r.stdout.strip())
 
@@ -385,6 +419,41 @@ def _ensure_gitignore(wt: Path) -> None:
             f.write(prefix + "\n".join(add) + "\n")
 
 
+def _main_manifest_path(root: Path, slug: str) -> Path:
+    return root / MANIFEST_DIR / f"{slug}.json"
+
+
+def _write_manifests(root: Path, wt: Path, slug: str, manifest: dict) -> list[str]:
+    """매니페스트를 워크트리·메인 두 곳에 쓴다. 쓴 경로 목록을 돌려준다.
+
+    한 번 정확히 알아낸 값(브랜치·base_commit·워크트리 경로)을 버리지 않기 위한 것이다.
+    이게 없으면 cancel·list 가 나중에 slug 로부터 브랜치를 추측하게 된다.
+    """
+    written: list[str] = []
+    for target in (wt / MANIFEST_DIR / HANDOFF_NAME, _main_manifest_path(root, slug)):
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(
+                json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            written.append(str(target))
+        except OSError as e:
+            print(f"NOTE: 매니페스트를 쓰지 못했다: {target} ({e})", file=sys.stderr)
+    return written
+
+
+def _read_main_manifest(root: Path, slug: str) -> Optional[dict]:
+    p = _main_manifest_path(root, slug)
+    if not p.is_file():
+        return None
+    try:
+        data = json.loads(p.read_text(encoding="utf-8", errors="replace"))
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
 def _branch_rows(root: Path) -> list[dict]:
     """base 후보 — 로컬 브랜치 + origin/* 추적 브랜치, 최근 커밋 순."""
     fmt = ("%(refname)%09%(refname:short)%09%(objectname:short)"
@@ -550,6 +619,12 @@ def cmd_init(args: argparse.Namespace) -> int:
         "skipped": skipped,
         "submodule_log": log,
     }
+
+    # 메인 .gitignore 는 건드리지 않는다 — 고치면 ` M .gitignore` 가 남아 다음 init 이
+    # dirty 로 막힌다. `?? .process/` 는 _ensure_worktree 의 dirty 검사에서 이미 제외되고,
+    # requirement-spec Phase 0 이 소비자 repo .gitignore 에 .process/ 를 넣어둔다.
+    manifest["manifests"] = _write_manifests(root, wt, slug, manifest)
+
     if not args.quiet:
         print(f"[forge] worktree: {wt}")
         print(f"[forge] branch:   {branch}")
@@ -561,6 +636,8 @@ def cmd_init(args: argparse.Namespace) -> int:
             print(f"[forge] 복사:     {', '.join(copied)}")
         if skipped:
             print(f"[forge] skip:     {', '.join(skipped)}")
+        for m in manifest["manifests"]:
+            print(f"[forge] manifest: {m}")
         for l in log:
             print(f"[forge] {l}")
     print(json.dumps(manifest, ensure_ascii=False))
@@ -613,14 +690,29 @@ def _worktree_branch(root: Path, wt: Path) -> Optional[str]:
 
 
 def cmd_list(args: argparse.Namespace) -> int:
-    """forge 워크트리 나열 — .worktree/ 하위 + feat-<slug>·intent/… 브랜치인 것만."""
+    """forge 워크트리 나열 — 매니페스트 우선, 없으면 .worktree/ 스캔 폴백."""
     root = _repo_root(Path.cwd())
     if root is None:
         _err("ERROR: git repository가 아닙니다.")
 
+    out: dict[str, dict] = {}
+
+    # ① 매니페스트 — init 이 기록한 사실. 브랜치 이름 규칙에 의존하지 않는다.
+    for mf in sorted((root / MANIFEST_DIR).glob("*.json")):
+        try:
+            data = json.loads(mf.read_text(encoding="utf-8", errors="replace"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        slug, branch, wtp = data.get("slug"), data.get("branch"), data.get("worktree")
+        if not (slug and branch and wtp) or not Path(wtp).is_dir():
+            continue
+        out[slug] = {"slug": slug, "branch": branch, "worktree": wtp, "source": "manifest"}
+
+    # ② 스캔 폴백 — 매니페스트 이전에 만들어진 워크트리.
     wt_base = (root / ".worktree").resolve()
     r = _git(root, "worktree", "list", "--porcelain")
-    out: list[dict] = []
     cur: Optional[Path] = None
     for line in r.stdout.splitlines():
         if line.startswith("worktree "):
@@ -632,10 +724,12 @@ def cmd_list(args: argparse.Namespace) -> int:
                 under = cur.resolve().parent == wt_base
             except OSError:
                 under = False
-            if under and (br.startswith("feat-") or br.startswith("intent/")):
-                out.append({"slug": cur.name, "branch": br, "worktree": str(cur)})
+            if under and cur.name not in out and (br.startswith("feat-") or br.startswith("intent/")):
+                out[cur.name] = {"slug": cur.name, "branch": br,
+                                 "worktree": str(cur), "source": "scan"}
             cur = None
-    print(json.dumps(out, ensure_ascii=False))
+
+    print(json.dumps([out[k] for k in sorted(out)], ensure_ascii=False))
     return EXIT_OK
 
 
@@ -645,8 +739,18 @@ def cmd_cancel(args: argparse.Namespace) -> int:
         _err("ERROR: git repository가 아닙니다.")
 
     slug = _slugify(args.slug)
-    wt = root / ".worktree" / slug
-    branch = _worktree_branch(root, wt) or f"feat-{slug}"
+    manifest = _read_main_manifest(root, slug)
+
+    # 브랜치 이름은 Handoff 로 정해지므로 slug 에서 유도할 수 없다.
+    # ① 매니페스트(init 이 기록한 사실) → ② 워크트리 역인덱싱 → ③ 명시 실패.
+    # 예전의 `feat-<slug>` 추측은 intent/<ID> 기본값과 어긋나 조용히 실패했다.
+    wt = Path(manifest["worktree"]) if manifest and manifest.get("worktree") \
+        else root / ".worktree" / slug
+    branch = (manifest or {}).get("branch") or _worktree_branch(root, wt)
+    if not branch:
+        _err(f"취소 대상 브랜치를 특정할 수 없다: slug={slug}, worktree={wt}\n"
+             f"  Hint: `python worktree_setup.py list` 로 slug 를 확인하거나, "
+             f"브랜치명을 알면 `git worktree remove` + `git branch -D` 로 직접 정리한다.")
     registered = _registered_worktree_path(root, branch)
 
     if registered is not None and not registered.exists():
@@ -692,11 +796,23 @@ def cmd_cancel(args: argparse.Namespace) -> int:
             _err(f"git branch -D 실패: {r.stderr.strip()}")
         removed_branch = True
 
+    # 메인 매니페스트는 "살아 있는 워크트리" 대장이므로 정리와 함께 지운다.
+    removed_manifest = False
+    mpath = _main_manifest_path(root, slug)
+    if mpath.is_file():
+        try:
+            mpath.unlink()
+            removed_manifest = True
+        except OSError as e:
+            print(f"NOTE: 매니페스트를 지우지 못했다: {mpath} ({e})", file=sys.stderr)
+
     print("worktree_setup: cancel 완료")
     if removed_worktree:
         print(f"- removed worktree: {wt}")
     if removed_branch:
         print(f"- deleted branch:   {branch}")
+    if removed_manifest:
+        print(f"- removed manifest: {mpath}")
     return EXIT_OK
 
 

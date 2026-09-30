@@ -51,8 +51,8 @@ intents: 3
 | 시점 | 주체 | 커밋 |
 |---|---|---|
 | Phase 5 진입 (승인 질의 전 · `draft`) | requirement-spec Phase 5 1번 | 없음 (승인 전) |
-| `draft` → `approved` | requirement-spec Phase 5 6번 | 없음 (사용자 몫) |
-| `approved` → `in-dev` | `worktree_setup.py init` | `chore({App}-INT-{NNN}): 상태 in-dev` 에 동봉 |
+| `draft` → `approved` | requirement-spec Phase 5 6번 | 없음 — `/forge-init` 1번(승인 커밋 게이트)이 `docs({App}-INT-{NNN}): Intent 승인` 으로 커밋 |
+| `approved` → `in-dev` | `/forge-init` 3번 (`worktree_setup.py init`) | `chore({App}-INT-{NNN}): 상태 in-dev` 에 동봉 |
 | `in-dev` → `in-review` | forge-scope F5 | `chore({App}-INT-{NNN}): 상태 in-review` 에 동봉 |
 
 빠뜨려도 `check --app {App}` 이 `INT_CATALOG stale` 로 잡는다.

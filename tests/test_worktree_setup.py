@@ -334,6 +334,7 @@ MANIFEST_KEYS = {
     "slug", "intent", "intent_worktree",
     "intent_id", "status", "created", "status_committed",
     "acceptance", "handoff", "copied", "skipped", "submodule_log",
+    "manifests",
 }
 
 
@@ -694,3 +695,133 @@ def test_refresh_int_catalog_writes_catalog_for_intent_path(tmp_path: Path):
     catalog = (tmp_path / rel).read_text(encoding="utf-8")
     assert catalog_row(catalog, "Demo-INT-001"), catalog
     assert catalog.strip().splitlines()[-1] == "intents: 1"
+
+
+# ============================================================================
+# 매니페스트 · cwd 독립성
+#
+# `init` 은 고른 base·만든 브랜치·워크트리 경로를 알고 있다. 그걸 파일로 남기지
+# 않으면 cancel·list 가 나중에 slug 로부터 브랜치를 추측하게 되고, 기본 브랜치가
+# intent/<ID> 인 지금은 그 추측(feat-<slug>)이 항상 틀린다.
+# ============================================================================
+def test_init_writes_manifest_to_worktree_and_main(git_repo: Path):
+    intent = write_intent(git_repo)
+    commit_all(git_repo)
+
+    manifest = manifest_from(run_init(git_repo, intent))
+
+    wt_manifest = Path(manifest["worktree"]) / ".process" / "forge" / "handoff.json"
+    main_manifest = git_repo / ".process" / "forge" / f"{manifest['slug']}.json"
+    assert wt_manifest.is_file(), "워크트리 인수인계 사본이 없다"
+    assert main_manifest.is_file(), "메인 repo 조회용 사본이 없다"
+
+    a = json.loads(wt_manifest.read_text(encoding="utf-8"))
+    b = json.loads(main_manifest.read_text(encoding="utf-8"))
+    assert a == b
+    assert a["branch"] == manifest["branch"] == "intent/Demo-INT-001"
+    assert a["worktree"] == manifest["worktree"]
+    assert sorted(manifest["manifests"]) == sorted([str(wt_manifest), str(main_manifest)])
+
+
+def test_init_leaves_main_gitignore_untouched(git_repo: Path):
+    """메인 .gitignore 를 고치면 ` M .gitignore` 가 남아 다음 init 이 dirty 로 막힌다.
+
+    `?? .process/` 는 dirty 검사에서 이미 제외되므로 고칠 이유가 없다.
+    """
+    intent = write_intent(git_repo)
+    (git_repo / ".gitignore").write_text(".process/\n", encoding="utf-8")
+    commit_all(git_repo)
+    before = (git_repo / ".gitignore").read_text(encoding="utf-8")
+
+    assert run_init(git_repo, intent).returncode == 0
+    assert (git_repo / ".gitignore").read_text(encoding="utf-8") == before
+
+    porcelain = run_git(git_repo, "status", "--porcelain").stdout
+    assert ".gitignore" not in porcelain
+
+    # 두 번째 init(resume)도 dirty 로 막히지 않는다.
+    second = run_init(git_repo, intent)
+    assert second.returncode == 0, second.stderr
+    assert manifest_from(second)["status_committed"] is False
+
+
+def test_repo_root_resolves_main_repo_from_inside_worktree(git_repo: Path):
+    intent = write_intent(git_repo)
+    commit_all(git_repo)
+    worktree = Path(manifest_from(run_init(git_repo, intent))["worktree"])
+
+    # --show-toplevel 이면 워크트리 자신을 돌려줘 .worktree/<slug> 계산이 어긋난다.
+    assert _ws._repo_root(worktree).resolve() == git_repo.resolve()
+    assert _ws._repo_root(git_repo).resolve() == git_repo.resolve()
+
+
+def test_list_works_from_inside_worktree(git_repo: Path):
+    intent = write_intent(git_repo)
+    commit_all(git_repo)
+    worktree = Path(manifest_from(run_init(git_repo, intent))["worktree"])
+
+    result = run_script(worktree, "list")
+
+    assert result.returncode == 0, result.stderr
+    entries = json.loads(result.stdout.strip())
+    assert [e["branch"] for e in entries] == ["intent/Demo-INT-001"]
+    assert entries[0]["source"] == "manifest"
+
+
+def test_cancel_uses_manifest_branch_not_feat_guess(git_repo: Path):
+    intent = write_intent(git_repo)
+    commit_all(git_repo)
+    manifest = manifest_from(run_init(git_repo, intent))
+    slug = manifest["slug"]
+
+    result = run_script(git_repo, "cancel", slug)
+
+    assert result.returncode == 0, result.stderr
+    assert "intent/Demo-INT-001" in result.stdout
+    assert "feat-" not in result.stdout
+    assert not Path(manifest["worktree"]).exists()
+    assert not (git_repo / ".process" / "forge" / f"{slug}.json").exists()
+    branches = run_git(git_repo, "branch", "--format=%(refname:short)").stdout
+    assert "intent/Demo-INT-001" not in branches.split()
+
+
+def test_cancel_falls_back_to_reverse_index_without_manifest(git_repo: Path):
+    intent = write_intent(git_repo)
+    commit_all(git_repo)
+    manifest = manifest_from(run_init(git_repo, intent))
+    slug = manifest["slug"]
+    (git_repo / ".process" / "forge" / f"{slug}.json").unlink()
+
+    result = run_script(git_repo, "cancel", slug)
+
+    assert result.returncode == 0, result.stderr
+    assert not Path(manifest["worktree"]).exists()
+
+
+def test_cancel_fails_loudly_when_branch_cannot_be_determined(git_repo: Path):
+    result = run_script(git_repo, "cancel", "no-such-slug")
+
+    assert result.returncode != 0
+    assert "특정할 수 없다" in result.stderr
+    # 예전에는 feat-<slug> 로 추측해 "취소 대상 없음" 이라는 엉뚱한 사유를 냈다.
+    assert "feat-no-such-slug" not in result.stderr
+
+
+def test_guardrails_copy_claude_settings(git_repo: Path):
+    """`.claude/` 를 gitignore 하는 repo 가 흔하다 — 그러면 settings.json 이 base 커밋에
+    없어서 워크트리 체크아웃에 안 딸려온다. 권한 allowlist 없이 부팅한 워크트리 세션은
+    첫 bash 호출부터 프롬프트가 뜨므로 가드레일로 복사해야 한다."""
+    (git_repo / ".gitignore").write_text(".claude/\n", encoding="utf-8")
+    intent = write_intent(git_repo)
+    commit_all(git_repo)
+
+    settings = git_repo / ".claude" / "settings.json"
+    settings.parent.mkdir(parents=True, exist_ok=True)
+    settings.write_text('{"permissions": {"allow": ["Bash(git status:*)"]}}\n', encoding="utf-8")
+
+    manifest = manifest_from(run_init(git_repo, intent))
+
+    assert ".claude/settings.json" in manifest["copied"]
+    copied = Path(manifest["worktree"]) / ".claude" / "settings.json"
+    assert copied.is_file()
+    assert "Bash(git status:*)" in copied.read_text(encoding="utf-8")

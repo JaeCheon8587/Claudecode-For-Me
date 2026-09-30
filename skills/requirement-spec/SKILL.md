@@ -222,7 +222,7 @@ critic 이 쓴 `critic-round-<n>.txt` 가 있는지 확인한 뒤:
 5. **승인 조건**: `상태: approved` 는 Open questions 가 `none` 이고, Handoff 에 `pending` 이 없고, `유형` 이 한 값이고, `검증` 이 `PASS`·`OVERRIDE`·`SKIPPED` 중 하나로 시작할 때만 가능하다. 미충족이면 승인할 수 없다고 알리고, **해당 항목만** 사용자에게 물어 채운다.
 6. **승인 시**: 메타 표의 `상태` = `approved`, `승인` = `<사용자> · <YYYY-MM-DD>` 로 갱신한다. OVERRIDE 승인이면 `검증` 행의 총평을 `OVERRIDE` 로 바꾸고 quality.json 의 `final` 을 `OVERRIDE` 로 쓴다. 메타 표를 고친 **직후** `intent-catalog --repo . --app <App> --write` 를 **한 번 더** 실행한다 — 1번에서 쓴 뒤 `상태`·`승인` 행이 또 바뀌었고, 둘 다 카탈로그 열이다.
 7. **거절·중단 시**: `상태` = `draft` 를 유지한다. 카탈로그는 **1번에서 이미 최신 상태**이므로 여기서 다시 쓰지 않는다 — 바뀐 메타 행이 없다.
-8. **종료 보고**: Intent 경로, 카탈로그 경로(`docs/<App>/<App>-INT-CATALOG.md`), 상태, `검증` 행, Handoff 요약을 보고한다. 후속(개발 세션 위임)은 **사용자가** 진행한다 — 이 스킬은 실행하지 않는다.
+8. **종료 보고**: Intent 경로, 카탈로그 경로(`docs/<App>/<App>-INT-CATALOG.md`), 상태, `검증` 행, Handoff 요약을 보고한다. 승인했으면 다음 단계를 **한 줄로 안내만** 한다 — `/forge-init <Intent 경로>`(개발 환경 구성: 승인 커밋 · base 선택 · 워크트리). 후속은 **사용자가** 진행한다 — 이 스킬은 실행하지 않는다.
 
 ---
 
