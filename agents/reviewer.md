@@ -2,7 +2,7 @@
 name: reviewer
 description: Fresh-context verifier. Judges a diff or plan against its stated goal before commit or risky steps. Read-only. Returns a verdict, not advice.
 model: opus
-effort: high
+effort: xhigh
 maxTurns: 12
 tools: Read, Grep, Glob, Bash
 disallowedTools: Edit, Write, MultiEdit, NotebookEdit

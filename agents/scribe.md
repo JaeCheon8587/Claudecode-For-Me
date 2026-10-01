@@ -2,7 +2,7 @@
 name: scribe
 description: Document authoring agent. Writes or revises documents (SSOT/ADR/TASK/README/reports) from a bounded spec. Every normative claim carries a source pointer. Returns a compact receipt.
 model: opus
-effort: high
+effort: xhigh
 maxTurns: 20
 permissionMode: acceptEdits
 tools: Read, Grep, Glob, Edit, Write, Bash

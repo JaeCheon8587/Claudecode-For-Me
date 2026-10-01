@@ -2,7 +2,7 @@
 name: scout
 description: Fast repository locator. Finds files, symbols, call sites, tests, and evidence. Read-only. Returns locations with confidence, never opinions.
 model: sonnet
-effort: low
+effort: high
 maxTurns: 8
 tools: Read, Grep, Glob, Bash
 disallowedTools: Edit, Write, MultiEdit, NotebookEdit

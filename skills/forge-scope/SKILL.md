@@ -16,7 +16,7 @@ description: /forge-init 이 만들어 둔 워크트리 안에서 오케스트�
 | `/forge-init` (이 스킬 **이전**, 스펙 세션) | 승인 커밋 게이트 · base 선택 · 워크트리/브랜치 · 서브모듈 링크 · 가드레일 복사 · `approved→in-dev` 전이 커밋 · 매니페스트 기록 |
 | 팀장(세션) | ledger · 개발 플랜 결정 · 스펙 작성 · 판정 · 커밋 · 보고 (Intent 는 직접 고치지 않는다) |
 | scribe | F5 의 Intent 상태 행 `in-dev→in-review` 1줄 |
-| coder (ext 기본, native 폴백) | RED 테스트 · GREEN 구현 · VERIFY 실행 |
+| coder | RED 테스트 · GREEN 구현 · VERIFY 실행 |
 | reviewer / reviewer-lite | 슬라이스 diff 판정 · 마감 브랜치 판정 |
 | explorer / analyst | 골격 파악 · 위험 도메인 감사 · 대안 비교 |
 
@@ -84,7 +84,6 @@ Intent 가 부족하면(FR 모순, 결정 없이는 스펙을 못 씀, A 가 판
 
 coder 스펙 규칙:
 - TARGET FILES = **워크트리 절대경로**. `손대지 말 영역` 은 CONSTRAINTS 에 옮긴다.
-- ext 디스패치는 `ext_dispatch.py run --role coder --repo <worktree> --spec … --report …`.
 - 같은 워크트리의 coder 는 순차.
 
 ## F4 — 통합

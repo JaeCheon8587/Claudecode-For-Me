@@ -67,6 +67,39 @@ pip install -U codenavigator
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
 
+### v3.65.0 — 외부 위임(ext) 폐지 · 모든 미션을 Claude Code 서브에이전트로 · BREAKING
+
+오케스트레이터는 v3.43.0 부터 **ext-first** 였다 — 탐색과 소스 변경이 `scripts/ext_dispatch.py`
+를 통해 외부 CLI 로 나가고, 네이티브 `scout`·`coder` 는 실패 시 폴백으로만 도달했다. 그 기본값을
+되돌린다. 이제 모든 미션이 Claude Code 서브에이전트로 간다.
+
+- **라우팅 표가 곧 결정** — 탐색 `scout`, 모든 소스 변경 `coder`, 읽고 이해하기 `explorer`,
+  설계 판단 `analyst`, 모든 문서 `scribe`, 판정 `reviewer`/`reviewer-lite`. 목적지를 저울질하는
+  단계가 없다. `EXT-FIRST` 기본값·적격 판정·폴백 사다리·봉인 규칙·`probe`·exit 2~8 실패
+  처리·`ext:` 텔레메트리가 전부 사라졌다.
+- **rule 10 교체** — `External delegation`(232줄) → **`Coder spec quality`**(26줄). ①②③④ 는
+  경로 선택 장치가 아니라 스펙 품질 요건이었으므로 그대로 남기고, 리시트 스팟체크(`git diff
+  --stat` + VERIFY 대조)도 네이티브 coder 에 그대로 적용한다. 오케스트레이터 본문 677 → 448줄.
+- **텔레메트리 단순화** — `native:` / `ext:` 짝 비교가 의미를 잃어 `dispatch: <satellite> /
+  <1-line mission>` 한 종류로 합쳤다.
+- **HARD LIMIT 정리** — HL 3 의 ext 전송 예외, HL 6 의 "ext 는 Agent 스폰이 아니다" 단서,
+  HL 7 의 `.orchestration/specs/` 쓰기 권한(ext 스펙 파일 작성용)이 모두 제거됐다. 이제 HL 7 과
+  Ledger 절의 "`.orchestration/ledgers/` 외에는 쓰지 않는다"가 일치한다 — 둘은 전부터 어긋나
+  있었다.
+- **스킬** — `forge-scope` F3 의 coder 디스패치에서 ext 경로를 제거했다.
+- **스크립트는 보존** — `scripts/ext_dispatch.py` · `scripts/ext_preambles/` ·
+  `tests/test_ext_dispatch.py` 는 지우지 않았다. 참조하는 곳이 없어 동작에 관여하지 않으며,
+  되돌릴 때를 위한 보존이다.
+- **에이전트 effort 상향** — `scribe` high → **xhigh**, `reviewer` high → **xhigh**,
+  `scout` low → **high**. README 표가 `reviewer-lite` 를 `high` 로 적고 있던 드리프트
+  (실제값 `max`)도 함께 정정했다. 이제 9종 전부 파일 ↔ README 가 일치한다.
+
+**신규 `tests/test_orchestrator_agents.py`** — 두 오케스트레이터의 본문 sha256 동일성,
+frontmatter 가 `name`/`description`/`model`/`effort` 4키만 다른 것, ext 토큰 부재,
+라우팅 표의 네이티브 지정, ①②③④ 생존, HARD LIMIT 6 허용목록 ↔ frontmatter `Agent()` 정합.
+
+**검증**: `python -m pytest tests/ -q`.
+
 ### v3.64.0 — 개발 환경 구성을 `/forge-init` 으로 분리 · 매니페스트 영속화 · BREAKING
 
 세션의 cwd 는 프로세스 시작 시점에 고정된다. 그런데 워크트리를 만드는 주체가 개발 세션 자신(forge-scope F1)이라
@@ -1788,50 +1821,26 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 |---|---|---|
 | `fable-orchestrator` | fable / high | 메인 오케스트레이터. 판단·결정만 하고 컨텍스트를 먹는 작업은 전부 위성에 위임 |
 | `opus-orchestrator` | opus / max | 위와 **본문 동일**(sha256 일치), frontmatter 4줄만 상이한 병렬 변종 |
-| `scout` | sonnet / low | 파일·심볼·호출부·테스트 위치 탐색. read-only. 위치만 반환하고 의견 금지. **v3.43.0부터 ext-scout 실패 시의 폴백 경로** — 탐색 미션의 기본값은 ext다 |
-| `explorer` | opus / high | 코드 흐름·아키텍처·의미 파악. 상세는 리포트 파일로, 리턴은 압축 맵. **v3.51.0부터 수집+종합 단일 모드** — ext-explorer 폐지로 읽기가 되돌아왔고, effort도 `high`로 복원(v3.49.0의 `medium`은 ext 수확을 전제한 값이었다). 모델은 opus 유지 — 종합이 판단이라는 근거는 그대로다 |
+| `scout` | sonnet / high | 파일·심볼·호출부·테스트 위치 탐색. read-only. 위치만 반환하고 의견 금지. **v3.65.0부터 모든 탐색 미션의 유일한 목적지** |
+| `explorer` | opus / high | 코드 흐름·아키텍처·의미 파악. 상세는 리포트 파일로, 리턴은 압축 맵. 수집+종합 단일 모드. 모델은 opus 유지 — 종합이 판단이라는 근거는 그대로다 |
 | `analyst` | opus / xhigh | 온디맨드 판단. 트레이드오프 분석·리포트 적대 감사·root-cause 추적. 옵션만 반환하고 결정 금지 |
 | `coder` | sonnet / max | **코드** 구현. 소스 편집·신규 코드·테스트. `VERIFY` 리시트 반환 |
-| `scribe` | opus / high | **문서** 작성. 규범적 주장마다 근거 필수(`SOURCES`/`UNSOURCED`/`CONFLICTS`) |
-| `reviewer` | opus / high | fresh-context 검증자. 커밋·고위험 단계 전 diff/계획 판정 + 규범 문서의 인용 소스 대조. read-only, 조언 아닌 판정 |
-| `reviewer-lite` | sonnet / high | **v3.45.0 신설**. 모든 hunk가 스펙에 받아쓰기된 diff 전용 — 스펙 대조·VERIFY raw 확인·호출부 점검. 티어 밖(위험 도메인·설계 판단·규범 문서)을 발견하면 `VERDICT: ESCALATE`로 opus reviewer에 이관 |
+| `scribe` | opus / xhigh | **문서** 작성. 규범적 주장마다 근거 필수(`SOURCES`/`UNSOURCED`/`CONFLICTS`) |
+| `reviewer` | opus / xhigh | fresh-context 검증자. 커밋·고위험 단계 전 diff/계획 판정 + 규범 문서의 인용 소스 대조. read-only, 조언 아닌 판정 |
+| `reviewer-lite` | sonnet / max | **v3.45.0 신설**. 모든 hunk가 스펙에 받아쓰기된 diff 전용 — 스펙 대조·VERIFY raw 확인·호출부 점검. 티어 밖(위험 도메인·설계 판단·규범 문서)을 발견하면 `VERDICT: ESCALATE`로 opus reviewer에 이관 |
 
-**외부 위임 2종(ext-scout / ext-coder)은 이 표에 없다** — Agent 스폰이 아니라
-`scripts/ext_dispatch.py`를 통한 Bash 전송이기 때문이다(모델 `zai/glm-5.3` / effort xhigh,
-v3.54.0). v3.43.0부터 **기본값은 ext**이고 native 위성은 폴백이다: 모든 탐색 미션은
-ext-scout, **모든 소스 변경은 ext-coder**(v3.50.0 — JUDGMENT-FREE 게이트 폐지).
-**읽고 이해하기**(v3.51.0에서 ext-explorer 폐지), 설계 판단, **모든** 문서(ext-scribe는
-v3.45.0에서 폐지), `analyst`·`reviewer`는 native 고정이다 — **ext 경계는 위치와 타이핑
-둘뿐이다.**
-**v3.46.0부터 디스패치는 2경로다** — 탐색은 `--mission "<한 줄>"`로 스펙 파일 없이
-Bash 1콜(스크립트가 `<report>-spec.md`에 스펙을 합성), ext-coder만 `--spec` 파일.
-ext-scout의 stdout은 제어 필드 요약이고 `path:line` 목록은 REPORT에만
-남는다(`--full-receipt`로 해제).
-**v3.47.0부터 읽기 전용 역할도 기계 검증을 탄다** — 스크립트가 인용된 `path:line`을 파일과
-대조해 `VERIFIED:` 줄로 보고하고, 라인 드리프트는 자동 교정하며, 반증된 주장이 있으면
-**exit 7**로 올린다(쓰기 역할의 porcelain 대조 exit 4에 대응). 오케스트레이터의 수동
-스팟체크는 기계가 판정 못 한 `unparsed` 줄로 축소된다. 형식이 어긋나 **한 건도 대조되지
-않은** 수확물은 `VERIFIED: NOTHING CHECKED` / status `facts-unverifiable` 로 드러나며,
-증거로는 못 쓰고 지도로만 쓴다.
-**v3.48.0부터 두 보증이 기계적으로 성립한다** — exit 4는 실행 전 트리가 더러워도 유지되고
-(경로별 내용 지문 대조), 같은 repo의 ext-coder는 wave 안에서 직렬화되어 서로를 위반으로
-집계하지 않는다. fact의 파일 접근도 저장소 밖으로 나가지 못하며,
-job 하나의 크래시는 형제 job의 리시트를 삼키지 않고 `exit 1 / job-error`로 강등된다.
-**v3.51.0부터 모델 출력이 파일 쓰기 경로를 정하는 지점이 없다** — ext-explorer의
-`FACTS FILE` 선언값이 유일한 그 지점이었고, 역할과 함께 사라졌다.
-**v3.44.0부터 위험 도메인은 위임 기준이 아니다** — auth·결제·크립토 파일이라도 다른 변경과
-똑같이 ext로 간다(리뷰 의무 rule 4는 그대로 유지, 위험 도메인은 opus reviewer 티어 고정).
-**v3.55.0부터 ext 봉인은 증거를 요구한다** — ext 경로를 태스크 전체에 대해 봉인할
-자격은 셋뿐이다: exit 2(CLI 부재), exit 6(쿼터·인증 시그널 확정), `probe` 실패.
-그 외 실패는 해당 미션 1건의 native 폴백에서 끝나고 다음 미션은 다시 ext로 간다.
-원인 시그널 없는 실행 실패는 **exit 8**(`agent-env`)로 분리되어
-`python scripts/ext_dispatch.py probe --repo <abs repo>` 1회 실측으로 판정한다 —
-probe는 파일을 읽고 `PROBE-OK`를 돌려주는 사소 미션이며(읽기를 빼면 deny-read 고장을
-통과시킨다) 쓰기도 리포트도 남기지 않는다. 실측 14.5초 / 약 13.5k 외부 토큰.
-**v3.50.0부터 coder에 적격 판정이 없다** — 게이트가 재던 것은 스펙 품질인데 그건 native
-coder도 요구하므로(HARD LIMIT 2 → BLOCKED) 목적지를 가르지 못했다. ①②③④는 남되 **경로
-선택이 아니라 스펙 요건**이고, ②는 "바뀐 뒤 상태"만 가리킨다 — 현재 시그니처는 두 coder
-모두 파일을 재독해 얻는다. 상세는 rule 10과 v3.44.0 / v3.45.0 / v3.50.0 체인지로그 참조.
+**v3.65.0부터 외부 위임(ext)은 없다** — 모든 미션이 위 표의 Claude Code 서브에이전트로
+간다. 탐색은 `scout`, 모든 소스 변경은 `coder`, 읽고 이해하기는 `explorer`, 설계 판단은
+`analyst`, 모든 문서는 `scribe`, 판정은 `reviewer`/`reviewer-lite` 다. 목적지를 저울질하는
+단계가 사라졌다 — **역할이 곧 라우팅**이고, 표가 결정의 전부다.
+
+`scripts/ext_dispatch.py` · `scripts/ext_preambles/` 는 **호출하는 곳 없이 남아 있다**(되돌릴
+때를 위한 보존). 오케스트레이터·스킬 어디에서도 참조하지 않으므로 동작에 관여하지 않는다.
+도입부터 폐지까지의 경위는 v3.43.0 ~ v3.55.0 체인지로그에 그대로 남겨뒀다.
+
+**coder 스펙 요건 ①②③④는 남는다**(rule 10) — 경로 선택 장치가 아니라 스펙 품질 요건이었기
+때문이다. ②는 "바뀐 뒤 상태"만 가리킨다. 현재 시그니처는 coder 가 파일을 재독해 얻으므로
+스펙에 복사하지 않는다.
 
 `coder`/`scribe` 분리 근거는 **코드에는 기계적 오라클(VERIFY)이 있고 산문에는 없다**는 비대칭이다.
 소유권은 파일 종류로 가르며(소스와 그 주석·docstring은 coder, 문서는 scribe), 코드+문서 동시
@@ -2325,10 +2334,10 @@ Claudecode-For-Me/
 │   ├── ddr_loop.py              # ddr-loop 워크트리·docs 검증 + .process 스캐폴딩 (init)
 │   ├── doc_driven_review.py
 │   ├── docs_helpers.py
-│   ├── ext_dispatch.py          # ext-scout / ext-coder 외부 위임 디스패치
+│   ├── ext_dispatch.py          # (v3.65.0 미사용 — 외부 위임 폐지, 보존만)
 │   ├── worktree_setup.py        # forge-init 워크트리 셋업·검증·매니페스트·cancel
 │   ├── ddr_templates/           # ddr-loop build/progress 템플릿
-│   └── ext_preambles/           # ext 역할별 프리앰블
+│   └── ext_preambles/           # (v3.65.0 미사용 — 보존만)
 ├── tests/                       # pytest 스위트 (forge·docs·doc-driven-review)
 ├── samples/                     # (gitignored) 로컬 C# 테스트 픽스처 — 미커밋
 ├── .gitattributes

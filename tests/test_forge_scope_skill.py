@@ -53,7 +53,7 @@ def test_skill_slice_loop_is_red_green_review_commit():
         "reviewer-lite",
         "UNCOVERED",
         "feat(<ID>): S<k>",
-        "--repo <worktree>",
+        "TARGET FILES = **워크트리 절대경로**",
     )
     missing = [expected for expected in required if expected not in text]
     assert not missing, f"SKILL.md is missing required strings: {missing}"
@@ -108,14 +108,14 @@ def test_forge_templates_removed():
     assert not (ROOT / "scripts" / "forge_templates").exists()
 
 
-def test_plugin_version_is_3_64_0():
+def test_plugin_version_is_3_65_0():
     plugin = json.loads(read(".claude-plugin/plugin.json"))
-    assert plugin["version"] == "3.64.0"
+    assert plugin["version"] == "3.65.0"
 
     marketplace = json.loads(read(".claude-plugin/marketplace.json"))
     matched = 0
     for entry in marketplace["plugins"]:
         if entry.get("name") == "claudecode-for-me":
-            assert entry["version"] == "3.64.0"
+            assert entry["version"] == "3.65.0"
             matched += 1
     assert matched >= 1
