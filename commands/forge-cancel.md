@@ -30,6 +30,18 @@ python "$FORGE" cancel <slug>
 3. 목록을 표로 보여주고 `AskUserQuestion`으로 **어느 워크트리를 제거할지** 사용자에게 확인한다 (여러 개 선택 허용).
 4. 선택된 각 slug에 대해 `python "$FORGE" cancel <slug>` 실행.
 
+## 제거 전 — 살아있는 세션 확인
+
+워크트리를 지우면 그 안에서 도는 세션의 cwd 가 사라진다. 세션은 그걸 모르고 계속 돌다가 파일을 못 찾는다. 그래서 **제거 전에 본다**:
+
+```bash
+herdr agent list
+```
+
+- `herdr` 가 없거나 `HERDR_ENV` 가 `1` 이 아니면 이 확인을 건너뛴다(그냥 진행한다). 확인을 건너뛰었다는 것은 보고에 한 줄 남긴다.
+- 제거 대상 워크트리를 cwd 로 가진 에이전트가 있으면 **중단**한다. 종료 순서를 안내한다: ① 그 세션을 종료 ② 페인을 닫음 ③ 이 커맨드를 다시 실행. **대신 종료해주지 않는다.**
+- 사용자가 "그래도 지워라" 라고 **명시**하면 진행한다.
+
 ## 동작 / 보고
 - `cancel`이 하는 일: 대상 브랜치 확정 → 워크트리 서브모듈 junction/symlink **링크만 해제**(메인 repo 서브모듈 원본은 100% 보존) → `git worktree remove`(dirty면 자동 `--force`) → `git branch -D <branch>` → 메인 매니페스트 삭제.
 - **브랜치 확정 순서**: ① `.process/forge/<slug>.json`(forge-init 이 기록한 사실) → ② `git worktree list` 역인덱싱 → ③ 둘 다 실패하면 "브랜치를 특정할 수 없다"로 **명시 실패**. 브랜치 이름은 Intent Handoff로 정해지므로(기본값 `intent/<문서 ID>`) slug에서 유도할 수 없다 — 추측하지 않는다.

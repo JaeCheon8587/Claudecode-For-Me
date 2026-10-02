@@ -104,6 +104,7 @@ python "$FORGE" init --doc <Intent> --quiet --base <선택한 ref> [--name <slug
 - `submodule_log` 가 비어 있지 않으면 그대로 전달한다(메인 repo 에 populate 안 된 서브모듈은 링크되지 않고 로그만 남는다)
 - `copied` / `skipped` — 가드레일 복사 결과
 - **다음 단계 안내 1줄**: "이 워크트리에서 개발 세션을 시작한 뒤 `/forge-scope .process/forge/handoff.json`"
+  - 세션을 띄우는 것도 커맨드로 할 수 있다 — 예: `/dispatch-session <워크트리 절대경로> --agent opus-orchestrator --prompt "/forge-scope .process/forge/handoff.json"`. **예시 문장일 뿐 여기서 실행하지 않는다.** 어디에 띄울지는 그 커맨드가 사용자에게 묻는다.
 
 여기서 종료한다. 개발 세션을 띄우지 않는다.
 

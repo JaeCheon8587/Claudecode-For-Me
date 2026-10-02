@@ -16,7 +16,7 @@
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
 | 네임스페이스 | `/claudecode-for-me:<name>` |
-| 구성요소 | Skill 11 · Command 15 · Agent 9 (`agents/`) · Python helper 6 (`scripts/`) |
+| 구성요소 | Skill 12 · Command 17 · Agent 9 (`agents/`) · Python helper 7 (`scripts/`) |
 | 외부 연동 도구 | [`codenavigator`](https://github.com/JaeCheon8587/codenavigator) (PyPI) — codenav-bootstrap / codenav-frontmatter-gen 슬래시가 호출 |
 
 플러그인은 **글로벌 캐시**에 설치되므로 한 번 설치 후 모든 프로젝트의 **새 세션**에서 자동 노출된다. 프로젝트별 재설치 불필요.
@@ -66,6 +66,67 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v3.66.0 — `/dispatch-session` 신설 · 세션 런처로 워크플로우의 마지막 구멍을 메움
+
+`requirement-spec → /forge-init → **(개발 세션 시작)** → /forge-scope → /branch-review` 에서
+가운데 한 칸만 손으로 하는 상태였다. 세션의 cwd 는 프로세스 시작 시점에 고정되므로 그 칸을
+없앨 수는 없고(워크트리가 먼저 있어야 세션이 거기서 뜬다), **대신 타이핑해 주는 커맨드**를 둔다.
+
+- **`/dispatch-session [<cwd>] [--agent <name>] [--prompt "<text>"] [--kind <kind>] [--name <agent-name>] [--direction right|down]` 신설**
+  (커맨드 단독, 스킬 없음). 이미 있는 디렉터리에 herdr 페인을 열고 거기서 에이전트를 기동한 뒤,
+  `--prompt` 가 있으면 작업을 지시한다.
+  - **범용이다** — forge 를 모른다. 매니페스트를 읽지 않고 Intent 를 보지 않는다. 위치 후보를
+    `git worktree list` 로 뽑으므로 forge 워크트리가 자연히 포함된다. 덕분에 herdr 의존이
+    이 커맨드 + `herdr_name.py` **두 파일에 갇힌다** — forge 체인은 herdr 없이 그대로 동작한다.
+  - **만들지 않는다** — 워크트리를 생성하지 않고 브랜치를 고르지 않는다(`/forge-init` 몫).
+    `herdr worktree create` 대신 `open` 만 쓴다 — `create` 는 자기가 `git worktree add` 를 해버려
+    생성자가 둘이 되고, 그렇게 생긴 워크트리는 매니페스트가 없어 `/forge-cancel` 이 브랜치를 못 찾는다.
+  - **위치는 사용자가 고른다** — `AskUserQuestion` 필수. 임의 선택 금지.
+  - **중복 기동 방지** — 같은 cwd 에 살아있는 에이전트가 있으면 기본 중단. 오케스트레이터 둘이
+    한 워크트리에 붙으면 `.orchestration/ledgers/` 를 둘이 쓰고 커밋이 경합한다. cwd 를 확인할 수
+    없으면 "확인 불가" 를 **보고**한다 — 조용히 넘어가지 않는다.
+  - **`agent start` 직후 `agent wait --until idle`** — 오케스트레이터는 `initialPrompt` 로 ledger 를
+    훑는다. `agent start` 의 "입력 가능" 은 그 완료가 아니므로, 기다리지 않고 보내면 턴이 겹치거나
+    `agent_prompt_stalled` 가 난다.
+  - **슬래시 프롬프트는 전송을 확인하고 폴백한다** — Claude Code 는 `/` 에서 자동완성 메뉴를 띄우므로
+    `agent prompt` 가 보내는 Enter 가 제출이 아니라 **메뉴 선택**으로 먹힐 수 있다. 버전마다 다르므로
+    측정값을 박지 않고 **매번 `agent read` 로 제출 여부를 확인**한 뒤, 실패하면 `send-keys esc` → Enter 2단
+    전송으로 내려가고, 그래도 안 되면 중단하고 사용자에게 원문을 넘긴다. 자연어로 풀어 보내지 않는다
+    (`/forge-scope` 의 `$ARGUMENTS` 계약을 우회하면 그 세션이 다른 절차를 밟는다).
+  - `agent_not_ready` · `agent_blocked` · `agent_prompt_stalled` 3분기 명시. 어느 경우에도 **대신 답하지 않고**
+    `agent read` 내용을 사용자에게 전달한다. 재전송 금지.
+  - **보고하고 끝낸다** — 폴링하지 않고, 추가 프롬프트를 보내지 않고, 포커스를 옮기지 않는다.
+- **`scripts/herdr_name.py` 신설** — herdr 에이전트 이름 정규화. herdr 는 `^[a-z][a-z0-9_-]{0,31}$` 에
+  살아있는 에이전트 중 유일할 것을 요구하는데, `worktree_setup.py` 의 `_slugify` 는 `[^A-Za-z0-9._-]` 만
+  치환해 `MyApp-INT-007` 을 그대로 남긴다. 산문 규칙으로 두면 오적용되므로 **결정적 함수**로 고정했다
+  (`normalize(raw, taken)` · `is_valid(name)`, CLI `--taken` / `--strict`). 충돌 시 접미를 붙이되 **32자 상한을
+  지키며** 자른다. forge 와 결합하지 않는다 — `worktree_setup.py` 에 넣으면 forge 가 herdr 를 알게 된다.
+- **`/forge-cancel` 에 살아있는 세션 가드 추가** — 워크트리를 지우면 그 안에서 도는 세션의 cwd 가
+  사라지는데 지금까지 이 확인이 **0건**이었다. 제거 전 `herdr agent list` 로 보고, 있으면 중단 + 종료
+  순서 안내(세션 종료 → 페인 닫기 → 재실행). herdr 가 없으면 건너뛰고 그 사실을 보고한다 —
+  herdr 없는 환경에서 `/forge-cancel` 이 막히지 않는다.
+- **`/forge-init` 5단계**에 `/dispatch-session` 예시 1줄. **실행 지시가 아니라 예시 문장**이고,
+  본문에 그렇게 박아뒀다. 파이프라인 금지 원칙은 그대로다 — `/forge-init` 은 여전히 보고하고 끝낸다.
+  `tests/test_forge_init_command.py` 의 금지 토큰을 **실행 형태**(`herdr agent start` 등)로 좁히고
+  `/dispatch-session` **언급**은 허용으로 명시했다.
+
+**받아들이는 비용**: 플러그인에 herdr 의존이 처음 들어온다(이전까지 저장소 전체 herdr 언급 0건).
+`HERDR_ENV=1` 인 세션에서만 쓸 수 있는 커맨드가 하나 생긴다. 그리고 **띄운 세션은 독립 프로세스**라
+막혀도 이 세션은 모른다 — `herdr notification` 에 구독 기능이 없어(`show` 뿐) 자동 감지가 불가능하므로
+폴링(비용)·대리 응답(위험) 대신 **사용자가 본다**로 뒀고, 그 사실을 보고에 명시한다.
+
+**검증**: `python -m pytest tests/ -q` **384 passed, 3 skipped** (355 → 384).
+`tests/test_herdr_name.py` 15건은 **실행 테스트**다 — 정규화 함수와 CLI 가 실제로 돌았다.
+`tests/test_dispatch_session_command.py` 14건은 **문서 단정**이라 "그 문장이 파일에 있다"만 증명한다.
+
+> **런타임 미검증.** `/dispatch-session` 은 `HERDR_ENV=1` 인 세션에서만 돌아가는데, 작성한 세션이
+> herdr 밖이라 **한 번도 끝까지 실행해보지 못했다**. 특히 세 가지가 미확인이다 — ① 슬래시 프롬프트가
+> `agent prompt` 로 그냥 제출되는지 아니면 2단 폴백까지 가는지 ② `herdr worktree open` 응답에서
+> `pane_id` 가 실제로 어느 키에 있는지 ③ `agent list`/`agent get` 이 cwd 를 보고하는지(중복 기동
+> 판정과 "기존 에이전트 재사용" 옵션이 여기 달려 있다). 셋 다 **문서가 런타임에 확인하고 폴백하도록**
+> 써 뒀기 때문에 틀린 가정이 박혀 있지는 않지만, 폴백 경로 자체가 실제로 동작하는지는 herdr 안에서
+> 한 번 태워봐야 안다. `herdr` 0.8.2 기준 **명령 문법은 `--help` 로 실측 확인**했다.
 
 ### v3.65.0 — 외부 위임(ext) 폐지 · 모든 미션을 Claude Code 서브에이전트로 · BREAKING
 
@@ -1791,7 +1852,7 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `safe-pull` | `/claudecode-for-me:safe-pull [원격/브랜치]` | git pull 전 fetch(비파괴)로 변경·충돌·사이드이펙트 브리핑 후 AskUserQuestion 컨펌 게이트 |
 | `slack-brief` | `/claudecode-for-me:slack-brief [--channels <key,key>] [--dry-run] [--max <N>]` | 대화에서 토픽을 뽑아 다중선택으로 확정받고 타입 5종 양식(기승전결)으로 정리해 Slack 채널 담당 봇을 멘션한 **작업 트리거**로 전송. 토픽 1개 = 메시지 1개, 본문에 작업 지시문 금지(봇이 담당 업무 기준으로 처리), 전송 전 승인 게이트. 단일 에이전트 |
 
-### Command 16종
+### Command 17종
 
 | Command | 설명 |
 |---|---|
@@ -1800,6 +1861,7 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `codenav-bootstrap` | CodeNavigator parser-only 인덱싱 (frontmatter/XML doc만 읽어 SQLite 빌드, AI 호출 없음) |
 | `codenav-frontmatter-gen` | codenav-frontmatter-gen skill 진입 (AI가 .cs에 frontmatter 영구 삽입). `--projects` / `--files` / `--staged` 스코프 인자 |
 | `codenav-install` | 프로젝트 루트의 `tools/codenavigator/` 폴더에 codenavigator (PyPI) 격리 설치 + `codenav.ps1/codenav.sh` launcher + `.gitignore` 자동 작성 + `docs/codenav-guide.md` 작성 + 루트 `CLAUDE.md` 링크 셋업 |
+| `dispatch-session` | **세션 런처** — 이미 있는 디렉터리에 herdr 페인을 열고 Claude 세션을 기동, 선택적으로 작업 지시. 워크트리를 만들지 않고 브랜치를 고르지 않는다(`/forge-init` 몫). 띄울 위치는 `AskUserQuestion` 으로 사용자가 고른다. `HERDR_ENV=1` 인 세션에서만 동작. 스킬 없이 커맨드 단독 |
 | `doc-driven-review` | doc-driven-review skill 진입. Codex CLI 위임 read-only 리뷰. `--worktree <branch\|path>` linked worktree / `--commit <ref>` 커밋 노드 지목 지원 |
 | `ddr-loop` | ddr-loop skill 진입. forge 워크트리 브랜치↔docs 수렴 루프(codex reviewer + 세션 fixer, 최대 3회·99%) |
 | `commit-analysis` | 배포 여부 확인 후 `[ADD]`/`[MOD]`/`[FIX]` 자동 판단 한글 커밋 생성 (배포 시 본문에 `[Deploy]`) |
@@ -1934,10 +1996,11 @@ codenav --root <repo> ui --port 9876
 | | 어디서 | 무엇을 |
 |---|---|---|
 | `/forge-init <Intent>` | 스펙 세션 · **메인 repo** | 승인 커밋 게이트 → base 선택 → 워크트리/브랜치 → `approved→in-dev` → 매니페스트. **보고하고 끝낸다** |
+| *(개발 세션 시작)* | 사용자 | 그 워크트리를 cwd 로 하는 세션을 띄운다. 손으로 해도 되고 `/dispatch-session <워크트리> --agent opus-orchestrator --prompt "/forge-scope .process/forge/handoff.json"` 로 해도 된다(herdr 안에서만) |
 | `/forge-scope [handoff.json]` | 개발 세션 · **워크트리** | F0~F5 개발 절차. 워크트리를 만들지 않는다 |
-| `/forge-cancel [slug]` | 스펙 세션 · **메인 repo** | 워크트리·브랜치·매니페스트 정리 |
+| `/forge-cancel [slug]` | 스펙 세션 · **메인 repo** | 워크트리·브랜치·매니페스트 정리. 제거 전 그 워크트리에 살아있는 세션이 있는지 확인한다(v3.66) |
 
-`/forge-init` 은 후속 스킬을 실행하지 않는다 — 어디서 어떤 에이전트로 개발을 시작할지는 사용자가 정한다. `/forge-scope` 의 세션은 팀장 역할만 한다 — 코드는 coder, 판정은 reviewer, 기록은 팀장 ledger. 빌드/테스트는 **솔루션(`*.sln`) 금지, 대상 `.csproj` 단위만**. Work Packet·TASK 입력은 v3.58 에서 폐지됐다.
+`/forge-init` 은 후속 스킬을 실행하지 않는다 — 어디서 어떤 에이전트로 개발을 시작할지는 사용자가 정한다. `/dispatch-session` 은 그 **사용자 행위를 대신 타이핑해 주는 별도 커맨드**이지 `/forge-init` 이 자동으로 부르는 다음 칸이 아니다. `/forge-scope` 의 세션은 팀장 역할만 한다 — 코드는 coder, 판정은 reviewer, 기록은 팀장 ledger. 빌드/테스트는 **솔루션(`*.sln`) 금지, 대상 `.csproj` 단위만**. Work Packet·TASK 입력은 v3.58 에서 폐지됐다.
 
 #### 흐름
 
@@ -2318,6 +2381,7 @@ Claudecode-For-Me/
 │   ├── codenav-install.md
 │   ├── commit-analysis.md
 │   ├── ddr-loop.md
+│   ├── dispatch-session.md
 │   ├── doc-driven-review.md
 │   ├── forge-cancel.md
 │   ├── forge-init.md
@@ -2335,6 +2399,7 @@ Claudecode-For-Me/
 │   ├── doc_driven_review.py
 │   ├── docs_helpers.py
 │   ├── ext_dispatch.py          # (v3.65.0 미사용 — 외부 위임 폐지, 보존만)
+│   ├── herdr_name.py            # dispatch-session herdr 에이전트 이름 정규화 (단독)
 │   ├── worktree_setup.py        # forge-init 워크트리 셋업·검증·매니페스트·cancel
 │   ├── ddr_templates/           # ddr-loop build/progress 템플릿
 │   └── ext_preambles/           # (v3.65.0 미사용 — 보존만)
@@ -2355,6 +2420,9 @@ Claudecode-For-Me/
 | update 후 신규 스킬 호출 불가 | 동일 — 캐시는 갱신됐으나 세션은 구버전 보유 | 세션 재시작 |
 | `forge-init` 이 워크트리 안 만들고 종료(exit 2) | Intent 가 `approved`/`in-dev` 아님, `INT_*` FAIL, 커밋 0 또는 Intent 미커밋, Work Packet·TASK 입력 | requirement-spec 으로 Intent 승인·재검증. 미커밋이면 `/forge-init` 1번(승인 커밋 게이트)에서 커밋한다 |
 | `forge-scope` 가 시작하자마자 중단 | 메인 repo 에서 실행했거나 매니페스트가 없다 | 먼저 `/forge-init <Intent>`, 그 워크트리에서 세션을 시작한 뒤 `/forge-scope .process/forge/handoff.json` |
+| `dispatch-session` 이 즉시 중단 | 호출한 세션이 herdr 밖이다 (`HERDR_ENV` != 1) | herdr 페인에서 세션을 다시 연다. 밖에서는 페인을 만들 수 없다 — 커맨드가 출력한 수동 명령 3줄을 직접 실행해도 된다 |
+| `dispatch-session` 이 "중복 기동" 으로 중단 | 같은 cwd 에 살아있는 에이전트가 있다 | 기존 세션을 쓰거나 종료한다. 오케스트레이터 둘이 한 워크트리에 붙으면 ledger·커밋이 경합한다. 의도한 것이면 명시적으로 진행을 지시한다 |
+| `forge-cancel` 이 "살아있는 세션" 으로 중단 | 지울 워크트리에서 세션이 돌고 있다 | 세션 종료 → 페인 닫기 → 재실행. 먼저 지우면 그 세션의 cwd 가 사라진다 |
 | `ddr-loop` init exit 2 "forge 워크트리 없음" | 해당 slug 워크트리 미생성 | 먼저 `/forge-init <Intent-doc-path>` 실행, 또는 slug 확인 (`worktree_setup.py list`) |
 | `ddr-loop` 첫 review exit 2 | codex CLI 미설치 (리뷰는 codex 의존) | `/codex:setup` 후 재시도 |
 | `codenav frontmatter gen` 결과 `generated=0` | `claude` CLI 부재 또는 stdout JSON 키 mismatch | `where claude` 확인. v1.15.0+ 는 `result`/`response` 둘 다 처리 |

@@ -59,7 +59,12 @@ def test_does_not_chain_into_another_skill():
     다음 단계는 '안내 문장'으로만 등장해야 하고, 실행 지시로 등장하면 안 된다.
     """
     text = read("commands/forge-init.md")
-    banned = ("herdr ", "agent start", "pane split", "worktree open", "agent prompt")
+    # 금지하는 것은 **실행 지시**다. 터미널에서 직접 두드리는 형태만 막는다 —
+    # `/dispatch-session` 을 예시로 **언급**하는 것은 허용한다(아래에서 따로 단정).
+    banned = (
+        "herdr agent start", "herdr agent prompt", "herdr pane split",
+        "herdr worktree open", "herdr worktree create",
+    )
     hits = [s for s in banned if s in text]
     assert not hits, f"commands/forge-init.md must not drive another session: {hits}"
 
@@ -69,6 +74,10 @@ def test_does_not_chain_into_another_skill():
     # /forge-scope 는 안내 문구 안에서만 언급된다 — 실행 지시가 아니다.
     assert "/forge-scope .process/forge/handoff.json" in text
     assert "먼저 skills/forge-scope/SKILL.md" not in text
+
+    # /dispatch-session 도 마찬가지로 예시일 뿐임이 본문에 박혀 있어야 한다.
+    assert "/dispatch-session" in text
+    assert "예시 문장일 뿐 여기서 실행하지 않는다" in text
 
 
 def test_approval_commit_comes_after_base_selection():
