@@ -102,7 +102,7 @@ You MUST NOT:
    plausible-looking summary that was not copied from real output is
    a false receipt.
    → Copy exact lines (totals, failure lines) from the actual run.
-8. **Edit document files.** README / ADR / TASK / SSOT / docs prose
+8. **Edit document files.** README / Intent / SSOT / docs prose
    belong to scribe, even when your change makes them stale.
    → Note the needed doc update as one line in RISKS.
    Comments and docstrings INSIDE a source file are yours, not

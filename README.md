@@ -1918,7 +1918,7 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 ```
 /claudecode-for-me:branch-review main
 /claudecode-for-me:branch-review v1.4.0
-/claudecode-for-me:branch-review main --spec docs/Feature/TASK/Feature-TASK-001.md
+/claudecode-for-me:branch-review main --spec docs/Feature/INTENT/Feature-INT-001.md
 /claudecode-for-me:branch-review          # ref 생략 시 merge-base 자동
 /claudecode-for-me:branch-review --resume # 중단된 리뷰(청크 모드) 재개
 ```
@@ -2134,7 +2134,7 @@ init 이 워크트리의 `.gitignore` 에 아래를 추가한다.
 - **Phase 5 승인(1회)**: 진입 직후 `intent-catalog --repo . --app <App> --write` 로 카탈로그를 재생성한다(승인 여부와 무관 — 이 시점이면 제목·`검증`·FR/A 가 모두 확정돼 있다). 이어 `AskUserQuestion` 본문에 Intent 경로·`검증` 행·최종 체크리스트 경로와 `<PASS 행>/<전체 행> PASS`·`인터뷰 반영 <covered>/<expected> · 누락 <EXP 키>`·잔존 MAJOR/MINOR 키·critic의 `IMPROVE` 목록(차단 아님)·Part 1 변경 diff(≤10줄)·SKIPPED 경고를 싣는다. 승인 조건은 `Open questions`가 `none` ∧ Handoff에 `pending` 없음 ∧ `유형`이 단일값 ∧ `검증`이 `PASS`·`OVERRIDE`·`SKIPPED` 중 하나로 시작. 총평이 `FAIL`이면 옵션은 수동 수정 후 재검증 1회 / OVERRIDE 승인 / 중단이고, OVERRIDE 승인 시 `검증` 총평과 `quality.json` 의 `final` 을 `OVERRIDE` 로 쓴다. 충족 시 `상태`=`approved`, 거절·중단 시 `draft` 유지
 - **`--no-gate`**: Phase 3·4를 건너뛰고 `검증` 행을 `SKIPPED — --no-gate` 로 둔 채 Phase 5만 수행
 - **Intent 템플릿**: `docs/.templates/App/INTENT/APP-INT-001-TEMPLATE.md` — 메타 표 7행(`검증` 포함) + Part 1 기능 명세 6섹션(Problem / Outcome / Affected / Constraints / Decisions / Open questions) + Part 2 작업 지시 7섹션
-- **Intent 카탈로그**: `docs/<App>/<App>-INT-CATALOG.md` — `INTENT/` 를 훑어 `docs_helpers.py intent-catalog --repo . --app <App> --write` 가 생성하는 **파생 인덱스**. 행은 `Intent · 제목 · 유형 · 상태 · 검증 · 요약 · 규모`(요약 = Outcome 첫 줄 50자, 규모 = FR·A 개수). ADR-CATALOG 와 달리 고유 정보가 0 이라 손으로 쓰지 않는다 — 상태 전이 4 지점(Phase 5 진입 · Phase 5 승인 · `/forge-init` 의 in-dev · forge-scope F5 의 in-review)에서 재생성하고, 빠뜨리면 `check --app <App>` 이 `INT_CATALOG stale` FAIL 로 잡는다. 참고 양식은 `docs/.templates/App/APP-INT-CATALOG-TEMPLATE.md`
+- **Intent 카탈로그**: `docs/<App>/<App>-INT-CATALOG.md` — `INTENT/` 를 훑어 `docs_helpers.py intent-catalog --repo . --app <App> --write` 가 생성하는 **파생 인덱스**. 행은 `Intent · 제목 · 유형 · 상태 · 검증 · 요약 · 규모`(요약 = Outcome 첫 줄 50자, 규모 = FR·A 개수). 고유 정보가 0 인 생성물이라 손으로 쓰지 않는다 — 상태 전이 4 지점(Phase 5 진입 · Phase 5 승인 · `/forge-init` 의 in-dev · forge-scope F5 의 in-review)에서 재생성하고, 빠뜨리면 `check --app <App>` 이 `INT_CATALOG stale` FAIL 로 잡는다. 참고 양식은 `docs/.templates/App/APP-INT-CATALOG-TEMPLATE.md`
 - **경계**: 클래스명·파일명·구현 방법은 어느 Part에도 쓰지 않는다(개발 세션 몫). 후속 스킬 자동 호출 없음, `ExitPlanMode` 미호출
 
 ### 6.7 commit-analysis
@@ -2216,7 +2216,7 @@ init 이 워크트리의 `.gitignore` 에 아래를 추가한다.
 /claudecode-for-me:acceptance-design docs/feature.md
 ```
 
-타겟 문서(spec/FRD)는 "무엇을 만든다"는 적어도 **완료조건·엣지케이스·오류케이스·검증방법**이 비거나 모호한 경우가 많다. acceptance-design은 그 doc를 ground truth로 읽고 위 4축을 사용자와 같이 설계한다. 질문 방식은 grill-me(6.4)와 동일하되, 시작 시 doc를 읽고 질문 범위를 4축으로 고정한다는 점이 다르다.
+타겟 문서(spec/Intent)는 "무엇을 만든다"는 적어도 **완료조건·엣지케이스·오류케이스·검증방법**이 비거나 모호한 경우가 많다. acceptance-design은 그 doc를 ground truth로 읽고 위 4축을 사용자와 같이 설계한다. 질문 방식은 grill-me(6.4)와 동일하되, 시작 시 doc를 읽고 질문 범위를 4축으로 고정한다는 점이 다르다.
 
 - **doc 입력 필수**: `$ARGUMENTS` doc 경로 → `Read` 1회. 경로 없음 "문서 경로 필수" / 파일 없음 "오류: 문서 파일 없음" 종료.
 - **4축 고정**: 완료조건(Acceptance Criteria) / 엣지케이스 / 오류케이스 / 검증방법. doc에 명시된 것은 확인, 빈 곳·모호한 곳 우선 질문.

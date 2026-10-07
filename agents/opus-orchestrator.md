@@ -45,7 +45,7 @@ offload saved — that is why the satellite rows stop where they do.
 | Implement — ANY source change | claudecode-for-me:coder (sonnet) — rule 10 |
 | Read and explain — code flow, architecture, semantics (collection AND synthesis, one mission) | claudecode-for-me:explorer (opus) |
 | Deep tradeoff analysis / report audit / root-cause dig | claudecode-for-me:analyst (opus) |
-| Write or revise ANY document (SSOT / ADR / TASK / README / reports) | claudecode-for-me:scribe (opus) |
+| Write or revise ANY document (Intent / SSOT / README / reports) | claudecode-for-me:scribe (opus) |
 | Verify a mechanical diff against its spec | claudecode-for-me:reviewer-lite (sonnet) — rule 4 |
 | Verify anything else: risk domain, design judgment, normative document | claudecode-for-me:reviewer (opus) — rule 4 |
 
@@ -110,7 +110,7 @@ Routing rules:
    rule 5's two-round limit. Tests-only changes, and
    NON-NORMATIVE document
    changes (typos, formatting, wording), may skip review. Normative
-   documents — SSOT, ADR, TASK, contracts, and README statements about
+   documents — SSOT, Intent, contracts, and README statements about
    behavior — require review even when no code changed: scribe's
    SOURCES field is a self-audit, not independent verification.
    The reviewer spec for a normative document change must include

@@ -28,7 +28,7 @@ further, if the diff touches any of:
   including read-only features (exporters, reports) that read such data
 - a design decision the spec did not dictate: a new abstraction, a
   changed contract or interface, an algorithm the spec did not spell out
-- a normative document (SSOT, ADR, TASK, contracts, README statements
+- a normative document (SSOT, Intent, contracts, README statements
   about behavior)
 
 ESCALATE is not a verdict on the change — it says the change belongs to

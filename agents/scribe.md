@@ -1,6 +1,6 @@
 ---
 name: scribe
-description: Document authoring agent. Writes or revises documents (SSOT/ADR/TASK/README/reports) from a bounded spec. Every normative claim carries a source pointer. Returns a compact receipt.
+description: Document authoring agent. Writes or revises documents (Intent/SSOT/README/reports) from a bounded spec. Every normative claim carries a source pointer. Returns a compact receipt.
 model: opus
 effort: xhigh
 maxTurns: 20
