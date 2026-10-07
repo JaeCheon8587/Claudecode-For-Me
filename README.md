@@ -2391,8 +2391,8 @@ Claudecode-For-Me/
 │   ├── requirement-spec.md
 │   ├── safe-pull.md
 │   └── slack-brief.md
-├── docs/                       # v0.7 문서 시스템 자산
-│   └── .templates/             # PRD/FC/FRD/ADR/ARCHITECTURE/CLAUDE/README 양식 + App/ (ADR·INTENT·FRD·PRD·FC·ARCHITECTURE·ADR-CATALOG·INT-CATALOG) + .rules/ (코드 룰 3종)
+├── docs/                       # 문서 체계 참고 명세 (Intent 1문서 체계 — DOCUMENT_GUIDE v1.0)
+│   └── .templates/             # DOCUMENT_GUIDE + CLAUDE/README/PRD/ARCHITECTURE 양식 + App/ (PRD·ARCHITECTURE·INT-CATALOG·INTENT) + .rules/ (코드 룰 5종)
 ├── scripts/                     # Python deterministic helper
 │   ├── branch_review_chunk_plan.py  # branch-review diff 크기측정·모드판정·청크분할·patch 생성
 │   ├── ddr_loop.py              # ddr-loop 워크트리·docs 검증 + .process 스캐폴딩 (init)
