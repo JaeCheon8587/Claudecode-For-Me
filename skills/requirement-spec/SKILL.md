@@ -29,7 +29,7 @@ argument-hint: "[--app <App>] [--type 기능개발|리팩토링] [--no-gate]"
    1. repo 의 `docs/.templates/App/INTENT/APP-INT-001-TEMPLATE.md`
    2. 없으면 `${CLAUDE_PLUGIN_ROOT}/docs/.templates/App/INTENT/APP-INT-001-TEMPLATE.md`
    3. 둘 다 없으면 **중단**하고 그 사실을 보고한다.
-4. **디렉터리 준비**: `docs/<App>/INTENT/` 가 없으면 생성한다.
+4. **디렉터리 준비**: `docs/<App>/INTENT/` 가 없으면 생성한다. 문서 폴더는 레포에 이미 있는 표기를 쓴다 — `Docs/` 가 있으면 `Docs/<App>/INTENT/`. `docs`·`Docs` 는 같은 폴더로 보며(이 스킬의 `docs/` 는 둘 다를 뜻한다) 대소문자만 다른 폴더를 새로 만들거나 이름을 바꾸지 않는다.
 5. **NNN 산정**: 그 디렉터리의 `<App>-INT-*.md` 중 최대 번호 + 1, 3자리 0패딩. 파일이 없으면 `001`.
 6. **문서 생성**: 템플릿을 `docs/<App>/INTENT/<App>-INT-<NNN>.md` 로 복사한 뒤 TEMPLATE 경고 블록을 삭제하고, 메타 표 7행을 채운다 — `문서 ID`·`작성` 을 채우고, `상태` = `draft`, `승인` = `pending`, `검증` = `pending`, `관련 Intent` 는 해당 없으면 `none` 으로 두고, `유형` 행에는 Phase 0에서 확정된 값 하나만 남긴다. 1행의 제목은 Phase 1 종료 시 확정해 기록한다.
 7. **작업 폴더 생성**: `.process/intent-check/<문서 ID>/` 를 만든다. Phase 1 의 전사부터 여기에 쓴다.

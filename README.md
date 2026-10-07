@@ -2051,7 +2051,7 @@ codenav --root <repo> ui --port 9876
 
 | 커맨드 | 인자 | 설명 |
 |---|---|---|
-| `forge-init` | `<Intent-doc-path>` | **필수**. `docs/<App>/INTENT/<ID>.md` |
+| `forge-init` | `<Intent-doc-path>` | **필수**. `docs/<App>/INTENT/<ID>.md` — 문서 폴더 `docs`·`Docs` 는 같은 폴더로 본다(어느 표기로 줘도 된다) |
 | | `--name <slug>` | 워크트리 slug 명시 (기본: Intent 문서 ID) |
 | | `--base <ref>` | 워크트리 분기점 — 주면 선택 질문을 건너뛴다. 로컬·`origin/*` 모두 가능. 브랜치가 이미 있으면 무시되고 `base_applied: false` |
 | | `--force` | 메인 repo dirty 검사만 우회 (커밋·승인 조건은 우회 불가) |
@@ -2062,10 +2062,10 @@ codenav --root <repo> ui --port 9876
 
 1. **입력 판별** — 경로에 `INTENT` 폴더가 있거나 파일명이 `<App>-INT-<nnn>` 이면 Intent. 그 밖(Work Packet·TASK)은 exit 2 "v3.58 에서 폐지".
 2. **승인 게이트** — `상태 ∈ {approved, in-dev}` + `docs_helpers` 의 Intent 검사 FAIL 0. 미통과면 exit 2 + 사유, 워크트리를 만들지 않는다.
-3. **시작 조건** — 분기점(`--base`, 기본 HEAD) 존재 + Intent 가 그 분기점에 tracked + **그 사본이 디스크 Intent 와 동일** (다르면 워크트리에 승인 상태가 반영되지 않으므로 exit 2).
+3. **시작 조건** — 분기점(`--base`, 기본 HEAD) 존재 + Intent 가 그 분기점에 tracked(대소문자 무시로 찾는다 — 탐색기 rename 으로 디스크 `Docs`·커밋 `docs` 처럼 어긋나도 커밋된 표기를 쓴다) + **그 사본이 디스크 Intent 와 동일** (다르면 워크트리에 승인 상태가 반영되지 않으므로 exit 2).
 4. **워크트리** — `.worktree/<slug>`, 브랜치 = Handoff `브랜치명`(유효한 ref 일 때) 아니면 `intent/<문서 ID>`. 분기점은 `--base` 로 고른 ref — 브랜치 이름과 별개다. 후보는 `branches` 서브커맨드로 나열한다.
-5. **가드레일 복사** — 메인의 `CLAUDE.md`·`.claude/rules`·`Docs`·`docs` 중 워크트리에 **없는 파일만** 복사(덮어쓰지 않음).
-6. **상태 전이** — 신규 생성일 때만 워크트리 Intent `approved → in-dev` + 커밋 `chore(<ID>): 상태 in-dev`. 메인 repo 의 Intent 는 그대로.
+5. **가드레일 복사** — 메인의 `CLAUDE.md`·`.claude/settings.json`·`.claude/rules`·문서 폴더(`docs`·`Docs` 중 디스크에 있는 표기 하나) 중 워크트리에 **없는 파일만** 복사(덮어쓰지 않음).
+6. **상태 전이** — 신규 생성일 때만 워크트리 Intent `approved → in-dev` + `<App>-INT-CATALOG.md` 재생성 + 두 파일 커밋 `chore(<ID>): 상태 in-dev` (문서 폴더 표기 무관). 메인 repo 의 Intent 는 그대로.
 7. **매니페스트** — stdout 마지막 줄 JSON: `worktree`·`branch`·`base`·`base_commit`·`base_applied`·`intent_worktree`·`intent_id`·`status`·`created`·`status_committed`·`acceptance`(A-n)·`handoff`(5행) 등. `.process/<slug>/` 스캐폴딩(build.md·progress.md)은 v3.61.0 에서 제거 — 계획·진행 상태는 팀장 ledger 하나다.
 
 #### 워크트리 서브모듈

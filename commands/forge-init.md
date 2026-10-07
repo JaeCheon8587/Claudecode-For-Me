@@ -17,6 +17,8 @@ FORGE="${CLAUDE_PLUGIN_ROOT}/scripts/worktree_setup.py"
 
 `$ARGUMENTS` 첫 인자 = Intent 경로(`docs/<App>/INTENT/<ID>.md`). `--name <slug>` · `--base <ref>` · `--force` 는 그대로 넘긴다.
 
+> **문서 폴더 `docs` · `Docs` 는 같은 폴더다.** 레포마다 표기가 다를 뿐이다 — 이 문서의 `docs/` 는 둘 다를 뜻한다. 인자를 어느 표기로 받든 그대로 넘긴다: `branches` · `init` 이 디스크 표기와 커밋된 표기로 알아서 맞춘다(탐색기에서 폴더 이름만 바꿔 둘이 어긋난 레포 포함). 이 차이로 멈추거나 사용자에게 묻지 않고, 폴더 이름을 바꾸지도 않는다.
+
 Python 3.10+ 확인: `python --version`(없으면 `py -3 --version`). 없으면 중단하고 설치를 안내한다.
 
 ---
@@ -28,8 +30,9 @@ Python 3.10+ 확인: `python --version`(없으면 `py -3 --version`). 없으면 
 1. Intent 메타 표의 `상태` 가 `approved` 인지 확인한다. `draft` 면 중단하고 requirement-spec Phase 5 승인을 안내한다. **여기서 Intent 를 고치지 않는다.**
 2. Intent 와 카탈로그가 커밋됐는지 본다. **경로를 지정해서** 본다 — 인자 없는 `git status --porcelain` 은 untracked 디렉터리를 `?? docs/` 한 줄로 접어버려 어떤 파일이 빠졌는지 안 보인다:
    ```bash
-   git status --porcelain -uall -- docs/<App>/INTENT/<ID>.md docs/<App>/<App>-INT-CATALOG.md
+   git status --porcelain -uall -- ':(icase)docs/<App>/INTENT/<ID>.md' ':(icase)docs/<App>/<App>-INT-CATALOG.md'
    ```
+   `:(icase)` 를 빼지 않는다 — git 은 경로를 대소문자 구분으로 비교해서, 문서 폴더가 `Docs` 인 레포에 `docs/…` 로 물으면 이미 커밋된 파일의 변경(카탈로그 등)이 출력에서 빠진다(Linux 에서는 전부). 그러면 승인 커밋이 빠지거나 일부만 들어가 `init` 이 dirty·게이트에서 멈춘다. 출력에 찍힌 경로를 3 에서 그대로 스테이징한다.
    카탈로그는 requirement-spec 이 python 을 못 써서 아예 없을 수도 있다 — 그러면 **있는 파일만** 대상으로 한다.
 3. 커밋이 필요한지 기억해두고 **2 로 간다.** 커밋은 base 를 정한 뒤에 한다(아래 3 참조).
 
@@ -59,7 +62,7 @@ python "$FORGE" branches --doc <Intent>
 
 - **이미 커밋돼 있으면** 이 단계를 건너뛴다(`init` 이 base 사본 일치를 검사한다).
 - **미커밋 + 고른 base == 현재 브랜치**(`branches` 의 `current`) → `AskUserQuestion` 1회:
-  - **승인 커밋** — Intent + 카탈로그 **두 파일만** 스테이징해 `docs(<ID>): Intent 승인` 으로 커밋한다. 그 밖의 파일은 건드리지 않는다.
+  - **승인 커밋** — Intent + 카탈로그 **두 파일만** 스테이징해 `docs(<ID>): Intent 승인` 으로 커밋한다. 그 밖의 파일은 건드리지 않는다. 스테이징은 1 의 출력에 찍힌 경로를 그대로 `git add -- <경로>` 한다 — 표기를 바꿔 쓰면(`Docs` ↔ `docs`) 이미 커밋된 파일이 스테이징에서 빠진다 — Windows·macOS 에서는 오류도 없이.
   - **직접 커밋할게** — 중단하고, 커밋 후 다시 실행하도록 안내한다.
   - **중단**
 - **미커밋 + 고른 base ≠ 현재 브랜치** → **중단**한다. 승인 커밋이 그 base 에 올라가지 않아 어차피 게이트에 막힌다. 사용자에게 두 길을 제시한다: ① base 를 현재 브랜치(`current`)로 바꾼다 ② 그 base 브랜치로 체크아웃한 뒤 `/forge-init` 을 다시 실행한다. **대신 체크아웃해주지 않는다.**
@@ -114,5 +117,5 @@ python "$FORGE" init --doc <Intent> --quiet --base <선택한 ref> [--name <slug
 
 - 브랜치는 Intent Handoff 의 `브랜치명`(유효한 ref 일 때), 아니면 `intent/<문서 ID>` 다. **분기점(base)과 브랜치 이름은 별개다** — base 는 2 에서 고른 ref 이고, `init` 이 워크트리 Intent 의 Handoff `base branch` 행을 그 값으로 치환해 `in-dev` 전이 커밋에 함께 넣는다.
 - `init` 의 `chore(<ID>): 상태 in-dev` 커밋은 스크립트의 결정적 전이다.
-- 가드레일 복사(`CLAUDE.md`·`.claude/settings.json`·`.claude/rules`·`Docs`·`docs`)는 base 와 무관하게 **메인 repo 작업트리**에서 온다. 작업 공간 수준 가드레일이라 의도된 동작이다.
+- 가드레일 복사(`CLAUDE.md`·`.claude/settings.json`·`.claude/rules`·문서 폴더)는 base 와 무관하게 **메인 repo 작업트리**에서 온다. 작업 공간 수준 가드레일이라 의도된 동작이다. 문서 폴더는 `docs`·`Docs` 중 디스크에 있는 표기 하나로 복사하고 `copied`/`skipped` 에도 그 표기로 1번만 보고한다.
 - 정리는 `/forge-cancel <slug>` — 메인 repo 에서 실행한다.

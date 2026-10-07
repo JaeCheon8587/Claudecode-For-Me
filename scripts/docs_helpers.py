@@ -7,6 +7,7 @@ Subcommands:
     intent-catalog  docs/<App>/<App>-INT-CATALOG.md 생성·검사 (INTENT/ 에서 파생)
 
 파일을 쓰는 것은 `intent-catalog --write` 뿐이고, 나머지 서브커맨드는 read-only 다.
+문서 폴더는 docs·Docs 를 같은 폴더로 본다 (_docs_root) — 이 문서의 docs/ 는 둘 다를 뜻한다.
 
 Standard library only. Windows PowerShell 호환.
 """
@@ -59,6 +60,30 @@ def _resolve_repo(arg: str) -> Path:
     return p
 
 
+def _match_case(base: Path, rel: str | Path) -> Path:
+    """base 아래 rel 을 디스크에 있는 표기로 잇는다 — 대소문자만 다른 이름(docs·Docs)은 같은 것으로 본다.
+
+    대소문자 구분 FS(Linux)는 표기가 다르면 아예 열지 못하고, 대소문자 무시 FS(Windows·macOS)는
+    열리기는 해도 받은 표기가 그대로 남아 출력·git 경로가 실제와 어긋난다. 같은 이름이 있으면
+    그것을, 없으면 대소문자만 다른 이름을 쓴다. 디스크에 없는 구간부터는 받은 표기 그대로 잇는다.
+    """
+    cur = base
+    for part in Path(rel).parts:
+        try:
+            names = sorted(p.name for p in cur.iterdir())
+        except OSError:
+            names = []
+        if part not in names:
+            part = next((n for n in names if n.lower() == part.lower()), part)
+        cur = cur / part
+    return cur
+
+
+def _docs_root(repo: Path) -> Path:
+    """repo 의 문서 폴더 — docs·Docs 어느 표기든 같은 폴더로 본다. 없으면 repo/docs."""
+    return _match_case(repo, "docs")
+
+
 # ---------------------------------------------------------------------------
 # check
 # ---------------------------------------------------------------------------
@@ -83,7 +108,7 @@ def _format(r: CheckResult, repo: Path) -> str:
 
 
 def _scan_docs_folders(repo: Path) -> list[str]:
-    docs = repo / "docs"
+    docs = _docs_root(repo)
     if not docs.is_dir():
         return []
     out: list[str] = []
@@ -100,7 +125,7 @@ def _scan_docs_folders(repo: Path) -> list[str]:
 
 def _check_app(repo: Path, app: str) -> list[CheckResult]:
     results: list[CheckResult] = []
-    docs_dir = repo / "docs" / app
+    docs_dir = _docs_root(repo) / app
     if not docs_dir.is_dir():
         results.append(CheckResult("FAIL", "APP_DIR", "missing", docs_dir))
         return results
@@ -788,7 +813,7 @@ INTENT_RULES = (
 
 def _check_intent_file(repo: Path, path: Path) -> list[CheckResult]:
     if not path.is_absolute():
-        path = repo / path
+        path = _match_case(repo, path)   # docs·Docs 표기 무관
     path = path.resolve()
 
     results: list[CheckResult] = []
@@ -1218,7 +1243,7 @@ def cmd_intent_checklist(args: argparse.Namespace) -> int:
     repo = _resolve_repo(args.repo)
     path = Path(args.file)
     if not path.is_absolute():
-        path = repo / path
+        path = _match_case(repo, path)   # docs·Docs 표기 무관
     path = path.resolve()
     text = _read_text(path)
     if text is None:
@@ -1376,7 +1401,7 @@ def _intent_summary(doc: IntentDoc) -> str:
 
 def _collect_intent_rows(repo: Path, app: str) -> tuple[list[CatalogRow], list[str]]:
     """docs/<App>/INTENT/<App>-INT-<NNN>.md 를 파싱해 카탈로그 행으로 만든다."""
-    intent_dir = repo / "docs" / app / "INTENT"
+    intent_dir = _docs_root(repo) / app / "INTENT"
     rows: list[CatalogRow] = []
     skipped: list[str] = []
     if not intent_dir.is_dir():
@@ -1463,7 +1488,7 @@ def cmd_intent_catalog(repo: Path, args: argparse.Namespace) -> int:
     if args.write and args.check:
         print("FAIL ARGS --write 와 --check 는 함께 쓸 수 없다", file=sys.stderr)
         return 2
-    docs_dir = repo / "docs" / app
+    docs_dir = _docs_root(repo) / app
     if not docs_dir.is_dir():
         print(f"FAIL ARGS --app not a directory: {docs_dir}", file=sys.stderr)
         return 2

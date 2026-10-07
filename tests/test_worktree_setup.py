@@ -111,7 +111,7 @@ def _meta_row(text: str, key: str, value: str) -> str:
     return re.sub(rf"(?m)^\| {re.escape(key)} \| .*$", f"| {key} | {value} |", text, count=1)
 
 
-def write_intent(repo: Path, status: str = "approved", **overrides: str) -> Path:
+def write_intent(repo: Path, status: str = "approved", docs_dir: str = "docs", **overrides: str) -> Path:
     text = INTENT_TEXT
     if status == "approved":
         text = _meta_row(text, "승인", "tester · 2026-09-26")
@@ -119,7 +119,7 @@ def write_intent(repo: Path, status: str = "approved", **overrides: str) -> Path
     text = _meta_row(text, "상태", status)
     for key, value in overrides.items():
         text = _meta_row(text, key, value)
-    intent = repo / "docs" / "Demo" / "INTENT" / "Demo-INT-001.md"
+    intent = repo / docs_dir / "Demo" / "INTENT" / "Demo-INT-001.md"
     intent.parent.mkdir(parents=True, exist_ok=True)
     intent.write_text(text, encoding="utf-8")
     return intent
@@ -825,3 +825,126 @@ def test_guardrails_copy_claude_settings(git_repo: Path):
     copied = Path(manifest["worktree"]) / ".claude" / "settings.json"
     assert copied.is_file()
     assert "Bash(git status:*)" in copied.read_text(encoding="utf-8")
+
+
+# ============================================================================
+# 문서 폴더 대소문자 (docs · Docs)
+#
+# 레포마다 문서 폴더가 docs 또는 Docs 다 — 둘은 같은 폴더로 봐야 한다. git 은 경로를
+# 대소문자 구분으로 비교하므로(`show <ref>:<path>` · pathspec · add) 표기를 하드코딩하면
+# Docs 레포에서 카탈로그가 상태 전이 커밋에서 빠지고, 탐색기에서 폴더 이름만 바꿔 디스크와
+# 커밋의 표기가 어긋난 레포에서는 커밋된 Intent 를 "마지막 커밋에 없다" 로 막는다.
+# ============================================================================
+def case_insensitive_fs(path: Path) -> bool:
+    probe = path / "case-probe"
+    probe.mkdir()
+    try:
+        return (path / "CASE-PROBE").exists()
+    finally:
+        probe.rmdir()
+
+
+def write_catalog(repo: Path) -> None:
+    assert _dh.main(["intent-catalog", "--repo", str(repo), "--app", "Demo", "--write"]) == 0
+
+
+def head_commit_files(repo: Path) -> list[str]:
+    out = run_git(repo, "show", "--name-only", "--format=", "HEAD").stdout
+    return sorted(line for line in out.splitlines() if line)
+
+
+@pytest.mark.parametrize("arg_docs", ["Docs", "docs"])
+def test_capital_docs_repo_commits_catalog_with_in_dev(git_repo: Path, arg_docs: str):
+    """Docs 레포 — 인자 표기(Docs·docs)와 무관하게 Intent·카탈로그가 같은 전이 커밋에 들어간다."""
+    write_intent(git_repo, docs_dir="Docs")
+    write_catalog(git_repo)
+    commit_all(git_repo)
+
+    result = run_init(git_repo, Path(arg_docs, "Demo", "INTENT", "Demo-INT-001.md"))
+
+    assert result.returncode == 0, result.stderr
+    manifest = manifest_from(result)
+    wt = Path(manifest["worktree"])
+    assert head_commit_files(wt) == ["Docs/Demo/Demo-INT-CATALOG.md", "Docs/Demo/INTENT/Demo-INT-001.md"]
+    assert Path(manifest["intent_worktree"]).relative_to(wt).as_posix() == "Docs/Demo/INTENT/Demo-INT-001.md"
+    assert _dh.main(["check", "--repo", str(wt), "--app", "Demo"]) == 0
+
+
+def test_init_when_disk_folder_case_differs_from_commit(git_repo: Path):
+    """탐색기에서 docs → Docs 로 이름만 바꾸면 git 은 모른다(core.ignorecase) — 디스크는 Docs,
+    커밋은 docs 다. 디스크 표기로 커밋을 찾으면 커밋된 Intent 를 없다고 막는다."""
+    if not case_insensitive_fs(git_repo):
+        pytest.skip("대소문자 무시 FS(Windows·macOS)에서만 생기는 어긋남")
+    write_intent(git_repo)
+    write_catalog(git_repo)
+    commit_all(git_repo)
+    (git_repo / "docs").rename(git_repo / "docs-tmp")
+    (git_repo / "docs-tmp").rename(git_repo / "Docs")
+    assert run_git(git_repo, "status", "--porcelain").stdout == ""
+
+    result = run_init(git_repo, git_repo / "Docs" / "Demo" / "INTENT" / "Demo-INT-001.md")
+
+    assert result.returncode == 0, result.stderr
+    wt = Path(manifest_from(result)["worktree"])
+    assert head_commit_files(wt) == ["docs/Demo/Demo-INT-CATALOG.md", "docs/Demo/INTENT/Demo-INT-001.md"]
+
+
+def test_in_dev_commit_stages_catalog_tracked_under_other_spelling(git_repo: Path):
+    """index 에 표기가 섞인 레포(Intent 는 Docs/…, 카탈로그는 docs/…) — 카탈로그를 Intent 쪽
+    표기로 add 하면 tracked 파일이라 조용히 스테이징되지 않는다. 커밋된 표기로 add 해야 한다."""
+    if not case_insensitive_fs(git_repo):
+        pytest.skip("대소문자 무시 FS(Windows·macOS)에서만 한 폴더에 두 표기가 공존한다")
+    write_intent(git_repo)
+    write_catalog(git_repo)
+    run_git(git_repo, "add", CATALOG_REL)
+    run_git(git_repo, "-c", "core.ignorecase=false", "add", "Docs/Demo/INTENT/Demo-INT-001.md")
+    run_git(git_repo, "commit", "-q", "-m", "mixed spelling")
+    tracked = run_git(git_repo, "ls-files").stdout.split()
+    assert "Docs/Demo/INTENT/Demo-INT-001.md" in tracked and CATALOG_REL in tracked
+    assert run_git(git_repo, "status", "--porcelain").stdout == ""
+
+    result = run_init(git_repo, git_repo / INTENT_REL)
+
+    assert result.returncode == 0, result.stderr
+    wt = Path(manifest_from(result)["worktree"])
+    assert head_commit_files(wt) == ["Docs/Demo/INTENT/Demo-INT-001.md", CATALOG_REL]
+
+
+@pytest.mark.parametrize("docs_dir", ["docs", "Docs"])
+def test_guardrails_copy_docs_folder_once_in_disk_spelling(git_repo: Path, docs_dir: str):
+    """docs·Docs 를 따로 세면 한 폴더가 다른 표기로 보고되거나 '복사' 와 'skip' 에 함께 오른다."""
+    (git_repo / ".gitignore").write_text(f"{docs_dir}/local/\n", encoding="utf-8")
+    intent = write_intent(git_repo, docs_dir=docs_dir)
+    commit_all(git_repo)
+    local = git_repo / docs_dir / "local" / "notes.md"
+    local.parent.mkdir(parents=True)
+    local.write_text("# local\n", encoding="utf-8")
+
+    manifest = manifest_from(run_init(git_repo, intent))
+
+    reported = [e for e in manifest["copied"] + manifest["skipped"] if e.lower() == "docs/"]
+    assert reported == [f"{docs_dir}/"]
+    wt = Path(manifest["worktree"])
+    assert docs_dir in os.listdir(wt)
+    assert (wt / docs_dir / "local" / "notes.md").is_file()
+
+
+def test_refresh_int_catalog_accepts_capital_docs(tmp_path: Path):
+    write_intent(tmp_path, docs_dir="Docs")
+
+    rel = _ws._refresh_int_catalog(tmp_path, "Docs/Demo/INTENT/Demo-INT-001.md")
+
+    assert rel == "Docs/Demo/Demo-INT-CATALOG.md"
+    assert catalog_row((tmp_path / rel).read_text(encoding="utf-8"), "Demo-INT-001")
+
+
+def test_branches_reads_handoff_through_other_docs_spelling(git_repo: Path):
+    intent = write_intent(git_repo, docs_dir="Docs")
+    set_handoff(intent, "base branch", "develop")
+    commit_all(git_repo)
+    run_git(git_repo, "branch", "develop")
+
+    result = run_script(git_repo, "branches", "--doc", "docs/Demo/INTENT/Demo-INT-001.md")
+
+    assert result.returncode == 0, result.stderr
+    assert branches_of(result)["recommended"] == "develop"

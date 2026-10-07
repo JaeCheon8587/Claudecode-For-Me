@@ -40,7 +40,8 @@ EXIT_BLOCKED = 2  # 검증 게이트 미통과 (미결 항목 / 미완성 문서
 # 권한 allowlist·훅 없이 부팅해 첫 bash 호출부터 프롬프트가 뜬다.
 # settings.local.json 은 기계 로컬이라 제외한다.
 GUARDRAIL_FILES = ["CLAUDE.md", ".claude/settings.json"]
-GUARDRAIL_DIRS = [".claude/rules", "Docs", "docs"]
+# 문서 폴더는 레포마다 docs·Docs 로 표기가 갈린다 — 한 폴더로 보고 디스크 표기로 복사·보고한다.
+GUARDRAIL_DIRS = [".claude/rules", "docs"]
 
 # init 이 남기는 매니페스트. 워크트리 사본은 개발 세션 인수인계용,
 # 메인 repo 사본은 cancel·list 조회용이다. 둘 다 .process/ 아래라 gitignore.
@@ -173,6 +174,37 @@ def _submodule_entries(root: Path, worktree: Path) -> list[tuple[str, str]]:
 INTENT_START_STATUSES: tuple[str, ...] = ("approved", "in-dev")
 
 
+def _doc_path(root: Path, raw: str) -> Path:
+    """--doc 인자 → 디스크 표기의 절대경로. docs/Docs 처럼 대소문자만 다른 표기는 같은 파일로 본다."""
+    doc = Path(raw)
+    if not doc.is_absolute():
+        doc = Path.cwd() / doc
+    doc = doc.resolve()
+    try:
+        return _dh._match_case(root.resolve(), doc.relative_to(root.resolve()))
+    except ValueError:
+        return doc   # repo 밖 — init 은 _gate_start 가 막는다
+
+
+def _tree_rel(root: Path, ref: str, rel: str) -> Optional[str]:
+    """ref 트리에 실제로 있는 표기로 rel 을 돌려준다 — 대소문자만 다르면 같은 파일로 본다.
+
+    git 은 경로를 대소문자 구분으로 비교한다(`show <ref>:<path>` · pathspec · add). 레포마다
+    docs/Docs 표기가 다르고, Windows·macOS 에서 탐색기로 폴더 이름만 바꾸면 디스크 표기와
+    커밋된 표기가 어긋난다(core.ignorecase 라 git status 는 깨끗하다). 디스크 표기를 그대로
+    쓰면 커밋된 Intent 를 없다고 막고, tracked 파일 add 가 조용히 아무것도 하지 않는다.
+    `ls-tree` 는 :(icase) pathspec 을 받지 않아 전체 목록에서 고른다.
+    """
+    r = _git(root, "ls-tree", "-r", "-z", "--name-only", ref)
+    if r.returncode != 0:
+        return None
+    names = r.stdout.split("\0")
+    if rel in names:
+        return rel
+    low = rel.lower()
+    return next((n for n in names if n and n.lower() == low), None)
+
+
 def _detect_input_kind(doc: Path, raw: str) -> str:
     if any(p.upper() == "INTENT" for p in doc.parts):
         return "INTENT"
@@ -212,8 +244,9 @@ def _gate_start(root: Path, doc: Path, start_ref: str = "HEAD") -> list[str]:
     except ValueError:
         return [f"Intent 가 이 repo 밖에 있다: {doc}"]
     where = "마지막 커밋" if start_ref == "HEAD" else f"base '{start_ref}'"
-    show = _git(root, "show", f"{start_ref}:{rel}")
-    if show.returncode != 0:
+    tree_rel = _tree_rel(root, start_ref, rel)
+    show = _git(root, "show", f"{start_ref}:{tree_rel}") if tree_rel else None
+    if show is None or show.returncode != 0:
         return [f"Intent 가 {where}에 없다: {rel} — 먼저 그 브랜치에 커밋하거나 다른 base 를 고른다."]
     if _norm(show.stdout) != _norm(doc.read_text(encoding="utf-8", errors="replace")):
         return [f"Intent 가 {where}의 사본과 다르다: {rel} — 워크트리에는 그 사본이 들어가므로 "
@@ -333,7 +366,8 @@ def _copy_guardrails(root: Path, wt: Path) -> tuple[list[str], list[str]]:
         else:
             skipped.append(rel)
     for rel in GUARDRAIL_DIRS:
-        src = root / rel
+        src = _dh._match_case(root, rel)
+        rel = src.relative_to(root).as_posix()
         if src.is_dir():
             n_copied = 0
             for f in src.rglob("*"):
@@ -359,10 +393,11 @@ def _refresh_int_catalog(wt: Path, intent_rel: str) -> Optional[str]:
     막지 않는다 — docs_helpers.py check --app <App> 이 stale 로 잡는다.
     """
     parts = Path(intent_rel).parts
-    if len(parts) < 4 or parts[0] != "docs" or parts[2] != "INTENT":
+    # 문서 폴더는 docs·Docs 둘 다 받는다 — 카탈로그는 Intent 와 같은 표기의 폴더에 둔다.
+    if len(parts) < 4 or parts[0].lower() != "docs" or parts[2] != "INTENT":
         return None
     app = parts[1]
-    rel = f"docs/{app}/{app}-INT-CATALOG.md"
+    rel = f"{parts[0]}/{app}/{app}-INT-CATALOG.md"
     try:   # 게이트가 아니다 — 문서 문제로 죽지 않는다 (쓰기 실패 포함)
         rows, _ = _dh._collect_intent_rows(wt, app)
         text = _dh._render_intent_catalog(app, rows)
@@ -401,7 +436,8 @@ def _mark_in_dev(wt: Path, intent_rel: str, intent_id: str, base: Optional[str] 
     _git(wt, "add", intent_rel)
     cat_rel = _refresh_int_catalog(wt, intent_rel)
     if cat_rel:
-        _git(wt, "add", cat_rel)
+        # 카탈로그가 Intent 와 다른 표기로 커밋돼 있을 수 있다 — 그 표기로 add 해야 스테이징된다.
+        _git(wt, "add", _tree_rel(wt, "HEAD", cat_rel) or cat_rel)
     r = _git(wt, "commit", "-m", f"chore({intent_id}): 상태 in-dev")
     if r.returncode != 0:
         _err(f"ERROR: 상태 in-dev 커밋 실패 ({intent_rel}).\n  {r.stderr.strip()}")
@@ -496,9 +532,7 @@ def cmd_branches(args: argparse.Namespace) -> int:
     recommended_source = "head"
     target_branch = ""
     if args.doc:
-        doc = Path(args.doc)
-        if not doc.is_absolute():
-            doc = (Path.cwd() / doc).resolve()
+        doc = _doc_path(root, args.doc)
         try:   # 게이트가 아니다 — 문서 문제로 죽지 않는다
             intent = _dh._parse_intent(doc.read_text(encoding="utf-8", errors="replace"))
             intent_id = intent.meta.get("문서 ID", "").strip() or doc.stem
@@ -540,9 +574,7 @@ def cmd_init(args: argparse.Namespace) -> int:
     if root is None:
         _err("ERROR: git repository가 아닙니다. `git init` 후 재시도.", EXIT_BLOCKED)
 
-    doc = Path(args.doc)
-    if not doc.is_absolute():
-        doc = (Path.cwd() / doc).resolve()
+    doc = _doc_path(root, args.doc)
 
     if not doc.exists():
         _err(f"§F 문서 없음: {doc}", EXIT_BLOCKED)
@@ -583,8 +615,10 @@ def cmd_init(args: argparse.Namespace) -> int:
     _link_submodules(root, wt, log)
     copied, skipped = _copy_guardrails(root, wt)
 
-    # _gate_start 와 같은 방식 — 게이트가 repo 내부임을 이미 보장했다.
-    intent_rel = doc.resolve().relative_to(root.resolve()).as_posix()
+    # _gate_start 와 같은 방식 — 게이트가 repo 내부임을 이미 보장했다. 워크트리는 커밋된
+    # 표기로 체크아웃되므로 디스크 표기(docs/Docs)가 아니라 그 표기를 쓴다 (_tree_rel).
+    rel = doc.resolve().relative_to(root.resolve()).as_posix()
+    intent_rel = _tree_rel(wt, "HEAD", rel) or rel
     _ensure_gitignore(wt)
 
     status_committed = False
@@ -824,7 +858,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     sub = p.add_subparsers(dest="cmd", required=True)
 
     pi = sub.add_parser("init", help="검증 게이트 + 워크트리 + 링크 + 복사 + 상태 전이")
-    pi.add_argument("--doc", required=True, help="approved Intent 문서 경로 (docs/<App>/INTENT/<ID>.md)")
+    pi.add_argument("--doc", required=True, help="approved Intent 문서 경로 (docs/<App>/INTENT/<ID>.md — docs·Docs 무관)")
     pi.add_argument("--name", default=None, help="slug 명시 (기본: Intent 문서 ID)")
     pi.add_argument("--base", default=None,
                     help="워크트리 분기점 ref (기본: 현재 HEAD). 예: main, develop, origin/develop")

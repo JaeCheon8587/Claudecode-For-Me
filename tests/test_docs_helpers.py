@@ -177,6 +177,7 @@ def write_intent(
     app: str = "Demo",
     nnn: str = "001",
     template: str = INTENT_CANONICAL,
+    docs_dir: str = "docs",
     **overrides: str,
 ) -> Path:
     """정상 3.60 포맷 Intent 문서를 작성한다. overrides 는 str.replace 쌍."""
@@ -184,7 +185,7 @@ def write_intent(
     for old, new in overrides.items():
         text = text.replace(old, new)
     text = text.replace("{app}", app).replace("{nnn}", nnn)
-    path = tmp_path / "docs" / app / "INTENT" / f"{app}-INT-{nnn}.md"
+    path = tmp_path / docs_dir / app / "INTENT" / f"{app}-INT-{nnn}.md"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
     return path
@@ -1367,3 +1368,37 @@ class TestCheckIntentOnly:
     def test_legacy_subcommands_removed(self, tmp_path, capsys, cmd):
         assert dh.main([cmd, "--repo", str(tmp_path)]) == 2
         assert "invalid choice" in capsys.readouterr().err
+
+
+class TestDocsFolderCase:
+    """문서 폴더는 레포마다 docs 또는 Docs 다 — 대소문자만 다른 표기는 같은 폴더로 본다.
+
+    "docs" 를 하드코딩하면 대소문자 구분 FS(Linux)의 Docs 레포에서 App 을 못 찾아 check 가
+    FAIL APPS 로, intent-catalog 가 --app not a directory 로 멈춘다.
+    """
+
+    def test_docs_root_follows_disk_spelling(self, tmp_path):
+        (tmp_path / "Docs").mkdir()
+        assert dh._docs_root(tmp_path).name == "Docs"
+
+    def test_docs_root_defaults_to_lowercase(self, tmp_path):
+        assert dh._docs_root(tmp_path) == tmp_path / "docs"
+
+    def test_capital_docs_repo_catalog_and_check(self, tmp_path, capsys):
+        write_intent(tmp_path, app="XLAB", docs_dir="Docs")   # --app 없는 스캔은 대문자 App 코드만 잡는다
+
+        assert dh.main(["intent-catalog", "--repo", str(tmp_path), "--app", "XLAB", "--write"]) == 0
+        assert capsys.readouterr().out.strip() == "WROTE Docs/XLAB/XLAB-INT-CATALOG.md · intents: 1"
+        assert sorted(p.name for p in tmp_path.iterdir()) == ["Docs"]   # docs 를 따로 만들지 않는다
+
+        assert dh.main(["check", "--repo", str(tmp_path)]) == 0         # --app 없이 스캔
+        out = capsys.readouterr().out
+        assert "PASS APP_DIR Docs/XLAB exists" in out
+        assert out.strip().splitlines()[-1] == "Summary: 2 PASS, 0 WARN, 0 FAIL"
+
+    @pytest.mark.parametrize("cmd", [["check-intent"], ["intent-checklist", "--round", "1"]])
+    def test_file_arg_accepts_other_docs_spelling(self, tmp_path, capsys, cmd):
+        """requirement-spec 은 --file 에 docs/… 를 넘긴다 — Docs 레포에서도 같은 파일을 읽어야 한다."""
+        write_intent(tmp_path, docs_dir="Docs")
+        rc = dh.main([*cmd, "--repo", str(tmp_path), "--file", "docs/Demo/INTENT/Demo-INT-001.md"])
+        assert rc == 0, capsys.readouterr()
