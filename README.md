@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v3.63.0 · 커스텀 스킬 11종 + 슬래시 커맨드 15종 + 에이전트 9종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v3.67.0 · 커스텀 스킬 11종 + 슬래시 커맨드 17종 + 에이전트 9종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,12 +11,12 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `3.63.0` |
+| 버전 | `3.67.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
 | 네임스페이스 | `/claudecode-for-me:<name>` |
-| 구성요소 | Skill 12 · Command 17 · Agent 9 (`agents/`) · Python helper 7 (`scripts/`) |
+| 구성요소 | Skill 11 · Command 17 · Agent 9 (`agents/`) · Python helper 7 (`scripts/`) |
 | 외부 연동 도구 | [`codenavigator`](https://github.com/JaeCheon8587/codenavigator) (PyPI) — codenav-bootstrap / codenav-frontmatter-gen 슬래시가 호출 |
 
 플러그인은 **글로벌 캐시**에 설치되므로 한 번 설치 후 모든 프로젝트의 **새 세션**에서 자동 노출된다. 프로젝트별 재설치 불필요.
@@ -66,6 +66,49 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v3.67.0 — Intent 1문서 체계 마무리: 옛 문서 잔재 제거 · 템플릿 재작성 · 문서 폴더 `docs`·`Docs` 동일 취급 · BREAKING
+
+v3.58 에서 작업 단위 문서를 Intent 하나로 합쳤지만, 그 이전 체계(FRD · FC · ADR · ADR-CATALOG · TASK · Work Packet)가
+helper · 템플릿 · 스킬 곳곳에 남아 있었다. 템플릿은 AI 가 레포를 세팅할 때 읽는 참고 명세라서, 남은 한 줄이 새 레포마다
+옛 구조를 다시 심었다. 이번 릴리스로 걷어내고, 다시 들어오지 못하게 테스트로 고정한다.
+
+- **`docs_helpers.py check` 를 Intent 전용으로** — Intent 만 쓰는 repo 에서도 PRD · FC · ARCHITECTURE · ADR-CATALOG 파일과
+  FRD · ADR · TASK 폴더를 요구해 `check --app` 이 7 FAIL 로 끝났다. 이제 App 폴더와 INT-CATALOG 최신 여부만 본다.
+  호출처가 없던 서브커맨드 5종(`list-apps` · `next-id` · `parse-fc` · `parse-frd` · `git-user`)은 제거했다(**BREAKING** —
+  손으로 부르던 스크립트만 해당. 플러그인 안 호출처는 0).
+- **상시 템플릿 재작성 — DOCUMENT_GUIDE v1.0** — 템플릿은 복사 원본이 아니라 참고 명세다. §0 레포 세팅(만드는 것 /
+  만들지 않는 것 / 세팅 순서)을 새로 두고, §1.3 에 폐지 문서 → Intent 대응표를 둔다. CLAUDE-TEMPLATE 의 신규 App 추가 ·
+  부트스트랩 지시를 Intent 체계로 바꿨다. App PRD §7 이 FC 를 흡수해 "기능 목록(본 App SSOT)"이 되고, 솔루션 PRD §8 은
+  그 roll-up 이다. 결정 인용은 ADR 파일 대신 Intent `Decisions`.
+- **폐지 템플릿 8종 삭제** — `App/FRD/APP-FRD-001` · `App/ADR/APP-ADR-001` · `App/APP-FC` · `App/APP-ADR-CATALOG` 양식과
+  redirect `FC` · `FRD` · `ADR` · `UI_GUIDE` 템플릿(**BREAKING** — 이 경로를 직접 링크하던 외부 문서만 해당. 소비자 레포에
+  이미 있는 0.x 문서는 지우지 않는다 — 과거 요구 · 결정의 기록이다).
+- **`ddr-loop` 비교 문서를 forge-init 매니페스트의 Intent 로** — `--docs` 를 생략하면 폐지된 `forge-scope-build.md` →
+  Work Packet → TASK 경로를 따라가 항상 실패했다. 이제 메인 repo `.process/forge/<slug>.json` 에서 브랜치 · Intent
+  (`intent_worktree`) · base(`base_commit`)를 읽는다(**BREAKING** — 매니페스트 없는 v3.64 이전 워크트리는 `--docs` 를 줘도
+  대상이 아니다). `init` 출력 매니페스트에서 `work_packet` · `task_doc` · `required_ssot` · `forge_build_md` 키를 뺐고
+  `intent` 를 더했다. `docs_source` 값은 `auto-work-packet` → `auto-intent`, `base` 는 생략 시 매니페스트의 `base_commit`.
+- **문서 폴더 `docs` · `Docs` 를 같은 폴더로** — git 은 Windows 에서도 경로를 대소문자 구분으로 비교한다. 그래서 `Docs`
+  레포에서 `/forge-init` 이 승인 커밋을 놓쳐 dirty · 게이트로 멈췄고, 탐색기에서 폴더 이름만 바꾼 레포(디스크 `Docs` ·
+  커밋 `docs`)는 "Intent 가 마지막 커밋에 없다"로 막혔으며, `in-dev` 커밋에서 카탈로그가 조용히 빠졌다. 이제
+  `worktree_setup.py` 는 `--doc` 를 디스크 표기로, git 경로를 커밋된 표기로 맞추고, `docs_helpers.py` 는 문서 폴더를
+  대소문자 무시로 찾는다. forge-init · forge-scope 지시문의 git 명령은 `:(icase)` pathspec 을 쓴다. 한계: 대소문자 구분
+  FS 에 `docs/` 와 `Docs/` 가 둘 다 있으면 `docs/` 하나만 본다. macOS 는 실측하지 않았다(Windows · WSL ext4 실측).
+- **어휘 정리** — 에이전트 정의의 "SSOT / ADR / TASK" → "Intent / SSOT". branch-review 는 제거된 atdd-flow 의
+  `.atdd/**/*.md` spec glob 을 뺐고, README 현행 설명은 TASK · FRD 예시를 Intent 로 바꾸고 ADR-CATALOG 대비 문장을
+  지웠다.
+- **README 헤더 정정** — 상단 요약줄의 버전(v3.63.0 에 멈춰 있었다)과 커맨드 수(15 → 17), 개요 표의 버전(3.63.0 →
+  3.67.0)과 Skill 수(v3.66.0 에서 12 로 잘못 올린 것을 11 로).
+
+**신규 테스트** — `tests/test_intent_only.py`(폐지 문서 토큰이 스킬 · 커맨드 · 에이전트 · 스크립트 · 템플릿에 다시
+들어오면 실패), `tests/test_templates.py`(템플릿 · 스킬 · 커맨드가 가리키는 `.templates/` 경로가 실재), 문서 폴더
+대소문자 13건(Windows · WSL ext4 에서 수정 전 FAIL 확인).
+
+**이전 방법**: 매니페스트 없는 워크트리에서 `ddr-loop` 을 돌리려면 `/forge-init <Intent>` 로 다시 만든다. 제거된
+`docs_helpers.py` 서브커맨드는 대체가 없다.
+
+**검증**: `python -m pytest tests/ -q` → **416 passed, 3 skipped** (384 → 416).
 
 ### v3.66.0 — `/dispatch-session` 신설 · 세션 런처로 워크플로우의 마지막 구멍을 메움
 
