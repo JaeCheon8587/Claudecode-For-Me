@@ -1306,7 +1306,8 @@ class TestCheckAppIntentCatalog:
         write_intent(tmp_path, nnn="001")
         write_intent(tmp_path, nnn="002")
         self._write_catalog(tmp_path, capsys)
-        _, lines = self._lines(tmp_path, capsys)
+        rc, lines = self._lines(tmp_path, capsys)
+        assert rc == 0
         assert len(lines) == 1
         assert lines[0].startswith("PASS INT_CATALOG")
         assert "2 intents 최신" in lines[0]
@@ -1337,3 +1338,32 @@ class TestCheckAppIntentCatalog:
         )
         _, lines = self._lines(tmp_path, capsys)
         assert lines == []
+
+
+class TestCheckIntentOnly:
+    """check 는 Intent 체계만 검사한다 — v3.58 에서 걷어낸 PRD·FC·FRD·ADR·TASK 를 요구하지 않는다."""
+
+    def _run(self, tmp_path: Path, capsys, app: str = "Demo") -> tuple[int, str]:
+        rc = dh.main(["check", "--repo", str(tmp_path), "--app", app])
+        return rc, capsys.readouterr().out
+
+    def test_intent_only_repo_passes(self, tmp_path, capsys):
+        write_intent(tmp_path)
+        assert dh.main(["intent-catalog", "--repo", str(tmp_path), "--app", "Demo", "--write"]) == 0
+        capsys.readouterr()
+        rc, out = self._run(tmp_path, capsys)
+        assert rc == 0, out
+        assert not [line for line in out.splitlines() if line.startswith("FAIL ")]
+        assert out.strip().splitlines()[-1] == "Summary: 2 PASS, 0 WARN, 0 FAIL"
+
+    def test_app_without_legacy_docs_passes(self, tmp_path, capsys):
+        make_app_docs(tmp_path)
+        rc, out = self._run(tmp_path, capsys)
+        assert rc == 0, out
+        for code in ("APP_FILE", "APP_SUBDIR", "FRD_", "TASK_", "ADR_"):
+            assert code not in out
+
+    @pytest.mark.parametrize("cmd", ["list-apps", "next-id", "parse-fc", "parse-frd", "git-user"])
+    def test_legacy_subcommands_removed(self, tmp_path, capsys, cmd):
+        assert dh.main([cmd, "--repo", str(tmp_path)]) == 2
+        assert "invalid choice" in capsys.readouterr().err

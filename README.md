@@ -2397,7 +2397,7 @@ Claudecode-For-Me/
 │   ├── branch_review_chunk_plan.py  # branch-review diff 크기측정·모드판정·청크분할·patch 생성
 │   ├── ddr_loop.py              # ddr-loop 워크트리·docs 검증 + .process 스캐폴딩 (init)
 │   ├── doc_driven_review.py
-│   ├── docs_helpers.py
+│   ├── docs_helpers.py          # Intent 검사 — check · check-intent · intent-checklist · intent-catalog
 │   ├── ext_dispatch.py          # (v3.65.0 미사용 — 외부 위임 폐지, 보존만)
 │   ├── herdr_name.py            # dispatch-session herdr 에이전트 이름 정규화 (단독)
 │   ├── worktree_setup.py        # forge-init 워크트리 셋업·검증·매니페스트·cancel
