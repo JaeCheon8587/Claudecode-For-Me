@@ -1,114 +1,131 @@
 # DOCUMENT_GUIDE — 문서 작성 가이드
 
-> AI 코딩 에이전트가 신규 문서를 작성할 때 따라야 할 단일 SSOT. 작성 룰 충돌 시 본 가이드 우선. 코드 룰은 [DDD_ARCHITECTURE_RULES](.rules/DDD_ARCHITECTURE_RULES.md) / [OBJECT_ORIENTED_DESIGN_RULES](.rules/OBJECT_ORIENTED_DESIGN_RULES.md) / [BEHAVIORAL_GUIDELINES_RULES](.rules/BEHAVIORAL_GUIDELINES_RULES.md) 참조.
-> **본 파일은 deploy 후 `docs/DOCUMENT_GUIDE.md` 위치 기준**. 상대 경로는 `../CLAUDE.md`, 코드 룰 파일은 `.rules/` 하위.
+> AI 코딩 에이전트가 레포를 세팅하거나 문서를 작성할 때 따라야 할 단일 SSOT. 작성 룰 충돌 시 본 가이드 우선. 코드 룰은 [DDD_ARCHITECTURE_RULES](.rules/DDD_ARCHITECTURE_RULES.md) / [OBJECT_ORIENTED_DESIGN_RULES](.rules/OBJECT_ORIENTED_DESIGN_RULES.md) / [BEHAVIORAL_GUIDELINES_RULES](.rules/BEHAVIORAL_GUIDELINES_RULES.md) 참조.
+> **본 파일은 세팅 후 `docs/DOCUMENT_GUIDE.md` 위치 기준**. 상대 경로는 `../CLAUDE.md`, 코드 룰 파일은 `.rules/` 하위.
+> **템플릿은 참고 명세다.** 플러그인의 `docs/.templates/` 는 각 문서의 구조를 보여 주는 견본이다. 대상 레포에 복사해 두는 원본이 아니다 — 문서를 만들 때 해당 템플릿을 참고해 대상 레포 맥락으로 작성한다.
 
 | 항목 | 값 |
 |---|---|
 | 문서 ID | DOCUMENT_GUIDE (단일 파일) |
-| 버전 | 0.9 (Draft) |
-| 작성 가정 | 솔루션 전체 문서 (PRD/FC/FRD/RFD/TASK/WORK_PACKET/ADR/ADR-CATALOG/ARCHITECTURE) 의 작성 룰 통합 |
-| 관련 문서 | [CLAUDE](../CLAUDE.md) · [.templates/](.templates/) |
+| 버전 | 1.0 |
+| 작성 가정 | 문서는 두 종류다 — 상시 문서(CLAUDE · ARCHITECTURE · 코드 룰 · PRD)와 작업 단위 문서(Intent). 작업 단위 문서는 Intent 1종뿐이다 |
+| 관련 문서 | [CLAUDE](../CLAUDE.md) · [ARCHITECTURE](ARCHITECTURE.md) |
 
 ## 변경 이력
 | 버전 | 일자 | 변경 요약 | 작성자 |
 |---|---|---|---|
-| 0.1 | YYYY-MM-DD | 초안 | {이름} |
-| 0.2 | YYYY-MM-DD | per-app 레이아웃 재정의. ADR 명칭 확정. SYSTEM_CODE 출처를 `/CLAUDE.md` 로 이전 | {이름} |
-| 0.3 | YYYY-MM-DD | 템플릿 링크 실제 파일 경로(`.templates/App/...`) 정합. SOLUTION_CODE / SYSTEM_CODE 용어 분리. 솔루션 공통 양식 행 추가. 신규 App 시나리오 명문화. 템플릿 파일명도 ADR 로 통일 | {이름} |
-| 0.4 | YYYY-MM-DD | 코드 상세를 쓰지 않는 리팩토링 계획(RFD)·일회성 작업 계획(TASK) 문서 유형 추가 | {이름} |
-| 0.5 | YYYY-MM-DD | FRD도 코드 상세 금지 원칙 적용. 기능 요구·흐름·수용 기준 중심 문서로 재정의 | {이름} |
-| 0.6 | YYYY-MM-DD | TASK 문서 수정 범위 룰 추가 — TASK 본문은 자기 자신 외 SSOT 문서 직접 수정 금지, 영향은 §5·§6 에 명시만 하고 실제 갱신은 별도 작업으로 분리 | {이름} |
-| 0.7 | YYYY-MM-DD | 컨셉 재정의 — TASK = 휘발성 self-contained 작업 지시서 + 외부 SSOT 인용 금지 (양방향). 영향 SSOT 갱신은 작성 시점 사전 동반. AI 실행 시 SSOT 자동 수정 금지. RFD 양식 폐기 (리팩토링도 TASK 작업 유형 = refactor) | {이름} |
-| 0.8 | 2026-05-20 | ADR 용어 통일 (템플릿 파일명·결과 파일명·문서 ID 전부 ADR 접두사) | {이름} |
-| 0.9 | 2026-07-01 | TASK / SSOT / Work Packet 책임 분리. TASK 는 Scope Authority, SSOT 는 Truth Authority, Work Packet 은 Context Router 로 재정의 | {이름} |
+| 1.0 | 2026-10-07 | Intent 1문서 체계로 재작성. 0.x 의 작업 단위·인덱스 문서 폐지(§1.3). §0 레포 세팅 신설 — 템플릿은 복사 원본이 아니라 참고 명세 | {이름} |
 
-## 0. 용어 정의
+## 0. 레포 세팅
 
-| 용어 | 의미 | 예시 | 사용 위치 |
+새 레포를 세팅하거나 기존 레포를 이 체계에 맞출 때 이 절부터 읽는다.
+
+### 0.1 만드는 것
+
+| 경로 | 역할 | 참고 템플릿 | 필요성 |
 |---|---|---|---|
-| **SOLUTION_CODE** | 솔루션(레포 전체) 식별자 | `XLAB` | `docs/ARCHITECTURE.md`, `/CLAUDE.md` 제목, (선택) 솔루션 단일 PRD |
-| **SYSTEM_CODE** ≡ **APP_CODE** ≡ **{App}** | App(S/W 단위) 식별자. 3개 별칭은 동일 개념. **{App} 가 식별자 패턴 표기 기본** | `LOADER` | App별 문서 ID (`{App}-PRD`, `{App}-FRD-{NNN}` 등), 폴더명 `docs/{App}/` |
+| `/CLAUDE.md` | AI 진입점 · App 레지스트리(Backend Services Overview) · 문서 인덱스 | `.templates/CLAUDE-TEMPLATE.md` | 필수 |
+| `/README.md` | 사람용 개요 · 빌드·실행 | `.templates/README-TEMPLATE.md` | 필수 |
+| `docs/DOCUMENT_GUIDE.md` | 본 가이드 | `.templates/DOCUMENT_GUIDE.md` | 필수 |
+| `docs/ARCHITECTURE.md` | 솔루션 공통 코드 레이어 규칙 | `.templates/ARCHITECTURE-TEMPLATE.md` | 필수 |
+| `docs/.rules/*.md` | 코드 룰 (§1.1) | `.templates/.rules/` | 채택한 것만 |
+| `docs/PRD.md` | 솔루션 PRD — 여러 App 을 묶을 때 | `.templates/PRD-TEMPLATE.md` | 선택 |
+| `docs/{App}/` | App 폴더 — App 마다 1개 | — | 필수 |
+| `docs/{App}/{App}-PRD.md` | App PRD · 기능 목록(§7) | `.templates/App/APP-PRD-TEMPLATE.md` | 권장 |
+| `docs/{App}/{App}-ARCHITECTURE.md` | App 호스트 아키텍처 | `.templates/App/APP-ARCHITECTURE-TEMPLATE.md` | 권장 |
 
-SYSTEM_CODE 후보 단일 출처(SSOT): [`/CLAUDE.md` Backend Services Overview](../CLAUDE.md) 표. 신규 App 도입 시 해당 표 행 추가가 모든 다른 작업보다 선행.
+### 0.2 만들지 않는 것
+
+| 대상 | 이유 |
+|---|---|
+| `docs/{App}/INTENT/{App}-INT-{NNN}.md` | `/requirement-spec` 이 인터뷰로 작성한다. 손으로 만들지 않는다 |
+| `docs/{App}/{App}-INT-CATALOG.md` | 생성물 — `docs_helpers.py intent-catalog --write` 가 `INTENT/` 에서 파생한다. requirement-spec · `/forge-init` · forge-scope 가 상태 전이 때 다시 쓴다 |
+| `docs/.templates/` | 플러그인 쪽 참고 명세다. 대상 레포에 둘 필요 없다. 단 `docs/.templates/App/INTENT/APP-INT-001-TEMPLATE.md` 를 두면 requirement-spec 이 플러그인 템플릿 대신 그것을 쓴다 (레포별 커스터마이즈) |
+
+<!-- retired-doc-types:begin -->
+**폐지 문서 — 만들지 않는다**: `FRD/` · `ADR/` · `TASK/` · `WORK_PACKET/` · `RFD/` 폴더와 `{App}-FC.md` · `{App}-ADR-CATALOG.md`. 0.x 체계의 문서이며 역할은 Intent 가 대체한다 (§1.3).
+<!-- retired-doc-types:end -->
+
+### 0.3 세팅 순서
+
+1. `/CLAUDE.md` — SOLUTION_CODE 확정, Backend Services Overview 에 App 행 등록.
+2. `docs/DOCUMENT_GUIDE.md` · `docs/ARCHITECTURE.md` · 채택한 `docs/.rules/`.
+3. App 마다 `docs/{App}/` + (권장) App PRD · App ARCHITECTURE. 여러 App 이면 (선택) `docs/PRD.md`.
+4. `/README.md`.
+5. 첫 작업은 `/requirement-spec` 으로 시작한다 — §2.
 
 ## 1. 문서 종류와 역할
 
-### 1.1 솔루션 공통 (single-instance)
+### 1.1 솔루션 공통 (상시 문서)
 
-| 종류 | 위치 | 역할 | 성격 | 템플릿 |
+| 종류 | 위치 | 역할 | 참고 템플릿 |
+|---|---|---|---|
+| CLAUDE | `/CLAUDE.md` | AI 진입점 / 라우터 / SOLUTION_CODE·SYSTEM_CODE SSOT / Backend Services Overview | `.templates/CLAUDE-TEMPLATE.md` |
+| ARCHITECTURE | `docs/ARCHITECTURE.md` | 솔루션 공통 레이어 모델 / 참조 매트릭스 / 폴더→레이어 매핑 / 접미사 | `.templates/ARCHITECTURE-TEMPLATE.md` |
+| (선택) 솔루션 PRD | `docs/PRD.md` | 솔루션 시점 — 시스템 전체 배경/목표/범위 + cross-cutting SSOT 부록 (errorCode/도메인/DTO). 미채택 시 App PRD 가 cross-cutting 부록 겸유 | `.templates/PRD-TEMPLATE.md` |
+| 룰: DDD | `docs/.rules/DDD_ARCHITECTURE_RULES.md` | 레이어 위반 방지 단일 룰 | `.templates/.rules/DDD_ARCHITECTURE_RULES.md` |
+| 룰: OOP | `docs/.rules/OBJECT_ORIENTED_DESIGN_RULES.md` | SOLID 책임 분해 룰 | `.templates/.rules/OBJECT_ORIENTED_DESIGN_RULES.md` |
+| 룰: 클래스 구조 | `docs/.rules/CLASS_STRUCTURE_RULES.md` | 클래스 작성 규약 | `.templates/.rules/CLASS_STRUCTURE_RULES.md` |
+| 룰: 로깅 | `docs/.rules/LOGGING_RULES.md` | 서비스 로깅 규약 | `.templates/.rules/LOGGING_RULES.md` |
+| 룰: Behavioral | `docs/.rules/BEHAVIORAL_GUIDELINES_RULES.md` | LLM coding 행동 가이드 | `.templates/.rules/BEHAVIORAL_GUIDELINES_RULES.md` |
+| 본 가이드 | `docs/DOCUMENT_GUIDE.md` | 문서 작성 SSOT (본 파일) | `.templates/DOCUMENT_GUIDE.md` |
+
+### 1.2 App별 (per-{App})
+
+| 종류 | 위치 | 역할 | 성격 | 참고 템플릿 |
 |---|---|---|---|---|
-| CLAUDE | `/CLAUDE.md` | AI 진입점 / 라우터 / SOLUTION_CODE·SYSTEM_CODE SSOT / Backend Services Overview | 라우터 | [.templates/CLAUDE-TEMPLATE.md](.templates/CLAUDE-TEMPLATE.md) |
-| ARCHITECTURE | `docs/ARCHITECTURE.md` | 솔루션 공통 레이어 모델 / 참조 매트릭스 / 폴더→레이어 매핑 / 접미사 | 콘텐츠 | [.templates/ARCHITECTURE-TEMPLATE.md](.templates/ARCHITECTURE-TEMPLATE.md) |
-| (선택) 솔루션 PRD | `docs/PRD.md` | 솔루션 시점 — 시스템 전체 배경/목표/범위 + cross-cutting SSOT 부록 (errorCode/도메인/DTO). 단일 App 솔루션 시 (선택) — 미채택 시 App PRD 가 cross-cutting 부록 겸유 | 콘텐츠 | [.templates/PRD-TEMPLATE.md](.templates/PRD-TEMPLATE.md) |
-| 룰: DDD | `docs/.rules/DDD_ARCHITECTURE_RULES.md` | C# 레이어 위반 방지 단일 룰 | 룰 | [.templates/.rules/DDD_ARCHITECTURE_RULES.md](.templates/.rules/DDD_ARCHITECTURE_RULES.md) |
-| 룰: OOP | `docs/.rules/OBJECT_ORIENTED_DESIGN_RULES.md` | SOLID 책임 분해 룰 | 룰 | [.templates/.rules/OBJECT_ORIENTED_DESIGN_RULES.md](.templates/.rules/OBJECT_ORIENTED_DESIGN_RULES.md) |
-| 룰: Behavioral | `docs/.rules/BEHAVIORAL_GUIDELINES_RULES.md` | LLM coding 행동 가이드 | 룰 | [.templates/.rules/BEHAVIORAL_GUIDELINES_RULES.md](.templates/.rules/BEHAVIORAL_GUIDELINES_RULES.md) |
-| 본 가이드 | `docs/DOCUMENT_GUIDE.md` | 문서 작성 SSOT (본 파일) | 룰 | [.templates/DOCUMENT_GUIDE.md](.templates/DOCUMENT_GUIDE.md) |
+| App PRD | `docs/{App}/{App}-PRD.md` | App 시점 — 배경/목표/범위 + **기능 목록 SSOT (§7)**. 기술 시야(호스트/런타임)는 App ARCHITECTURE 위임. cross-cutting 부록은 솔루션 PRD 인용 | 상시 | `.templates/App/APP-PRD-TEMPLATE.md` |
+| App ARCHITECTURE | `docs/{App}/{App}-ARCHITECTURE.md` | App 호스트 아키텍처 (런타임/진입점/책임/구성요소) | 상시 | `.templates/App/APP-ARCHITECTURE-TEMPLATE.md` |
+| Intent | `docs/{App}/INTENT/{App}-INT-{NNN}.md` | 작업 단위 계약 — Part 1 기능 명세(무엇을·왜·결정) + Part 2 작업 지시(FR · 엣지 · 오류 · Acceptance · Verification · Handoff) | 작업 단위 | `.templates/App/INTENT/APP-INT-001-TEMPLATE.md` |
+| Intent 카탈로그 | `docs/{App}/{App}-INT-CATALOG.md` | Intent 목록·상태 인덱스. 모든 열이 Intent 에서 파생 | 생성물 | `.templates/App/APP-INT-CATALOG-TEMPLATE.md` (예시) |
 
-### 1.2 App별 (per-{App} 인스턴스)
+**Intent 생애주기**: `draft` → `approved` (requirement-spec 승인) → `in-dev` (`/forge-init`) → `in-review` (forge-scope 마감) → `done` (사람이 전이). 전이마다 카탈로그를 다시 쓴다.
 
-| 종류 | 위치 | 역할 | 성격 | 템플릿 |
-|---|---|---|---|---|
-| App PRD | `docs/{App}/{App}-PRD.md` | App 시점 — 솔루션 내 단일 App 의 배경/목표/범위/기능 (FC roll-up). 기술 시야 (호스트/런타임) 는 APP-ARCHITECTURE 위임. cross-cutting 부록은 솔루션 PRD 인용 | 콘텐츠 | [.templates/App/APP-PRD-TEMPLATE.md](.templates/App/APP-PRD-TEMPLATE.md) |
-| App FC | `docs/{App}/{App}-FC.md` | App별 기능 레지스트리 (5축 표) | 콘텐츠 인덱스 | [.templates/App/APP-FC-TEMPLATE.md](.templates/App/APP-FC-TEMPLATE.md) |
-| App ARCHITECTURE | `docs/{App}/{App}-ARCHITECTURE.md` | App별 호스트 아키텍처 (런타임/진입점/책임/구성요소) | 콘텐츠 | [.templates/App/APP-ARCHITECTURE-TEMPLATE.md](.templates/App/APP-ARCHITECTURE-TEMPLATE.md) |
-| App FRD | `docs/{App}/FRD/{App}-FRD-{NNN}.md` | App별 기능 요구 문서. 코드 상세 없이 목적·흐름·정책·수용 기준·문서 반영 범위 정의 | 콘텐츠 | [.templates/App/FRD/APP-FRD-001-TEMPLATE.md](.templates/App/FRD/APP-FRD-001-TEMPLATE.md) |
-| ~~App RFD~~ | ~~`docs/{App}/RFD/{App}-RFD-{NNN}.md`~~ | **DEPRECATED (v0.7)** — RFD 양식 폐기. 리팩토링 작업은 App TASK 의 `작업 유형 = refactor` 로 처리 | — | — |
-| App TASK | `docs/{App}/TASK/{App}-TASK-{NNN}.md` | App별 작업 범위 계약(Task Spec). **Scope Authority** 로서 목적·범위·비목표·완료 기준·엣지 케이스·오류 처리·테스트 기준을 정의한다. TASK 는 영구 SSOT 영향 후보를 분석하거나 갱신하지 않는다 | 휘발성 콘텐츠 | [.templates/App/TASK/APP-TASK-001-TEMPLATE.md](.templates/App/TASK/APP-TASK-001-TEMPLATE.md) |
-| App Work Packet | `docs/{App}/WORK_PACKET/{App}-WP-{NNN}.md` | AI 코드 실행용 context router. TASK + 관련 SSOT 링크 + 충돌 규칙 + 검증 입력을 얇게 묶는다. 본문 복제 금지 | 실행 manifest | [.templates/App/WORK_PACKET/APP-WP-001-TEMPLATE.md](.templates/App/WORK_PACKET/APP-WP-001-TEMPLATE.md) |
-| App ADR | `docs/{App}/ADR/{App}-ADR-{NNN}.md` | App별 아키텍처 결정 narrative | 콘텐츠 | [.templates/App/ADR/APP-ADR-001-TEMPLATE.md](.templates/App/ADR/APP-ADR-001-TEMPLATE.md) |
-| App ADR-CATALOG | `docs/{App}/{App}-ADR-CATALOG.md` | App별 결정 상태/영향/반영 인덱스 | 인덱스 | [.templates/App/APP-ADR-CATALOG-TEMPLATE.md](.templates/App/APP-ADR-CATALOG-TEMPLATE.md) |
+**코드 상세 위치**: Intent 는 생성·수정 대상의 클래스명·메서드명·파일 경로·라이브러리 API 를 Handoff 표 밖에 쓰지 않는다 — 개발 세션 몫이다. PRD 는 product 시야라 코드 상세를 쓰지 않는다. 코드 구조 규칙은 ARCHITECTURE · `.rules/` 에 둔다.
 
-**명칭**: 템플릿 파일명, 결과 파일명, 문서 ID 모두 `ADR` 를 사용한다.
+### 1.3 폐지 문서 대응 (0.x → 1.0)
 
-**FRD 작성 원칙**: FRD 에는 코드 경로, 파일명, 클래스명, 메서드명, 구현 방식, 테스트/검증 명령, 설정 키, API 경로·스키마를 쓰지 않는다. FRD 는 기능 요구·흐름·정책·수용 기준 중심.
+<!-- retired-doc-types:begin -->
+| 0.x 문서 | 1.0 에서 맡는 곳 |
+|---|---|
+| FRD (기능 요구) | Intent Part 1 + Part 2 `Functional requirements` |
+| TASK (작업 범위 계약) | Intent Part 2 (`Edge cases` · `Error cases` · `Acceptance` · `Verification` · `Handoff`) |
+| RFD (리팩토링 계획) | Intent `유형 = 리팩토링` |
+| Work Packet (실행 manifest) | `/forge-init` 매니페스트 (`.process/forge/handoff.json`, 생성물) |
+| ADR (결정 기록) | Intent Part 1 `Decisions` (`D1.` …) |
+| ADR-CATALOG (결정 인덱스) | `{App}-INT-CATALOG.md` (생성물) |
+| FC (기능 레지스트리) | App PRD §7 기능 목록 |
 
-**TASK / SSOT / Work Packet 작성·실행 원칙 (v0.9)**:
-
-1. **TASK = Scope Authority**. TASK 는 이번 작업의 목적·범위·비목표·완료 기준·엣지 케이스·오류 처리·테스트 기준을 정의한다. TASK 는 영구 SSOT 가 아니며, SSOT 영향 후보를 분석하거나 갱신하지 않는다.
-2. **SSOT = Truth Authority**. FRD/FC/ADR/ADR-CATALOG/ARCHITECTURE 는 제품·기능·구조 결정의 영구 진실이다. TASK 확정 후 별도 SSOT 작성 단계에서 관련 문서를 갱신한다.
-3. **Work Packet = Context Router**. Work Packet 은 TASK 와 관련 SSOT 를 링크하고, 코드 작업자가 읽을 문서·충돌 규칙·검증 입력을 지정한다. Work Packet 은 문서 본문을 길게 복제하지 않는다.
-4. **코드 실행 기준**: 코드 작업 시 TASK 는 범위 기준, SSOT 는 진실/제약 기준이다. TASK 와 SSOT 가 충돌하면 구현하지 않고 보고한다. TASK 에 없는 요구는 구현하지 않는다.
-5. **작업 유형 메타**: TASK 의 작업 유형을 `feature / refactor / maintenance / migration / setup / investigation / 기타` 중 하나로 분류한다. **리팩토링도 TASK 양식** (작업 유형 = refactor) 으로 처리 — RFD 양식 폐기.
-
-**RFD 폐기 안내**: 기존 RFD 양식 ([.templates/App/RFD/APP-RFD-001-TEMPLATE.md](.templates/App/RFD/APP-RFD-001-TEMPLATE.md)) 은 v0.7 부터 사용하지 않는다. 폴더 (`docs/{App}/RFD/`) 가 비어 있으면 그대로 두고, 기존 RFD 본문이 있으면 별도 결정으로 처리 (보존 / 삭제 / TASK 로 흡수).
-
-**부트스트랩 절차**: [`/CLAUDE.md` § 최초 부트스트랩](../CLAUDE.md) 참조.
+기존 레포에 0.x 문서가 있으면 지우지 않는다 — 과거 요구·결정의 기록이다. 새 작업은 Intent 로만 하고, 필요하면 Intent 의 Constraints · Decisions 에서 인용한다. 0.x 문서를 갱신하거나 새로 만들지 않는다.
+<!-- retired-doc-types:end -->
 
 ## 2. 작성 순서
 
-**신규 기능 추가**: `{App}-PRD.md` §3.1·§7 갱신 → `{App}-FC.md` 5축 표 행 추가 → `docs/{App}/FRD/{App}-FRD-{NNN}.md` 신규 (코드 상세 없이 기능 요구·수용 기준 작성) → 필요 시 ADR 등재 + `{App}-ADR-CATALOG.md` 동기화 → 구현 착수.
+**신규 기능 · 리팩토링**:
+1. `/requirement-spec` — 인터뷰로 Intent 를 작성하고 검증·승인한다. 산출물 `docs/{App}/INTENT/{App}-INT-{NNN}.md` (+ 카탈로그).
+2. `/forge-init` — 승인된 Intent 로 워크트리·브랜치를 만들고 `in-dev` 로 전이한다.
+3. 워크트리에서 개발 세션을 시작해 `/forge-scope` — 슬라이스마다 RED → GREEN → 리뷰 → 커밋, Acceptance 증거로 마감한다.
+4. `/branch-review` — 워크트리 브랜치를 리뷰한다.
+5. Intent 가 끝나면 상시 문서를 맞춘다 — 기능 목록이 바뀌었으면 App PRD §7 (여러 App 이면 솔루션 PRD §8 도), 코드 규칙이 바뀌었으면 ARCHITECTURE · `.rules/`. 근거로 Intent ID 를 남긴다.
 
-**신규 결정 등재**: `docs/{App}/ADR/{App}-ADR-{NNN}.md` 신규 (narrative) → `{App}-ADR-CATALOG.md` 의 Proposed/Accepted 행 추가 → 영향 PRD/FC/FRD 본문에 ADR 인용. TASK 는 ADR 을 직접 인용하지 않으며, 코드 실행 시 Work Packet 이 Required SSOT 로 ADR 을 연결한다.
+**결정 기록**: 되돌리기 어려운 결정은 그 결정을 실행하는 Intent 의 `Decisions` 에 남긴다 (근거 · 기각 대안 포함). 실행할 작업이 없는 규칙 변경이면 ARCHITECTURE · `.rules/` 본문을 직접 고치고 변경 이력에 근거를 남긴다.
 
-**리팩토링 작업** (v0.7 부터): RFD 양식 폐기. **TASK 양식 + 작업 유형 = refactor** 로 처리. 작성 흐름은 아래 "AI 코드 작업 준비" 와 동일.
-
-**AI 코드 작업 준비** (TASK → SSOT → Work Packet):
-1. `docs/{App}/TASK/{App}-TASK-{NNN}.md` 신규 — 작업 목적·범위·비목표·완료 기준·엣지 케이스·오류 처리·테스트 기준을 작성한다. TASK 는 SSOT 영향 후보를 만들지 않는다.
-2. TASK 확정 후 SSOT 작성 단계에서 관련 PRD/FC/FRD/ADR/ADR-CATALOG/ARCHITECTURE 를 갱신한다. 신규 기능이면 FRD/FC/PRD 를, 구조 결정이면 ADR/ADR-CATALOG 를 갱신한다.
-3. `docs/{App}/WORK_PACKET/{App}-WP-{NNN}.md` 신규 — TASK 링크 + Required SSOT 링크 + 충돌 규칙 + 검증 입력을 작성한다.
-4. AI 에게 Work Packet 을 입력으로 제공한다. AI 는 Work Packet 이 지정한 TASK 와 Required SSOT 를 읽고 코드 작업을 수행한다.
-5. 완료 후 TASK/Work Packet 은 삭제될 수 있다. 영구 추적은 영구 SSOT 본문·변경이력·ADR 에 남긴다.
-
-**아키텍처 룰 변경**: ADR 등재 (배경/결정/결과/대안) → ADR-CATALOG → 솔루션 룰 파일(`.rules/DDD_ARCHITECTURE_RULES.md` 등) 본문 갱신.
-
-**신규 App 추가**: `/CLAUDE.md` Backend Services Overview 표 행 추가 (SYSTEM_CODE 확정) → `/CLAUDE.md` 설계 문서 인덱스 표 App 행 복제·추가 → `docs/{App}/` 폴더 + 하위 `FRD/`·`ADR/`·`TASK/`·`WORK_PACKET/` 서브폴더 생성 → `.templates/App/` 직접 양식 복사·rename (`APP-PRD-TEMPLATE` → `{App}-PRD.md` 등) → `.templates/App/{ADR,FRD,TASK,WORK_PACKET}/` 서브폴더 양식은 첫 개별 문서 작성 시 사용.
+**신규 App 추가**: `/CLAUDE.md` Backend Services Overview 행 추가 (SYSTEM_CODE 확정) → `/CLAUDE.md` 설계 문서 인덱스 App 행 복제 → `docs/{App}/` 생성 → (권장) App PRD · App ARCHITECTURE 작성. 하위 폴더는 미리 만들지 않는다 — `INTENT/` 는 첫 `/requirement-spec` 이 만든다.
 
 ## 3. 메타 표 공통 패턴
 
-모든 콘텐츠 문서 상단 보유 (라우터 CLAUDE 제외):
+상시 콘텐츠 문서 상단 보유 (라우터 CLAUDE 제외). Intent 는 자체 메타 표(7행)를 쓴다 — Intent 템플릿 참조.
 
 | 항목 | 값 |
 |---|---|
 | 문서 ID | (§5 식별자 규약 참조) |
 | 버전 | 0.1 (Draft) 등 |
 | 작성 가정 | 작성 시 깔린 가정 한 줄 |
-| 관련 문서 | 상위 SSOT 인용 (PRD / ADR-CATALOG 등) |
+| 관련 문서 | 상위 SSOT 인용 (PRD / ARCHITECTURE 등) |
 
 ## 4. 변경 이력 표 공통 패턴
 
-메타 표 직후 신설. 모든 콘텐츠 문서 적용.
+메타 표 직후 신설. 상시 콘텐츠 문서에 적용한다. Intent 와 카탈로그는 제외 — Intent 는 상태 전이가 커밋으로 남고, 카탈로그는 생성물이다.
 
 ```
 ## 변경 이력
@@ -125,17 +142,12 @@ SYSTEM_CODE 후보 단일 출처(SSOT): [`/CLAUDE.md` Backend Services Overview]
 | SYSTEM_CODE ≡ APP_CODE ≡ {App} | 영문 대문자 (App 이름) | `LOADER` |
 | 솔루션 PRD ID | `{SOLUTION_CODE}-PRD` (NNN 없음 — 단일) | `XLAB-PRD` |
 | App PRD ID | `{App}-PRD` | `LOADER-PRD` |
-| FC ID | `{App}-FC` | `LOADER-FC` |
 | ARCHITECTURE ID | `{App}-ARCHITECTURE` | `LOADER-ARCHITECTURE` |
-| FRD ID | `{App}-FRD-{NNN}` (NNN 3자리, 001~099 정식 / 101~ Backlog) | `LOADER-FRD-001` |
-| ~~RFD ID~~ | ~~`{App}-RFD-{NNN}`~~ — **DEPRECATED (v0.7)** | — |
-| TASK ID | `{App}-TASK-{NNN}` (NNN 3자리) | `LOADER-TASK-001` |
-| Work Packet ID | `{App}-WP-{NNN}` (NNN 3자리) | `LOADER-WP-001` |
-| ADR ID | `{App}-ADR-{NNN}` (NNN 3자리) | `LOADER-ADR-001` |
-| ADR-CATALOG ID | `{App}-ADR-CATALOG` | `LOADER-ADR-CATALOG` |
-| 수용 기준 | `AC-{NNN}-{NNN}` (FRD 내부 로컬) | `AC-001-001` |
-| 테스트 | `TC-{NNN}-{NNN}` | `TC-001-001` |
-| 미확인 | `Q-{NNN}-{NNN}` | `Q-001-001` |
+| Intent ID | `{App}-INT-{NNN}` (NNN 3자리 0패딩) | `LOADER-INT-001` |
+| Intent 카탈로그 ID | `{App}-INT-CATALOG` | `LOADER-INT-CATALOG` |
+| Intent 항목 | `D{n}` 결정 · `C{n}` 제약 · `FR-{n}` · `E-{n}` · `X-{n}` · `A-{n}` (Intent 내부 로컬, 1부터) | `FR-3`, `A-2` |
+| 기능 ID | `F{NNN}` (App PRD §7 행, App 내부 로컬) | `F001` |
+| 기능 ID (cross-app) | `{App}:F{NNN}` | `LOADER:F001` |
 | errorCode | SCREAMING_SNAKE | `INVALID_TOKEN` |
 
 SYSTEM_CODE 후보는 [`/CLAUDE.md` Backend Services Overview](../CLAUDE.md) 표를 단일 출처. 신규 App 도입 시 해당 표 행 추가 선행. SOLUTION_CODE 는 `/CLAUDE.md` 제목 line + `docs/ARCHITECTURE.md` 메타 표가 단일 출처.
@@ -144,25 +156,21 @@ SYSTEM_CODE 후보는 [`/CLAUDE.md` Backend Services Overview](../CLAUDE.md) 표
 
 - placeholder 형식: `{설명}` 중괄호. 실제 값 채우거나 줄 삭제.
 - 솔루션 레벨 placeholder: `{SOLUTION_CODE}`, `{프로젝트명}`.
-- App 레벨 placeholder: `{App}` (또는 `{SYSTEM_CODE}` / `{APP_CODE}` — 동의어), `{NNN}` (FRD/ADR/TASK/WP 번호 3자리. RFD 는 v0.7 폐기).
-- 빈칸 / "N/A" **금지**. 해당 없으면 **"없음" 명기**.
+- App 레벨 placeholder: `{App}` (또는 `{SYSTEM_CODE}` / `{APP_CODE}` — 동의어), `{NNN}` (Intent 번호 3자리).
+- 빈칸 / "N/A" **금지**. 해당 없으면 **"없음" 명기** (Intent 는 템플릿 규칙대로 `none`).
 - 미완성 항목은 "미작성/추후" 명기.
-- `_` 또는 `.` 시작 폴더 (예: `.templates/`) 는 기본적으로 템플릿/감사용 — SSOT 아님. 단 `docs/.rules/` 는 예외 — 코드 룰 (DDD/OOP/Behavioral) SSOT.
+- `_` 또는 `.` 시작 폴더는 기본적으로 SSOT 아님. 단 `docs/.rules/` 는 예외 — 코드 룰 (DDD/OOP/클래스 구조/로깅/Behavioral) SSOT.
 
-## 7. SSOT 인용 패턴
+## 7. 인용 패턴
 
-상호 참조 시 마크다운 링크 + anchor. **영구 SSOT 끼리만 상호 인용한다. TASK 는 영구 SSOT 를 직접 링크하지 않고, 영구 SSOT 도 TASK 를 인용하지 않는다. Work Packet 은 실행 manifest 이므로 TASK 와 Required SSOT 를 링크할 수 있다.**
+상호 참조 시 마크다운 링크 + anchor.
 
-### 7.1 App 폴더 내부 상대 경로 (기준: `docs/{App}/` 내부 파일, 영구 SSOT 간 인용)
+### 7.1 App 폴더 내부 상대 경로 (기준: `docs/{App}/` 내부 파일)
 
-- 절: `[PRD §3]({App}-PRD.md#3-범위)`
-- 부록: `[PRD 부록]({App}-PRD.md#부록)`
-- FRD: `[{App}-FRD-001](FRD/{App}-FRD-001.md)`
-- ADR: `[{App}-ADR-001](ADR/{App}-ADR-001.md)`
-- ADR-CATALOG: `[ADR-CATALOG]({App}-ADR-CATALOG.md)`
-- ~~RFD~~: **DEPRECATED (v0.7)** — RFD 양식 폐기
-- ~~TASK~~: **영구 SSOT 본문에서 인용 금지** — TASK 는 휘발성. 영구 SSOT 가 TASK 를 인용하지 않으며, TASK 본문도 영구 SSOT 를 직접 링크하지 않는다. Work Packet 은 예외적으로 TASK 와 Required SSOT 를 링크한다.
-- Work Packet: `[LOADER-WP-001](WORK_PACKET/LOADER-WP-001.md)` (실행 manifest 내부 또는 작업 운영 문서에서만 사용)
+- PRD 절: `[PRD §3]({App}-PRD.md#3-목표)`
+- Intent: `[{App}-INT-001](INTENT/{App}-INT-001.md)`
+- Intent 결정: `[{App}-INT-001 D2](INTENT/{App}-INT-001.md#decisions)`
+- Intent 카탈로그: `[INT-CATALOG]({App}-INT-CATALOG.md)`
 
 ### 7.2 솔루션 공통 문서 참조 (기준: `docs/{App}/` 내부 파일 → 상위)
 
@@ -171,32 +179,31 @@ SYSTEM_CODE 후보는 [`/CLAUDE.md` Backend Services Overview](../CLAUDE.md) 표
 - DOCUMENT_GUIDE: `[DOCUMENT_GUIDE](../DOCUMENT_GUIDE.md)`
 - CLAUDE: `[CLAUDE](../../CLAUDE.md)` (레포 루트)
 
-### 7.3 메타 행 인용 룰
+### 7.3 인용 방향
 
-"관련 문서" 메타 행에 부모 SSOT (상위) 인용. 하위 (디테일) 는 본문에서 인용.
+- Intent → 상시 문서: 허용. Constraints · Decisions 의 근거로 인용한다.
+- 상시 문서 → Intent: 근거 표기로만 — App PRD §7 `근거 Intent` 열, 규칙 변경의 근거. Intent 본문을 상시 문서에 복제하지 않는다.
+- "관련 문서" 메타 행에는 상위 SSOT 를 인용하고, 하위(디테일)는 본문에서 인용한다.
 
 ## 8. 동기화 부담 위치
 
 | 변경 | 갱신 위치 |
 |---|---|
-| 신규 ADR | `{App}-ADR-{NNN}.md` + `{App}-ADR-CATALOG.md` + 영향 PRD/FC/FRD 본문 (TASK 인용 X) |
-| ~~신규 RFD~~ | **DEPRECATED (v0.7)** — 리팩토링은 신규 TASK 의 작업 유형 = `refactor` 로 처리 |
-| 신규 TASK | `docs/{App}/TASK/{App}-TASK-{NNN}.md` 신규. 목적·범위·비목표·완료 기준·엣지 케이스·오류 처리·테스트 기준만 정의. SSOT 영향 후보·갱신 대상은 작성하지 않는다 |
-| 신규 Work Packet | TASK 확정 + 관련 SSOT 갱신 후 `docs/{App}/WORK_PACKET/{App}-WP-{NNN}.md` 신규. TASK 링크, Required SSOT 링크, 충돌 규칙, 검증 입력만 작성 |
-| 신규 App | `/CLAUDE.md` Backend Services Overview + `/CLAUDE.md` 인덱스 표 + `docs/{App}/` 전체 신규 (`{App}-PRD.md` / `{App}-FC.md` / `{App}-ARCHITECTURE.md` / `{App}-ADR-CATALOG.md`) |
-| 신규 기능 `{NNN}` | `{App}-FC.md` 5축 표 행 + `{App}-FRD-{NNN}.md` 신규 + `{App}-PRD.md` §7 (해당 시) |
-| 신규 기능 `{NNN}` (cross-cutting 영향) | 위 + 솔루션 PRD §3.1·§8·§11 + 솔루션 부록 B/D/E (영향 시) |
-| 솔루션 PRD ↔ App PRD 동기화 | App PRD §3.1·§7 변경 시 솔루션 PRD §3.1·§8 동기화. App 신규 errorCode/도메인 entity/Contract DTO 발생 시 솔루션 PRD 부록 B/D/E 등재 선행 |
-| 아키텍처 룰 변경 | ADR + ADR-CATALOG + 솔루션 룰 파일 본문 |
+| 신규 Intent | `/requirement-spec` 이 `INTENT/` 에 작성 + 카탈로그 재생성 (자동) |
+| Intent 상태 전이 | 카탈로그 재생성 — requirement-spec · `/forge-init` · forge-scope 가 자동 수행. 빠뜨리면 `docs_helpers.py check` 가 `INT_CATALOG stale` 로 잡는다 |
+| Intent 완료로 기능 목록 변경 | App PRD §7 (+ 여러 App 이면 솔루션 PRD §8) |
+| Intent 완료로 cross-cutting 영향 | 위 + 솔루션 PRD §3.1 · 부록 B/D/E (영향 시) |
+| 결정으로 코드 규칙 변경 | ARCHITECTURE / `.rules/` 본문 + 변경 이력에 근거 Intent ID |
+| 솔루션 PRD ↔ App PRD 동기화 | App PRD §3.1 · §7 변경 시 솔루션 PRD §3.1 · §8 동기화. 신규 errorCode/도메인 entity/Contract DTO 발생 시 솔루션 PRD 부록 B/D/E 등재 선행 |
+| 신규 App | `/CLAUDE.md` Backend Services Overview + `/CLAUDE.md` 인덱스 표 + `docs/{App}/` (+ 권장 App PRD · App ARCHITECTURE) + 솔루션 PRD 가 있으면 §7 App 레지스트리 · §11 진입점 행 |
 | 새 룰 파일 추가 | `/CLAUDE.md` 인덱스 행 추가 |
-| 신규 솔루션 (레포 초기화) | `/CLAUDE.md` § 최초 부트스트랩 절차 수행 |
+| 신규 솔루션 (레포 초기화) | §0 레포 세팅 |
 
 ## 9. AI 작업 시나리오 요약
 
-- **신규 기능 추가 요청** → §2 의 신규 기능 추가 흐름. FRD 에 코드 상세 없이 기능 요구·흐름·수용 기준 작성.
-- **결정 등재 요청** → §2 의 신규 결정 흐름. ADR Proposed → Accepted.
-- **리팩토링 요청** → §2 의 "AI 코드 작업 준비" 흐름 (TASK 양식 + 작업 유형 = refactor). RFD 양식은 v0.7 폐기.
-- **일회성 작업 요청** → §2 의 "AI 코드 작업 준비" 흐름 (TASK → SSOT → Work Packet). TASK 는 범위 계약, Work Packet 은 실행 manifest 로 작성한다.
-- **신규 App 추가 요청** → §2 의 신규 App 추가 흐름. `/CLAUDE.md` Backend Services Overview 행 추가가 모든 다른 작업보다 선행.
-- **코드 작성 요청** → Work Packet 을 먼저 읽고 TASK + Required SSOT 를 확인한다. TASK 는 범위 기준, SSOT 는 진실/제약 기준이다. 충돌 시 구현하지 않고 보고한다. 공통 룰 파일 (`DDD_ARCHITECTURE_RULES` / `OBJECT_ORIENTED_DESIGN_RULES` / `BEHAVIORAL_GUIDELINES_RULES`) 의 4단계 마커 (반드시/허용/금지/절대 금지) 를 준수한다.
-- **신규 솔루션 부트스트랩 요청** → [`/CLAUDE.md` § 최초 부트스트랩](../CLAUDE.md) 절차 수행.
+- **레포 세팅 요청** → §0. §0.2 의 만들지 않는 것은 만들지 않는다.
+- **신규 기능 · 리팩토링 요청** → §2 흐름. 문서를 손으로 먼저 만들지 않는다 — `/requirement-spec` 이 Intent 를 만든다.
+- **결정 기록 요청** → §2 결정 기록.
+- **신규 App 추가 요청** → §2 신규 App 추가. Backend Services Overview 행 추가가 모든 다른 작업보다 선행.
+- **코드 작성 요청** → 승인된 Intent (개발 세션에서는 `/forge-init` 매니페스트) 를 먼저 읽는다. Part 2 가 범위, Constraints · Decisions · ARCHITECTURE · `.rules/` 가 제약이다. 충돌하면 구현하지 않고 보고한다. Intent 에 없는 요구는 구현하지 않는다. 공통 룰 파일의 4단계 마커 (반드시/허용/금지/절대 금지) 를 준수한다.
+- **0.x 문서가 남은 레포에서 작업 요청** → §1.3.

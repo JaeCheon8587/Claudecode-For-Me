@@ -2,7 +2,7 @@
 
 > ⚠ **TEMPLATE** — 이 파일은 **참고용 예시**다. 실제 `docs/{App}/{App}-INT-CATALOG.md` 는 손으로 만들지 않는다 — `python scripts/docs_helpers.py intent-catalog --repo . --app {App} --write` 가 `INTENT/` 폴더를 훑어 생성한다.
 >
-> ADR-CATALOG 와 성격이 다르다. ADR-CATALOG 는 `영향 범위`·`반영 문서` 처럼 ADR 본문에 없는 값을 들고 있는 **수기 SSOT** 지만, INT-CATALOG 의 모든 열은 Intent 문서의 메타 표·H1·Outcome·항목 수에서 **파생**된다. 고유 정보가 0 이므로 손으로 고치면 아래 `## 재생성 시점` 의 **4 곳**(Phase 5 진입 · `draft`→`approved` · `approved`→`in-dev` · `in-dev`→`in-review`)에서 반드시 어긋난다.
+> INT-CATALOG 의 모든 열은 Intent 문서의 메타 표·H1·Outcome·항목 수에서 **파생**된다. 고유 정보가 0 인 **생성물**이므로 손으로 고치면 아래 `## 재생성 시점` 의 **4 곳**(Phase 5 진입 · `draft`→`approved` · `approved`→`in-dev` · `in-dev`→`in-review`)에서 반드시 어긋난다.
 >
 > 값을 바꾸려면 **해당 Intent 문서를 고치고 재생성**한다. `docs_helpers.py check --app {App}` 이 불일치를 `INT_CATALOG` FAIL 로 잡는다.
 >
@@ -39,7 +39,7 @@
 |---|---|---|---|---|---|---|
 | [{App}-INT-001](INTENT/{App}-INT-001.md) | 워크트리 base 브랜치 선택 | 기능개발 | in-dev | PASS 2/3 | init 시 base 브랜치를 고를 수 있다 | FR 5 · A 4 |
 | [{App}-INT-002](INTENT/{App}-INT-002.md) | 커밋 전 배포 게이트 | 기능개발 | approved | SKIPPED — --no-gate | 배포 커밋 본문에 [Deploy] 표기 | FR 3 · A 3 |
-| [{App}-INT-003](INTENT/{App}-INT-003.md) | Intent 문서 통합 | 리팩토링 | draft | pending | TASK 와 SSOT 를 Intent 1문서로 합친다 | FR 4 · A 5 |
+| [{App}-INT-003](INTENT/{App}-INT-003.md) | Intent 문서 통합 | 리팩토링 | draft | pending | 작업 단위 문서를 Intent 하나로 합친다 | FR 4 · A 5 |
 
 intents: 3
 ```

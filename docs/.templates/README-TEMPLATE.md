@@ -47,22 +47,20 @@
 |---|---|
 | 문서 작성 룰 | [`docs/DOCUMENT_GUIDE.md`](docs/DOCUMENT_GUIDE.md) |
 | 솔루션 아키텍처 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
-| App 요구사항 | [`docs/{SYSTEM_CODE}/{SYSTEM_CODE}-PRD.md`](docs/{SYSTEM_CODE}/{SYSTEM_CODE}-PRD.md) |
-| App 기능 레지스트리 | [`docs/{SYSTEM_CODE}/{SYSTEM_CODE}-FC.md`](docs/{SYSTEM_CODE}/{SYSTEM_CODE}-FC.md) |
-| App 기능별 상세 | [`docs/{SYSTEM_CODE}/FRD/`](docs/{SYSTEM_CODE}/FRD/) |
-| App 작업 지시서 | [`docs/{SYSTEM_CODE}/TASK/`](docs/{SYSTEM_CODE}/TASK/) |
-| App AI 실행 Work Packet | [`docs/{SYSTEM_CODE}/WORK_PACKET/`](docs/{SYSTEM_CODE}/WORK_PACKET/) |
-| App 결정 이력 | [`docs/{SYSTEM_CODE}/{SYSTEM_CODE}-ADR-CATALOG.md`](docs/{SYSTEM_CODE}/{SYSTEM_CODE}-ADR-CATALOG.md) |
-| 코드 레이어 규칙 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
+| App 요구사항 · 기능 목록 | [`docs/{SYSTEM_CODE}/{SYSTEM_CODE}-PRD.md`](docs/{SYSTEM_CODE}/{SYSTEM_CODE}-PRD.md) |
+| App 호스트 아키텍처 | [`docs/{SYSTEM_CODE}/{SYSTEM_CODE}-ARCHITECTURE.md`](docs/{SYSTEM_CODE}/{SYSTEM_CODE}-ARCHITECTURE.md) |
+| App 작업 단위 (Intent) | [`docs/{SYSTEM_CODE}/INTENT/`](docs/{SYSTEM_CODE}/INTENT/) |
+| App Intent 카탈로그 (생성물) | [`docs/{SYSTEM_CODE}/{SYSTEM_CODE}-INT-CATALOG.md`](docs/{SYSTEM_CODE}/{SYSTEM_CODE}-INT-CATALOG.md) |
+| 코드 룰 | [`docs/.rules/`](docs/.rules/) |
 
 > AI 에이전트(Claude Code 등)로 작업 시: 레포 루트 [`CLAUDE.md`](CLAUDE.md)를 참조한다.
 
 ## 기여
 
-{기여 정책. 예: 신규 기능은 PRD → FC → FRD 갱신 후 구현 착수. FRD 에는 코드 상세를 쓰지 않는다. AI 코드 작업은 TASK 작성 → SSOT 갱신 → Work Packet 작성 후 진행한다. TASK 는 범위 기준, SSOT 는 진실/제약 기준, Work Packet 은 실행 manifest 다. 상세는 docs/DOCUMENT_GUIDE.md §2. RFD 양식은 v0.7 폐기.}
+{기여 정책. 예: 신규 기능·리팩토링은 `/requirement-spec` 으로 Intent 를 작성·승인한 뒤 착수한다 (`/forge-init` → `/forge-scope` → `/branch-review`). 결정은 Intent 의 Decisions 에 남긴다. 기능 목록이 바뀌면 App PRD §7 을 갱신한다. 상세는 docs/DOCUMENT_GUIDE.md §2.}
 
 - 커밋 메시지: {conventional commits 형식 — `feat:`, `fix:`, `docs:`, `refactor:` 등}
-- PR 전 체크리스트: [`docs/DOCUMENT_GUIDE.md` §9](docs/DOCUMENT_GUIDE.md) 검증 항목 통과.
+- PR 전 체크리스트: [`docs/DOCUMENT_GUIDE.md` §8](docs/DOCUMENT_GUIDE.md#8-동기화-부담-위치) 동기화 위치 갱신 확인.
 
 ## 라이선스
 

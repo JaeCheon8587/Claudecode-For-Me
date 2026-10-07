@@ -16,7 +16,7 @@
 |---|---|---|---|
 | 0.1 | YYYY-MM-DD | 초안 | {이름} |
 
-> 본 문서는 **시스템 전체 시점**의 제품 요구사항. 단일 App 의 상세 product 요구사항은 [`docs/{App}/{App}-PRD.md`]({App}/{App}-PRD.md) 위임. App별 기능 정의 SSOT 는 [`{App}-FC.md`]({App}/{App}-FC.md). 부록 B·D·E 는 솔루션 전체 S/W 를 망라하는 cross-cutting 단일 정의 위치.
+> 본 문서는 **시스템 전체 시점**의 제품 요구사항. 단일 App 의 상세 product 요구사항은 [`docs/{App}/{App}-PRD.md`]({App}/{App}-PRD.md) 위임. App별 기능 목록 SSOT 는 각 App PRD §7. 부록 B·D·E 는 솔루션 전체 S/W 를 망라하는 cross-cutting 단일 정의 위치.
 
 ---
 
@@ -39,11 +39,11 @@
 |---|---|
 | MVP 필수 | {솔루션 MVP 결과 — cross-app 망라} |
 | 이번 릴리즈 포함 | {솔루션 현 릴리즈 범위 — 모든 App 합집합} |
-| 이번 릴리즈 제외 | {솔루션 제외 항목. 필요 시 App FC Backlog 등재} |
+| 이번 릴리즈 제외 | {솔루션 제외 항목. 필요 시 영향 App PRD §7 에 `Backlog` 로 등재} |
 
 ## 4. 비목표
 - {솔루션 비목표 1 — 명시적으로 안 만들 영역}
-- {비목표 2 — 향후 확장 후보는 영향 App 의 [`{App}-FC.md`]({App}/{App}-FC.md) Backlog 등재}
+- {비목표 2 — 향후 확장 후보는 영향 App PRD §7 에 `Backlog` 로 등재}
 
 ## 5. 사용자 / 이해관계자
 > 솔루션 전체 user persona. App 한정 user 는 [`{App}-PRD.md` §5]({App}/{App}-PRD.md) 위임.
@@ -74,7 +74,7 @@
 - {예: 통합 인증 / 공유 카탈로그 / 알림 채널. 없으면 "없음"}
 
 ## 8. 주요 기능 요약 (솔루션 전체 roll-up)
-> 모든 App `F{NNN}` 망라. 각 App `{App}-FC.md` § 기능 레지스트리 가 SSOT. App PRD §7 은 본 표의 App-한정 subset.
+> 모든 App `F{NNN}` 망라. 각 App PRD §7 이 SSOT — 본 표는 그 roll-up 이다.
 
 | App | 기능 ID | 기능명 | 한 줄 설명 | 릴리즈 범위 |
 |---|---|---|---|---|
@@ -96,17 +96,17 @@
 
 ## 10. 제약사항 (솔루션 공통)
 > 코드/레이어 제약은 [`DDD_ARCHITECTURE_RULES.md`](.rules/DDD_ARCHITECTURE_RULES.md) / [`OBJECT_ORIENTED_DESIGN_RULES.md`](.rules/OBJECT_ORIENTED_DESIGN_RULES.md) SSOT 인용. 본 절은 product/도메인 제약 + 룰 파일 인용만.
-> 솔루션 level architecture 결정은 App ADR 가 SSOT — cross-app 영향 ADR 는 영향 App 중 하나의 [`docs/{App}/ADR/{App}-ADR-{NNN}.md`]({App}/ADR/{App}-ADR-{NNN}.md) 본문 인용.
+> 솔루션 level 결정은 그 결정을 실행한 Intent 의 `Decisions` 가 SSOT — cross-app 영향 결정은 영향 App 중 하나의 Intent 를 인용 (`[{App}-INT-{NNN} D{n}]({App}/INTENT/{App}-INT-{NNN}.md#decisions)`).
 
 - {도메인 제약 1 — cross-app 적용}
 - {기술 제약 — DDD/레이어 룰 인용}
 
-## 11. App 별 PRD/FC/FRD 진입점
-> per-App SSOT 인덱스. 전체 FRD 인덱스는 각 `{App}-FC.md` § 문서 연결 SSOT.
+## 11. App 별 문서 진입점
+> per-App 진입점. 기능 목록은 각 App PRD §7, 작업 단위 문서 목록은 각 App 의 생성물 INT-CATALOG.
 
-| App | App PRD | App FC | 주요 FRD |
+| App | App PRD | App ARCHITECTURE | Intent 카탈로그 |
 |---|---|---|---|
-| {App} | [`{App}-PRD`]({App}/{App}-PRD.md) | [`{App}-FC`]({App}/{App}-FC.md) | [`{App}-FRD-001`]({App}/FRD/{App}-FRD-001.md) |
+| {App} | [`{App}-PRD`]({App}/{App}-PRD.md) | [`{App}-ARCHITECTURE`]({App}/{App}-ARCHITECTURE.md) | [`{App}-INT-CATALOG`]({App}/{App}-INT-CATALOG.md) |
 
 ---
 
@@ -142,12 +142,12 @@ stateDiagram-v2
 - {State1} → {State2}: {조건·금지 사항. cross-app 협력 명시}
 
 ## 부록 D — 도메인 모델
-> **본 부록은 솔루션 PRD SSOT** — 솔루션 전체 S/W 를 망라하는 핵심 엔티티 속성 단일 정의 위치. App FRD §10/§11 은 본 표 인용. App PRD 는 본 표 인용 (App-한정 entity 변형 발생 시 본 표 갱신).
+> **본 부록은 솔루션 PRD SSOT** — 솔루션 전체 S/W 를 망라하는 핵심 엔티티 속성 단일 정의 위치. Intent · App PRD 는 본 표 인용 (App-한정 entity 변형 발생 시 본 표 갱신).
 
 ### {Entity1} 엔티티
 | 속성 | 타입 | 제약 | 출처 |
 |---|---|---|---|
-| `{prop}` | {type} | {제약} | {요구사항 §X 또는 [{App}-ADR-{NNN}]({App}/ADR/{App}-ADR-{NNN}.md)} |
+| `{prop}` | {type} | {제약} | {요구사항 §X 또는 [{App}-INT-{NNN} D{n}]({App}/INTENT/{App}-INT-{NNN}.md#decisions)} |
 
 > **불변식**: {도메인 규칙 한 줄씩}
 
