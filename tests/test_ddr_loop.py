@@ -33,63 +33,48 @@ def commit_all(repo: Path, message: str = "docs") -> None:
     run_git(repo, "commit", "-q", "-m", message)
 
 
-def write_docs(repo: Path, nnn: str = "001") -> tuple[Path, Path, Path]:
-    task = repo / "docs" / "XLAB" / "TASK" / f"XLAB-TASK-{nnn}.md"
-    frd = repo / "docs" / "XLAB" / "FRD" / f"XLAB-FRD-{nnn}.md"
-    wp = repo / "docs" / "XLAB" / "WORK_PACKET" / f"XLAB-WP-{nnn}.md"
-    task.parent.mkdir(parents=True, exist_ok=True)
-    frd.parent.mkdir(parents=True, exist_ok=True)
-    wp.parent.mkdir(parents=True, exist_ok=True)
-    task.write_text(f"# XLAB-TASK-{nnn}\n\n## 9. 완료 기준\n- pass\n", encoding="utf-8")
-    frd.write_text(f"# XLAB-FRD-{nnn}\n\n## 1. 기준\n- pass\n", encoding="utf-8")
-    wp.write_text(
-        f"""# XLAB-WP-{nnn}
+INTENT_ID = "XLAB-INT-001"
+INTENT_REL = f"docs/XLAB/INTENT/{INTENT_ID}.md"
 
-| 항목 | 값 |
-|---|---|
-| 문서 ID | XLAB-WP-{nnn} |
-| 상태 | Ready |
-| 연결 TASK | [XLAB-TASK-{nnn}](../TASK/XLAB-TASK-{nnn}.md) |
 
-## 2. TASK
-| 구분 | 링크 | 사용 목적 |
-|---|---|---|
-| Scope Authority | [XLAB-TASK-{nnn}](../TASK/XLAB-TASK-{nnn}.md) | 범위 |
-
-## 4. Required SSOT Execution Matrix
-| SSOT type | Action | Document | Read range | Why required | Source matrix row | Priority |
-|---|---|---|---|---|---|---|
-| FRD | UPDATE | [XLAB-FRD-{nnn}](../FRD/XLAB-FRD-{nnn}.md) | §1 | 기준 | row 1 | Required |
-""",
+def write_intent(repo: Path) -> Path:
+    intent = repo / INTENT_REL
+    intent.parent.mkdir(parents=True, exist_ok=True)
+    intent.write_text(
+        f"# {INTENT_ID} — 샘플\n\n## Part 2 — 작업 지시\n\n### Acceptance\n- [ ] A-1. pass (FR-1)\n",
         encoding="utf-8",
     )
-    return wp, task, frd
+    return intent
 
 
-def create_forge_worktree(repo: Path, slug: str) -> Path:
+def create_forge_worktree(repo: Path, slug: str, branch: str) -> Path:
     wt = repo / ".worktree" / slug
     wt.parent.mkdir(parents=True, exist_ok=True)
-    run_git(repo, "worktree", "add", "-b", f"feat-{slug}", str(wt), "HEAD")
+    run_git(repo, "worktree", "add", "-b", branch, str(wt), "HEAD")
     return wt
 
 
-def write_forge_build(wt: Path, slug: str, wp: Path, task: Path, repo: Path) -> None:
-    proc = wt / ".process" / slug
-    proc.mkdir(parents=True, exist_ok=True)
-    wp_rel = wp.relative_to(repo).as_posix()
-    task_rel = task.relative_to(repo).as_posix()
-    (proc / "forge-scope-build.md").write_text(
-        f"""# Build - {slug}
+def write_manifest(repo: Path, slug: str, **fields: object) -> Path:
+    """forge-init 이 메인 repo 에 남기는 매니페스트(.process/forge/<slug>.json) 사본."""
+    mf = repo / ".process" / "forge" / f"{slug}.json"
+    mf.parent.mkdir(parents=True, exist_ok=True)
+    mf.write_text(json.dumps(fields, ensure_ascii=False), encoding="utf-8")
+    return mf
 
-## 입력
-- Work Packet: `{wp_rel}`
-- TASK 문서: `{task_rel}`
-- Legacy 입력 문서: `{wp_rel}`
-- Required SSOT: _(filled by forge-scope session)_
-- 빌드 타겟(.csproj): tests/Sample.Tests.csproj
-""",
-        encoding="utf-8",
+
+def forge_setup(repo: Path, slug: str = INTENT_ID, branch: str = f"intent/{INTENT_ID}") -> tuple[Path, Path, str]:
+    """Intent 커밋 → 워크트리 생성 → 매니페스트 기록. (wt, 워크트리 안 Intent, base_commit)"""
+    intent = write_intent(repo)
+    commit_all(repo, "docs: intent")
+    base_commit = run_git(repo, "rev-parse", "HEAD").stdout.strip()
+    wt = create_forge_worktree(repo, slug, branch)
+    intent_wt = wt / INTENT_REL
+    write_manifest(
+        repo, slug,
+        branch=branch, worktree=str(wt), base="main", base_commit=base_commit,
+        intent=str(intent), intent_worktree=str(intent_wt), intent_id=INTENT_ID,
     )
+    return wt, intent_wt, base_commit
 
 
 def run_init(repo: Path, *args: str) -> subprocess.CompletedProcess:
@@ -108,53 +93,68 @@ def manifest_from(result: subprocess.CompletedProcess) -> dict:
     return json.loads(result.stdout.strip().splitlines()[-1])
 
 
-def test_init_without_docs_auto_uses_work_packet_task_and_required_ssot(git_repo: Path):
-    slug = "XLAB-WP-001"
-    wp, task, frd = write_docs(git_repo, "001")
-    commit_all(git_repo)
-    wt = create_forge_worktree(git_repo, slug)
-    write_forge_build(wt, slug, wp, task, git_repo)
+def test_init_without_docs_uses_manifest_intent(git_repo: Path):
+    wt, intent_wt, base_commit = forge_setup(git_repo)
 
-    result = run_init(git_repo, "--slug", slug)
+    result = run_init(git_repo, "--slug", INTENT_ID)
 
     assert result.returncode == 0, result.stderr
     manifest = manifest_from(result)
-    assert manifest["docs_source"] == "auto-work-packet"
-    assert manifest["work_packet"] == str(wp.resolve())
-    assert manifest["task_doc"] == str(task.resolve())
-    assert manifest["required_ssot"] == [str(frd.resolve())]
-    assert manifest["docs"] == [str(wp.resolve()), str(task.resolve()), str(frd.resolve())]
+    assert manifest["branch"] == f"intent/{INTENT_ID}"
+    assert manifest["worktree"] == str(wt.resolve())
+    assert manifest["docs_source"] == "auto-intent"
+    assert manifest["intent"] == str(intent_wt.resolve())
+    assert manifest["docs"] == [str(intent_wt.resolve())]
+    assert manifest["base"] == base_commit
+    for retired in ("work_packet", "task_doc", "required_ssot", "forge_build_md"):
+        assert retired not in manifest
     build_md = Path(manifest["build_md"]).read_text(encoding="utf-8")
-    assert "비교 문서 source: `auto-work-packet`" in build_md
-    assert "Work Packet: `docs/XLAB/WORK_PACKET/XLAB-WP-001.md`" in build_md
-    assert "TASK 문서: `docs/XLAB/TASK/XLAB-TASK-001.md`" in build_md
-    assert "Required SSOT: docs/XLAB/FRD/XLAB-FRD-001.md" in build_md
+    assert "비교 문서 source: `auto-intent`" in build_md
+    assert f"- Intent: `.worktree/{INTENT_ID}/{INTENT_REL}`" in build_md
+    assert f"- base ref(vs): `{base_commit}`" in build_md
+    assert "Work Packet" not in build_md
 
 
-def test_init_with_explicit_docs_keeps_legacy_override(git_repo: Path):
-    slug = "manual-docs"
-    _, task, _ = write_docs(git_repo, "002")
-    commit_all(git_repo)
-    create_forge_worktree(git_repo, slug)
+def test_init_explicit_base_overrides_manifest_base_commit(git_repo: Path):
+    forge_setup(git_repo)
 
-    result = run_init(git_repo, "--slug", slug, "--docs", str(task))
+    result = run_init(git_repo, "--slug", INTENT_ID, "--base", "develop")
+
+    assert result.returncode == 0, result.stderr
+    assert manifest_from(result)["base"] == "develop"
+
+
+def test_init_with_explicit_docs_overrides_intent(git_repo: Path):
+    forge_setup(git_repo)
+    spec = git_repo / "docs" / "spec.md"
+    spec.write_text("# spec\n", encoding="utf-8")
+
+    result = run_init(git_repo, "--slug", INTENT_ID, "--docs", str(spec))
 
     assert result.returncode == 0, result.stderr
     manifest = manifest_from(result)
     assert manifest["docs_source"] == "explicit"
-    assert manifest["work_packet"] is None
-    assert manifest["task_doc"] is None
-    assert manifest["required_ssot"] == []
-    assert manifest["docs"] == [str(task.resolve())]
+    assert manifest["intent"] is None
+    assert manifest["docs"] == [str(spec.resolve())]
 
 
-def test_init_without_docs_blocks_when_work_packet_metadata_missing(git_repo: Path):
-    slug = "legacy-task"
-    write_docs(git_repo, "003")
+def test_init_blocks_without_forge_init_manifest(git_repo: Path):
+    write_intent(git_repo)
     commit_all(git_repo)
-    create_forge_worktree(git_repo, slug)
+    create_forge_worktree(git_repo, "no-manifest", "feat-no-manifest")
 
-    result = run_init(git_repo, "--slug", slug)
+    result = run_init(git_repo, "--slug", "no-manifest", "--docs", INTENT_REL)
+
+    assert result.returncode == 2
+    assert "forge-init 매니페스트" in result.stderr
+    assert "/forge-init" in result.stderr
+
+
+def test_init_without_docs_blocks_when_manifest_has_no_intent(git_repo: Path):
+    forge_setup(git_repo)
+    write_manifest(git_repo, INTENT_ID, branch=f"intent/{INTENT_ID}", base_commit="")
+
+    result = run_init(git_repo, "--slug", INTENT_ID)
 
     assert result.returncode == 2
     assert "비교 문서 자동 구성 실패" in result.stderr

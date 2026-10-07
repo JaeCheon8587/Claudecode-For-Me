@@ -8,13 +8,11 @@
 
 ## 입력
 - 대상 브랜치: `{branch}` (워크트리)
-- 비교 문서 source: `{docsSource}`
-- Work Packet: `{workPacketPath}`
-- TASK 문서: `{taskDocPath}`
-- Required SSOT: {requiredSsotDocs}
+- 비교 문서 source: `{docsSource}` (`auto-intent` = forge-init 매니페스트의 Intent / `explicit` = `--docs`)
+- Intent: `{intentPath}`
 - 비교 문서(최종 docs): {docPath}
-- 빌드 타겟(.csproj): _(forge-scope-build.md 있으면 그 타겟 재사용 / 없으면 docs·사용자 지정 — 여기 명시)_
-- base ref(vs): _(feat-{slug} 분기 모브랜치 — `git merge-base feat-{slug} <develop|main>`, 여기 명시)_
+- 빌드 타겟(.csproj): _(Intent Handoff 의 repo · app 과 워크트리 구조에서 도출하거나 사용자 지정 — 여기 명시)_
+- base ref(vs): `{base}`
 
 ## 루프 설정 (고정)
 - scope: `branch` (브랜치 누적 변경 vs base)
@@ -22,7 +20,7 @@
 - 정지 임계: 일치율 **≥ 99%**
 
 ## 회차 절차 (각 iter)
-1. **검증**: `doc_driven_review.py --docs <docs> --worktree {branch} --scope branch [--base <ref>]` → stdout 마지막 줄 `Conformance: N%` 추출. 자동 문서 source면 `<docs>`는 Work Packet + TASK + Required SSOT 전체다.
+1. **검증**: `doc_driven_review.py --docs <docs> --worktree {branch} --scope branch [--base <ref>]` → stdout 마지막 줄 `Conformance: N%` 추출. 자동 문서 source면 `<docs>`는 Intent 1개다.
 2. **기록**: progress.md iter 행에 일치율 + 주요 findings(Top Priorities/Review Comments) 요약.
 3. **판정**: N ≥ 99 → 수렴 정지(수정 불요). iter==3 → cap 정지.
 4. **수정**: codex 리뷰의 `Top Priorities` / `Review Comments`([CRITICAL]>[MAJOR]>[MINOR]) / `Overengineered`를 워크트리 안에서 인라인 수정 — 코드를 docs 요구에 맞춘다.
@@ -32,7 +30,6 @@
 ## 금지사항
 - 솔루션(`*.sln`) 빌드·테스트.
 - 메인 repo(워크트리 상위) 파일 수정. 작업은 워크트리 안에서만.
-- **비교 문서·영구 SSOT(PRD/FRD/ADR 등) 자동 수정** — 일치율을 올리려 docs를 고치지 않는다. docs는 정답, 코드를 거기 맞춘다.
-- Work Packet의 Required SSOT Execution Matrix를 DDR 비교에서 누락.
+- **비교 문서(Intent 등) 자동 수정** — 일치율을 올리려 docs를 고치지 않는다. docs는 정답, 코드를 거기 맞춘다.
 - 테스트 약화·삭제로 통과 위장. `.review/` 산출물 편집.
 - 범위 밖 리팩토링(Overengineered 지적분 제거는 예외).

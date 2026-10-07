@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """ddr_loop — doc-driven 수렴 루프 셋업 helper.
 
-forge-scope 워크트리(feat-<slug>)에 ddr-loop 빌드/프로그레스 문서를 스캐폴딩한다.
+forge-init 이 만든 워크트리에 ddr-loop 빌드/프로그레스 문서를 스캐폴딩한다. 브랜치·비교 문서(Intent)·
+base 는 forge-init 매니페스트(.process/forge/<slug>.json)에서 읽는다.
 오케스트레이션·리뷰·수정은 하지 않는다 — 그건 호출 세션이 doc_driven_review.py 를
 반복 호출하며 워크트리 안에서 인라인으로 수행한다.
 
 Subcommands
 -----------
 - init : 워크트리·docs 검증 → .process/<docName>/{ddr-loop-build.md, ddr-loop-progress.md}
-         스캐폴딩(자기 파일만 덮어쓰기 — forge-scope 산출물 보존) → JSON 매니페스트.
+         스캐폴딩(자기 파일만 덮어쓰기 — 다른 산출물 보존) → JSON 매니페스트.
 
 표준 라이브러리만 사용한다 (Python 3.10+).
 """
@@ -57,77 +58,6 @@ def _slugify(stem: str) -> str:
     return s or "task"
 
 
-def _split_md_row(line: str) -> list[str]:
-    if not line.strip().startswith("|"):
-        return []
-    return [cell.strip() for cell in line.strip().strip("|").split("|")]
-
-
-def _is_separator_row(cells: list[str]) -> bool:
-    return bool(cells) and all(re.fullmatch(r":?-{3,}:?", c.strip()) for c in cells)
-
-
-def _section(text: str, heading_re: str) -> Optional[str]:
-    lines = text.splitlines()
-    start = None
-    for i, ln in enumerate(lines):
-        if re.match(heading_re, ln):
-            start = i
-            break
-    if start is None:
-        return None
-    body: list[str] = []
-    for ln in lines[start + 1:]:
-        if ln.startswith("## "):
-            break
-        body.append(ln)
-    return "\n".join(body)
-
-
-def _markdown_links(text: str) -> list[tuple[str, str]]:
-    return [(m.group(1).strip(), m.group(2).strip()) for m in re.finditer(r"\[([^\]]+)\]\(([^)]+)\)", text)]
-
-
-def _markdown_table(section_text: str) -> list[dict[str, str]]:
-    header: Optional[list[str]] = None
-    rows: list[dict[str, str]] = []
-    for line in section_text.splitlines():
-        cells = _split_md_row(line)
-        if not cells:
-            if header and rows:
-                break
-            continue
-        if _is_separator_row(cells):
-            continue
-        if header is None:
-            header = cells
-            continue
-        padded = cells + [""] * max(0, len(header) - len(cells))
-        rows.append(dict(zip(header, padded)))
-    return rows
-
-
-def _resolve_path(root: Path, base_doc: Optional[Path], value: str) -> Path:
-    value = value.split("#", 1)[0].strip()
-    p = Path(value)
-    if p.is_absolute():
-        return p.resolve()
-    if base_doc is not None and value.startswith(".."):
-        return (base_doc.parent / p).resolve()
-    return (root / p).resolve()
-
-
-def _path_from_build_line(build_text: str, label: str) -> Optional[str]:
-    pattern = rf"^\s*-\s*{re.escape(label)}:\s*`([^`]+)`"
-    for line in build_text.splitlines():
-        m = re.match(pattern, line)
-        if m:
-            value = m.group(1).strip()
-            if value and not value.startswith("("):
-                return value
-    return None
-
-
 def _unique_paths(paths: list[Path]) -> list[Path]:
     seen: set[str] = set()
     out: list[Path] = []
@@ -139,70 +69,24 @@ def _unique_paths(paths: list[Path]) -> list[Path]:
     return out
 
 
-def _auto_docs_from_forge_scope(root: Path, wt: Path, doc_name: str) -> tuple[list[Path], dict, list[str]]:
-    """forge-scope-build.md의 Work Packet에서 DDR 비교 문서를 자동 구성."""
-    build_md = wt / ".process" / doc_name / "forge-scope-build.md"
-    meta: dict = {
-        "docs_source": "auto-work-packet",
-        "forge_build_md": str(build_md),
-        "work_packet": None,
-        "task_doc": None,
-        "required_ssot": [],
-    }
-    problems: list[str] = []
+def _load_forge_manifest(path: Path) -> Optional[dict]:
+    """forge-init 이 메인 repo 에 남긴 매니페스트(.process/forge/<slug>.json). 없거나 깨지면 None."""
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
 
-    if not build_md.is_file():
-        problems.append(f"forge-scope-build.md 없음: {build_md} — `--docs <doc...>`를 명시하세요.")
-        return [], meta, problems
 
-    build_text = build_md.read_text(encoding="utf-8", errors="replace")
-    wp_value = _path_from_build_line(build_text, "Work Packet")
-    if not wp_value:
-        problems.append("forge-scope-build.md에 Work Packet 경로가 없음 — `--docs <doc...>`를 명시하세요.")
-        return [], meta, problems
-
-    work_packet = _resolve_path(root, None, wp_value)
-    meta["work_packet"] = str(work_packet)
-    if not work_packet.is_file():
-        problems.append(f"Work Packet 파일 없음: {work_packet}")
-        return [], meta, problems
-
-    wp_text = work_packet.read_text(encoding="utf-8", errors="replace")
-    docs = [work_packet]
-
-    task_value = _path_from_build_line(build_text, "TASK 문서")
-    task_doc: Optional[Path] = _resolve_path(root, None, task_value) if task_value else None
-    if task_doc is None:
-        links = _markdown_links(_section(wp_text, r"^##\s*2\.\s*TASK\b") or "")
-        if links:
-            task_doc = _resolve_path(root, work_packet, links[0][1])
-    if task_doc is None or not task_doc.is_file():
-        problems.append(f"연결 TASK 파일 없음: {task_doc or '(경로 없음)'}")
-    else:
-        meta["task_doc"] = str(task_doc)
-        docs.append(task_doc)
-
-    matrix = _section(wp_text, r"^##\s*4\.\s*Required SSOT Execution Matrix\b")
-    if matrix is None:
-        problems.append("Required SSOT Execution Matrix 섹션 없음.")
-    else:
-        rows = _markdown_table(matrix)
-        for idx, row in enumerate([r for r in rows if r.get("Priority", "").strip() == "Required"], start=1):
-            links = _markdown_links(row.get("Document", ""))
-            if not links:
-                problems.append(f"Required SSOT row {idx}: Document 링크 없음.")
-                continue
-            ssot = _resolve_path(root, work_packet, links[0][1])
-            if not ssot.is_file():
-                problems.append(f"Required SSOT row {idx}: 파일 없음: {ssot}")
-                continue
-            meta["required_ssot"].append(str(ssot))
-            docs.append(ssot)
-
-    if not meta["required_ssot"]:
-        problems.append("Required SSOT 문서가 자동 발견되지 않음 — `--docs <doc...>`를 명시하세요.")
-
-    return _unique_paths(docs), meta, problems
+def _intent_from_manifest(manifest: dict) -> Optional[Path]:
+    """비교 문서 = 워크트리 안 Intent 사본(in-dev). 없으면 메인 repo 원본으로 폴백."""
+    for key in ("intent_worktree", "intent"):
+        value = manifest.get(key)
+        if value and Path(value).is_file():
+            return Path(value).resolve()
+    return None
 
 
 def _registered_worktree_path(root: Path, branch: str) -> Optional[Path]:
@@ -238,40 +122,35 @@ def cmd_init(args: argparse.Namespace) -> int:
 
     slug = _slugify(args.slug)
 
-    # 브랜치 이름은 Intent Handoff 로 정해지므로 slug 에서 유도할 수 없다
-    # (forge 기본값은 intent/<문서 ID>). forge-init 매니페스트가 있으면 거기서 읽고,
-    # 없을 때만 예전 feat-<slug> 관례로 폴백한다.
-    branch = f"feat-{slug}"
-    mf = root / ".process" / "forge" / f"{slug}.json"
-    if mf.is_file():
-        try:
-            data = json.loads(mf.read_text(encoding="utf-8", errors="replace"))
-            if isinstance(data, dict) and data.get("branch"):
-                branch = data["branch"]
-        except (OSError, ValueError):
-            pass
+    # 브랜치·비교 문서·base 는 forge-init 매니페스트에서 읽는다. 브랜치 이름은 Intent Handoff 로
+    # 정해지므로(기본 intent/<문서 ID>) slug 에서 유도하지 않는다.
+    mf_path = root / ".process" / "forge" / f"{slug}.json"
+    forge = _load_forge_manifest(mf_path)
+    if forge is None or not forge.get("branch"):
+        _err(
+            f"ERROR: forge-init 매니페스트 없음 또는 손상: {mf_path}\n"
+            "  Hint: 먼저 `/forge-init <Intent 경로>`로 워크트리를 만들거나 slug를 확인하세요.\n"
+            "  목록: `python worktree_setup.py list`",
+            EXIT_BLOCKED,
+        )
+    branch = forge["branch"]
 
     registered = _registered_worktree_path(root, branch)
     if registered is None or not registered.exists():
         _err(
-            f"ERROR: forge 워크트리 없음: branch={branch}, dir={root / '.worktree' / slug}\n"
-            "  Hint: 먼저 `/forge-init <Intent 경로>`로 워크트리를 만들거나 slug를 확인하세요.\n"
+            f"ERROR: forge 워크트리 없음: branch={branch}\n"
+            "  Hint: 워크트리가 지워졌다면 `/forge-init <Intent 경로>`로 다시 만들거나 slug를 확인하세요.\n"
             "  목록: `python worktree_setup.py list`",
             EXIT_BLOCKED,
         )
     wt = registered
 
     doc_name = args.name or slug
+    base = args.base or forge.get("base_commit") or None
 
-    docs_meta: dict = {
-        "docs_source": "explicit",
-        "forge_build_md": None,
-        "work_packet": None,
-        "task_doc": None,
-        "required_ssot": [],
-    }
-
-    # docs 존재 검사. --docs 생략 시 forge-scope Work Packet에서 자동 구성한다.
+    # docs 존재 검사. --docs 생략 시 매니페스트의 Intent 를 비교 문서로 쓴다.
+    docs_source = "explicit"
+    intent: Optional[Path] = None
     docs_paths: list[Path] = []
     missing: list[str] = []
     if args.docs:
@@ -283,9 +162,16 @@ def cmd_init(args: argparse.Namespace) -> int:
         if missing:
             _err("ERROR: 비교 문서 없음:\n" + "\n".join(f"  - {m}" for m in missing), EXIT_BLOCKED)
     else:
-        docs_paths, docs_meta, auto_problems = _auto_docs_from_forge_scope(root, wt, doc_name)
-        if auto_problems:
-            _err("ERROR: 비교 문서 자동 구성 실패:\n" + "\n".join(f"  - {p}" for p in auto_problems), EXIT_BLOCKED)
+        intent = _intent_from_manifest(forge)
+        if intent is None:
+            _err(
+                "ERROR: 비교 문서 자동 구성 실패:\n"
+                f"  - 매니페스트에 Intent 경로가 없거나 파일이 없음: {mf_path}\n"
+                "  - `--docs <doc...>`를 명시하세요.",
+                EXIT_BLOCKED,
+            )
+        docs_source = "auto-intent"
+        docs_paths = [intent]
 
     docs_abs = [str(p.resolve()) for p in _unique_paths(docs_paths)]
 
@@ -295,11 +181,9 @@ def cmd_init(args: argparse.Namespace) -> int:
         except ValueError:
             return Path(p).as_posix()
     doc_disp = ", ".join(_rel(d) for d in docs_abs)
-    work_packet_disp = _rel(docs_meta["work_packet"]) if docs_meta.get("work_packet") else "(explicit docs - none)"
-    task_doc_disp = _rel(docs_meta["task_doc"]) if docs_meta.get("task_doc") else "(explicit docs - none)"
-    required_ssot_disp = ", ".join(_rel(d) for d in docs_meta.get("required_ssot", [])) or "(explicit docs - none)"
+    intent_disp = _rel(str(intent)) if intent else "(explicit docs - none)"
 
-    # .process/<docName>/ 는 rmtree 하지 않는다 — forge-scope 산출물 보존. 자기 파일만 덮어쓴다.
+    # .process/<docName>/ 는 rmtree 하지 않는다 — 다른 산출물 보존. 자기 파일만 덮어쓴다.
     proc = wt / ".process" / doc_name
     proc.mkdir(parents=True, exist_ok=True)
 
@@ -309,10 +193,9 @@ def cmd_init(args: argparse.Namespace) -> int:
         "{docPath}": doc_disp,
         "{slug}": slug,
         "{branch}": branch,
-        "{docsSource}": docs_meta["docs_source"],
-        "{workPacketPath}": work_packet_disp,
-        "{taskDocPath}": task_doc_disp,
-        "{requiredSsotDocs}": required_ssot_disp,
+        "{docsSource}": docs_source,
+        "{intentPath}": intent_disp,
+        "{base}": base or "(미지정 — doc_driven_review 기본값)",
     }
     written: dict[str, Path] = {}
     for name in DDR_TEMPLATES:
@@ -335,8 +218,9 @@ def cmd_init(args: argparse.Namespace) -> int:
         "branch": branch,
         "docName": doc_name,
         "docs": docs_abs,
-        **docs_meta,
-        "base": args.base,
+        "docs_source": docs_source,
+        "intent": str(intent) if intent else None,
+        "base": base,
         "build_md": str(written["ddr-loop-build.md"]),
         "progress_md": str(written["ddr-loop-progress.md"]),
     }
@@ -354,10 +238,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     sub = p.add_subparsers(dest="cmd", required=True)
 
     pi = sub.add_parser("init", help="워크트리·docs 검증 + ddr 빌드/프로그레스 스캐폴딩")
-    pi.add_argument("--slug", required=True, help="forge 워크트리 slug (.worktree/<slug>, feat-<slug>)")
-    pi.add_argument("--docs", nargs="+", default=None, help="비교 문서 경로 1개 이상 (생략 시 forge-scope Work Packet에서 자동 구성)")
-    pi.add_argument("--name", default=None, help="docName 명시 (기본: slug — forge-scope .process 폴더 공유)")
-    pi.add_argument("--base", default=None, help="branch scope 기준 ref (manifest 기록 → 세션이 review에 전달)")
+    pi.add_argument("--slug", required=True, help="forge 워크트리 slug (forge-init 매니페스트 .process/forge/<slug>.json 의 키)")
+    pi.add_argument("--docs", nargs="+", default=None, help="비교 문서 경로 1개 이상 (생략 시 forge-init 매니페스트의 Intent)")
+    pi.add_argument("--name", default=None, help="docName 명시 (기본: slug)")
+    pi.add_argument("--base", default=None, help="branch scope 기준 ref (생략 시 매니페스트 base_commit. manifest 기록 → 세션이 review에 전달)")
     pi.add_argument("--quiet", action="store_true", help="진행 로그 억제 (JSON만)")
     pi.set_defaults(func=cmd_init)
 

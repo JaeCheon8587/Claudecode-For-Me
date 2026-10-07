@@ -1844,7 +1844,7 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `branch-review` | `/claudecode-for-me:branch-review [ref] [--spec <path>] [--resume]` | HEAD↔ref diff을 bugs/style/spec/perf 4 dimension 병렬 finder로 검토 |
 | `codenav-frontmatter-gen` | `/claudecode-for-me:codenav-frontmatter-gen [--limit N] [--apply]` | C# 클래스 description 빈칸을 AI로 일괄 채워 `// ---` frontmatter 블록 삽입 |
 | `doc-driven-review` | `/claudecode-for-me:doc-driven-review <doc-path>... [--worktree <ref>] [--commit <ref>]` | 첨부 문서 기준 working-tree/커밋 변경을 Codex CLI로 검증. Missing/Improve/Overengineered + Conformance(%) + 인용검증 보고. linked worktree·커밋 노드 지목 지원 |
-| `ddr-loop` | `/claudecode-for-me:ddr-loop <slug> [--docs <doc>...]` | forge 워크트리 브랜치를 Work Packet/TASK/Required SSOT 또는 명시 docs와 codex로 대조(일치율%), 미달분을 세션이 워크트리 안에서 인라인 수정·재검. `--docs` 생략 시 forge-scope Work Packet에서 자동 구성. 최대 3회·99% 정지. 빌드는 `.csproj`만. 정리는 forge-cancel |
+| `ddr-loop` | `/claudecode-for-me:ddr-loop <slug> [--docs <doc>...]` | forge 워크트리 브랜치를 Intent 또는 명시 docs와 codex로 대조(일치율%), 미달분을 세션이 워크트리 안에서 인라인 수정·재검. `--docs` 생략 시 forge-init 매니페스트의 Intent, `--base` 생략 시 매니페스트 `base_commit`. 최대 3회·99% 정지. 빌드는 `.csproj`만. 정리는 forge-cancel |
 | `forge-scope` | `/claudecode-for-me:forge-scope [<handoff.json>]` | `/forge-init` 이 만들어 둔 **워크트리 안에서** 오케스트레이터 세션(opus/fable-orchestrator)이 Intent 를 개발. 입력은 매니페스트(`.process/forge/handoff.json`), 슬라이스마다 coder RED → GREEN → reviewer → 커밋, A-n 증거로 마감. **워크트리를 만들지 않는다** — 환경 구성은 `/forge-init`(v3.64 분리). 메인 repo 에서 실행하면 진입 가드가 중단시킨다. Work Packet·TASK 입력은 v3.58 에서 폐지. 빌드는 `.csproj` 단위만(솔루션 금지). 정리는 `forge-cancel`. |
 | `grill-me` | `/claudecode-for-me:grill-me [주제]` | 1문 1답으로 요구사항 모호점 추적 |
 | `meta-prompter` | `/claudecode-for-me:meta-prompter [요청]` | 거친 요청 → 구조화된 메타 프롬프트 |
@@ -2230,18 +2230,18 @@ init 이 워크트리의 `.gitignore` 에 아래를 추가한다.
 ### 6.11 ddr-loop (문서↔코드 수렴 루프)
 
 ```
-/claudecode-for-me:ddr-loop LOADER-WP-007    # Work Packet 기반 forge-scope면 docs 자동 구성
-/claudecode-for-me:ddr-loop order-api --docs docs/spec.md docs/contract.md --base develop
+/claudecode-for-me:ddr-loop LOADER-INT-007   # forge-init 매니페스트의 Intent 를 비교 문서로
+/claudecode-for-me:ddr-loop LOADER-INT-007 --docs docs/spec.md docs/contract.md --base develop
 /claudecode-for-me:ddr-loop                # slug 생략 → forge 워크트리 목록에서 선택
 ```
 
-forge-scope가 워크트리에 기능을 구현한 뒤, ddr-loop은 그 브랜치 변경점을 **Work Packet/TASK/Required SSOT 또는 명시 문서(docs) 기준으로 수렴**시킨다. forge-scope→ddr-loop이 자연스러운 연계다.
+forge-scope가 워크트리에 기능을 구현한 뒤, ddr-loop은 그 브랜치 변경점을 **Intent 또는 명시 문서(docs) 기준으로 수렴**시킨다. forge-scope→ddr-loop이 자연스러운 연계다.
 
-- **build-process 방식** — forge-scope처럼 `.process/<docName>/ddr-loop-build.md`(루프 PLAN)·`ddr-loop-progress.md`(회차·일치율 추적)에 기록하며 진행. `ddr_loop.py init`은 `.process/<docName>/`를 지우지 않아 forge-scope 산출물과 공존.
-- **Work Packet 자동 docs** — (v3.61.0 부터 forge-scope 가 `forge-scope-build.md` 를 만들지 않으므로 새 워크트리에선 `--docs` 를 명시한다.) `--docs`를 생략하면 `.process/<slug>/forge-scope-build.md`의 Work Packet을 읽어 Work Packet + 연결 TASK + Required SSOT 문서를 `doc-driven-review` 입력으로 자동 구성한다. 명시 `--docs`는 override다.
-- **reviewer=codex / fixer=세션** — `doc_driven_review.py`(codex)가 `--worktree feat-<slug> --scope branch`로 브랜치 diff↔docs 대조해 `Conformance: N%` 산정. 미달 항목(Top Priorities/Review Comments/Overengineered)을 **현재 세션이 워크트리 안에서 인라인 수정**(자식 spawn 없음).
+- **build-process 방식** — `.process/<docName>/ddr-loop-build.md`(루프 PLAN)·`ddr-loop-progress.md`(회차·일치율 추적)에 기록하며 진행. `ddr_loop.py init`은 `.process/<docName>/`를 지우지 않아 다른 산출물과 공존.
+- **입력은 forge-init 매니페스트** — 메인 repo `.process/forge/<slug>.json` 에서 브랜치·비교 문서·base 를 읽는다. `--docs`를 생략하면 매니페스트의 Intent(워크트리 안 사본 `intent_worktree`)가 `doc-driven-review` 입력이 되고, `--base`를 생략하면 매니페스트의 `base_commit` 이 기준점이 된다. 명시 `--docs`·`--base`는 override다. 매니페스트가 없으면 init 이 exit 2 로 중단한다 — 먼저 `/forge-init`.
+- **reviewer=codex / fixer=세션** — `doc_driven_review.py`(codex)가 `--worktree <매니페스트 branch> --scope branch`로 브랜치 diff↔docs 대조해 `Conformance: N%` 산정. 미달 항목(Top Priorities/Review Comments/Overengineered)을 **현재 세션이 워크트리 안에서 인라인 수정**(자식 spawn 없음).
 - **수렴 조건(고정)** — 최대 **3회**, 일치율 **≥ 99%** 도달 시 정지. 회차마다 빌드/테스트(**대상 `.csproj`만, 솔루션 금지**) 통과 후 `fix(ddr-<slug>): iter N 일치율 N%` 커밋.
-- **문서 자동수정 금지** — 일치율을 올리려 docs/SSOT를 고치지 않는다. 코드를 docs에 맞춘다.
+- **문서 자동수정 금지** — 일치율을 올리려 docs(Intent 등)를 고치지 않는다. 코드를 docs에 맞춘다.
 - **전제** — codex CLI 필수(미설치 시 첫 review exit 2 → 중단), forge 워크트리 존재(없으면 init exit 2). 정리는 `/forge-cancel`(서브모듈 메인 원본 보존).
 
 ---
@@ -2423,7 +2423,7 @@ Claudecode-For-Me/
 | `dispatch-session` 이 즉시 중단 | 호출한 세션이 herdr 밖이다 (`HERDR_ENV` != 1) | herdr 페인에서 세션을 다시 연다. 밖에서는 페인을 만들 수 없다 — 커맨드가 출력한 수동 명령 3줄을 직접 실행해도 된다 |
 | `dispatch-session` 이 "중복 기동" 으로 중단 | 같은 cwd 에 살아있는 에이전트가 있다 | 기존 세션을 쓰거나 종료한다. 오케스트레이터 둘이 한 워크트리에 붙으면 ledger·커밋이 경합한다. 의도한 것이면 명시적으로 진행을 지시한다 |
 | `forge-cancel` 이 "살아있는 세션" 으로 중단 | 지울 워크트리에서 세션이 돌고 있다 | 세션 종료 → 페인 닫기 → 재실행. 먼저 지우면 그 세션의 cwd 가 사라진다 |
-| `ddr-loop` init exit 2 "forge 워크트리 없음" | 해당 slug 워크트리 미생성 | 먼저 `/forge-init <Intent-doc-path>` 실행, 또는 slug 확인 (`worktree_setup.py list`) |
+| `ddr-loop` init exit 2 "forge-init 매니페스트 없음" / "forge 워크트리 없음" | 해당 slug 를 `/forge-init` 으로 만들지 않았거나 워크트리가 지워졌다 | 먼저 `/forge-init <Intent-doc-path>` 실행, 또는 slug 확인 (`worktree_setup.py list`) |
 | `ddr-loop` 첫 review exit 2 | codex CLI 미설치 (리뷰는 codex 의존) | `/codex:setup` 후 재시도 |
 | `codenav frontmatter gen` 결과 `generated=0` | `claude` CLI 부재 또는 stdout JSON 키 mismatch | `where claude` 확인. v1.15.0+ 는 `result`/`response` 둘 다 처리 |
 | `codenav frontmatter gen` "git working tree is dirty" 거부 | 안전장치 | commit/stash 또는 `--allow-dirty` |
