@@ -1,9 +1,10 @@
 """Intent 1문서 체계 — 폐지한 문서 체계의 잔재 토큰 부재.
 
 v3.58 에서 작업 단위 문서를 Intent 하나로 통합했다(FRD · FC · ADR 파일과 카탈로그 ·
-TASK · Work Packet 폐지). 그 토큰이 스킬 · 커맨드 · 에이전트 · 스크립트 · 템플릿에 다시
-들어오면 실패한다. 템플릿은 AI 가 레포를 세팅할 때 참고하는 명세라서, 잔재 한 줄이 새
-레포마다 옛 구조를 다시 심는다.
+TASK · Work Packet 폐지, 그 문서를 쓰던 스킬 task-write · ssot-write · work-packet-write ·
+pipeline-runner 제거). 그 토큰이 스킬 · 커맨드 · 에이전트 · 스크립트 · 템플릿과 레포 로컬
+`.claude/` 사본에 다시 들어오면 실패한다. 템플릿은 AI 가 레포를 세팅할 때 참고하는 명세라서,
+잔재 한 줄이 새 레포마다 옛 구조를 다시 심는다.
 
 면제는 두 가지뿐이다.
 - 폐지 안내 3줄 — 옛 입력을 받으면 막는 가드 (ALLOWED). 면제되는 것은 그 문구 자체다 —
@@ -25,7 +26,9 @@ RETIRED = re.compile(
     r"|ADR-CATALOG|ADR/|-ADR-"
     r"|TASK/|-TASK-"
     r"|WORK_PACKET|Work Packet|work[-_]packet"
-    r"|forge-scope-build",
+    r"|forge-scope-build"
+    r"|ssot-write|task-write|pipeline-runner"    # 제거한 스킬 — work-packet-write 는 work[-_]packet 이 잡는다
+    r"|ssot-critic|ssot-planner",                # 제거한 에이전트 — ssot-writer 는 ssot-write 가 잡는다
     re.ASCII,
 )
 
@@ -37,6 +40,8 @@ SCAN = (
     ("scripts/ddr_templates", "*.md"),
     ("scripts/ext_preambles", "*.md"),
     ("docs/.templates", "**/*.md"),
+    (".claude/agents", "*.md"),            # 레포 로컬 사본. .claude/worktrees/ 는 레포 복사본이라 넣지 않는다
+    (".claude/commands", "*.md"),
 )
 
 # 파일 → 그 파일에서 잔재 토큰을 써도 되는 문구. 면제는 이 문구에만 걸린다.
@@ -87,7 +92,8 @@ def test_scan_covers_plugin_sources():
     rels = {p.relative_to(ROOT).as_posix() for p in _files()}
     for must in ("skills/ddr-loop/SKILL.md", "agents/scribe.md", "scripts/ddr_loop.py",
                  "docs/.templates/CLAUDE-TEMPLATE.md", "docs/.templates/.rules/DDD_ARCHITECTURE_RULES.md",
-                 "commands/codenav-templates/CODENAV-GUIDE-TEMPLATE.md", "scripts/ext_preambles/coder.md"):
+                 "commands/codenav-templates/CODENAV-GUIDE-TEMPLATE.md", "scripts/ext_preambles/coder.md",
+                 ".claude/commands/codenav-install.md"):
         assert must in rels, must
 
 
@@ -113,6 +119,13 @@ def test_token_followed_by_korean_particle_is_caught():
     for line in ("App PRD 가 FC를 흡수했다", "{App}-FC를 만든다"):
         assert RETIRED.search(line), line
     assert not RETIRED.search("FCM 토큰")   # 다른 낱말의 일부는 토큰이 아니다
+
+
+def test_removed_skill_and_agent_names_are_tokens():
+    # 제거한 스킬 · 에이전트의 사본(레포 로컬 .claude/agents 의 ssot-* 처럼)이 이름 한 줄만 남아도 잡는다.
+    for name in ("task-write", "ssot-write", "work-packet-write", "pipeline-runner",
+                 "ssot-critic", "ssot-planner", "ssot-writer"):
+        assert RETIRED.search(f"name: {name}"), name
 
 
 def test_marker_block_exempts_only_document_guide():

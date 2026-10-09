@@ -84,6 +84,9 @@ helper · 템플릿 · 스킬 곳곳에 남아 있었다. 템플릿은 AI 가 �
 - **폐지 템플릿 8종 삭제** — `App/FRD/APP-FRD-001` · `App/ADR/APP-ADR-001` · `App/APP-FC` · `App/APP-ADR-CATALOG` 양식과
   redirect `FC` · `FRD` · `ADR` · `UI_GUIDE` 템플릿(**BREAKING** — 이 경로를 직접 링크하던 외부 문서만 해당. 소비자 레포에
   이미 있는 0.x 문서는 지우지 않는다 — 과거 요구 · 결정의 기록이다).
+- **레포 로컬 `.claude/agents/ssot-*` 3종 삭제** — v3.26.0 에서 이 레포 `.claude/agents/` 에 둔 `ssot-critic` ·
+  `ssot-planner` · `ssot-writer` 다. v3.58.0 이 플러그인 `agents/ssot-*` 와 `ssot-write` 스킬을 지울 때 빠져, 이 레포에서
+  여는 세션에만 부를 곳 없는 에이전트로 떠 있었다. 플러그인은 `.claude/` 를 로드하지 않으므로 소비자 레포 영향은 없다.
 - **`ddr-loop` 비교 문서를 forge-init 매니페스트의 Intent 로** — `--docs` 를 생략하면 폐지된 `forge-scope-build.md` →
   Work Packet → TASK 경로를 따라가 항상 실패했다. 이제 메인 repo `.process/forge/<slug>.json` 에서 브랜치 · Intent
   (`intent_worktree`) · base(`base_commit`)를 읽는다(**BREAKING** — 매니페스트 없는 v3.64 이전 워크트리는 `--docs` 를 줘도
@@ -106,15 +109,15 @@ helper · 템플릿 · 스킬 곳곳에 남아 있었다. 템플릿은 AI 가 �
 - **README 헤더 정정** — 상단 요약줄의 버전(v3.63.0 에 멈춰 있었다)과 커맨드 수(15 → 17), 개요 표의 버전(3.63.0 →
   3.67.0)과 Skill 수(v3.66.0 에서 12 로 잘못 올린 것을 11 로).
 
-**신규 테스트** — `tests/test_intent_only.py`(폐지 문서 토큰이 스킬 · 커맨드 · 에이전트 · 스크립트 · 템플릿에 다시
-들어오면 실패), `tests/test_templates.py`(템플릿 · 스킬 · 커맨드가 가리키는 `.templates/` 경로가 실재 + 루트 템플릿의 `Docs` 링크 규칙), 문서 폴더
+**신규 테스트** — `tests/test_intent_only.py`(폐지 문서 토큰 · 제거한 스킬 · 에이전트 이름이 스킬 · 커맨드 · 에이전트 · 스크립트 ·
+템플릿 · 레포 로컬 `.claude/agents` · `.claude/commands` 에 다시 들어오면 실패), `tests/test_templates.py`(템플릿 · 스킬 · 커맨드가 가리키는 `.templates/` 경로가 실재 + 루트 템플릿의 `Docs` 링크 규칙), 문서 폴더
 대소문자 13건(Windows · WSL ext4 에서 수정 전 FAIL 확인), `tests/test_codenav_install_command.py`(문서 폴더 규칙 +
 레포 로컬 `.claude/commands/` 사본이 플러그인 커맨드와 같은지), `tests/test_branch_review_skill.py`(수집 glob 의 `Docs`).
 
 **이전 방법**: 매니페스트 없는 워크트리에서 `ddr-loop` 을 돌리려면 `/forge-init <Intent>` 로 다시 만든다. 제거된
 `docs_helpers.py` 서브커맨드는 대체가 없다.
 
-**검증**: `python -m pytest tests/ -q` → **426 passed, 3 skipped** (384 → 426).
+**검증**: `python -m pytest tests/ -q` → **427 passed, 3 skipped** (384 → 427).
 
 ### v3.66.0 — `/dispatch-session` 신설 · 세션 런처로 워크플로우의 마지막 구멍을 메움
 
