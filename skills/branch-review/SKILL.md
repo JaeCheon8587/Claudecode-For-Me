@@ -143,6 +143,7 @@ python "$SCRIPT" --ref <Step1에서 확정한 ref>
 2. **사용자 명시 경로** — `--spec <path>`로 받은 spec 파일(여러 번 가능). 위치 인자는 ref 전용이므로 bare file path를 spec으로 추측하지 않는다.
 3. **레포 표준 위치** — 최근 30일 내 변경된 매칭 문서:
    - `docs/**/*.md`, `specs/**/*.md`, `.scratch/**/*.md`
+   - 문서 폴더는 `docs` · `Docs` 를 같은 폴더로 본다. Glob 은 Windows 에서도 대소문자를 구분하므로 레포 루트 목록(`ls`)에서 확인한 실제 표기로 패턴을 만든다 — `Docs` 레포면 `Docs/**/*.md`. 존재 검사(`[ -d docs ]` · `Test-Path docs`)로 정하지 않는다 — Windows · macOS 는 `Docs` 에도 참이다. 둘 다 있으면 둘 다 수집한다.
    - 브랜치명과 유사 토큰 매칭 (e.g. `feature/auth` → `auth`, `authentication` 포함 파일).
 4. **PR description** — `gh pr view --json title,body` 가능 시 본문. 실패 시 건너뜀.
 5. **Commit message fallback** — 위 모두 빈약 시 `git log <ref>..HEAD` 본문 전체를 **합성 spec**으로 사용.
@@ -160,7 +161,7 @@ python "$SCRIPT" --ref <Step1에서 확정한 ref>
 **수집 대상 glob (범용)**:
 - `CLAUDE.md`, `**/CLAUDE.md` (최대 깊이 3)
 - `CONTRIBUTING.md`, `CONTEXT.md`, `STYLE.md`, `STYLE_GUIDE.md`
-- `docs/architecture/**/*.md`, `**/ADR-*.md`, `**/adr/*.md`, `**/decisions/*.md`
+- `docs/architecture/**/*.md`(문서 폴더가 `Docs` 면 `Docs/architecture/**/*.md` — 3-1 의 표기 규칙), `**/ADR-*.md`, `**/adr/*.md`, `**/decisions/*.md`
 - `.editorconfig`, `.gitattributes`
 
 **언어/스택 자동 감지** (레포 루트 마커 기준 — **멀티스택은 모두 수집**):

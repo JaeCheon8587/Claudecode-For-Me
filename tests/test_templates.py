@@ -43,3 +43,15 @@ def test_template_refs_resolve():
         if not (TEMPLATES / rel).is_file()
     ]
     assert not missing, "없는 템플릿을 가리킨다:\n" + "\n".join(missing)
+
+
+def test_root_templates_link_with_actual_docs_spelling():
+    """CLAUDE · README 는 레포 루트에 놓여 링크가 `docs/…` 로 시작한다. 기존 레포의 문서 폴더가
+    Docs 면 링크도 Docs 로 달아야 한다 — GitHub · Linux 는 대소문자를 구분해 소문자 링크가 깨진다."""
+    for name in ("CLAUDE-TEMPLATE.md", "README-TEMPLATE.md"):
+        warning = next(line for line in (TEMPLATES / name).read_text(encoding="utf-8").splitlines()
+                       if "**TEMPLATE**" in line)
+        assert "`Docs/`" in warning and "링크" in warning, name
+    guide = (TEMPLATES / "DOCUMENT_GUIDE.md").read_text(encoding="utf-8")
+    folder_rule = next(line for line in guide.splitlines() if line.startswith("**문서 폴더 표기**"))
+    assert "링크" in folder_rule

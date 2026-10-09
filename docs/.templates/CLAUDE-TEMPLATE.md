@@ -1,6 +1,6 @@
 # 프로젝트: {프로젝트명} ({SOLUTION_CODE})
 
-> ⚠ **TEMPLATE** — 모든 `{...}` placeholder를 실제 값으로 채우거나 해당 줄을 삭제한다. 본 파일은 레포 루트(`/CLAUDE.md`)에 배치한다. 레포 세팅 절차는 [`docs/DOCUMENT_GUIDE.md` §0](docs/DOCUMENT_GUIDE.md#0-레포-세팅) 참조.
+> ⚠ **TEMPLATE** — 모든 `{...}` placeholder를 실제 값으로 채우거나 해당 줄을 삭제한다. 본 파일은 레포 루트(`/CLAUDE.md`)에 배치한다. 레포 세팅 절차는 [`docs/DOCUMENT_GUIDE.md` §0](docs/DOCUMENT_GUIDE.md#0-레포-세팅) 참조. 기존 레포의 문서 폴더가 `Docs/` 면 이 파일의 링크 · 경로의 `docs/` 를 모두 `Docs/` 로 쓴다 — 링크는 실제 폴더 표기와 같아야 GitHub · Linux 에서 열린다.
 
 > {프로젝트 한 줄 요약 — 무엇을 하는 시스템인가}. **설계·규칙은 아래 상시 문서가, 작업 단위의 요구·결정은 Intent 문서가 단일 진실 공급원(SSOT)**. 코드 작성 전 관련 문서를 직접 읽어 최신 정합성을 확보한다.
 

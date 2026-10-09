@@ -95,7 +95,9 @@ helper · 템플릿 · 스킬 곳곳에 남아 있었다. 템플릿은 AI 가 �
   `worktree_setup.py` 는 `--doc` 를 디스크 표기로, git 경로를 커밋된 표기로 맞추고, `docs_helpers.py` 는 문서 폴더를
   대소문자 무시로 찾는다. forge-init · forge-scope 지시문의 git 명령은 `:(icase)` pathspec 을 쓴다. `/codenav-install` 도
   기존 `Docs/` 를 그대로 쓰고 CLAUDE.md 링크를 실제 표기로 단다 — v2.0.0 에서 없앤 `Docs` 인식을 되살렸다(소문자만 보면
-  대소문자 구분 FS 의 `Docs` 레포에 `docs/` 가 따로 생기고, 링크가 실제 표기와 어긋난다). 한계: 대소문자 구분 FS 에
+  대소문자 구분 FS 의 `Docs` 레포에 `docs/` 가 따로 생기고, 링크가 실제 표기와 어긋난다). branch-review 의 spec ·
+  standards 수집 glob 과 상시 템플릿(CLAUDE · README · DOCUMENT_GUIDE §0)의 링크 지시도 실제 표기를 따른다 — Glob
+  도구는 Windows 에서도 대소문자를 구분해 `docs/**/*.md` 가 `Docs/` 를 찾지 못한다. 한계: 대소문자 구분 FS 에
   `docs/` 와 `Docs/` 가 둘 다 있으면 `docs_helpers.py` · forge-init 가드레일 복사 · `/codenav-install` 은 `docs/` 를
   쓴다(`/codenav-install` 은 공존을 보고하고 링크 표기를 고치지 않는다). macOS 는 실측하지 않았다(Windows · WSL ext4 실측).
 - **어휘 정리** — 에이전트 정의의 "SSOT / ADR / TASK" → "Intent / SSOT". branch-review 는 제거된 atdd-flow 의
@@ -105,14 +107,14 @@ helper · 템플릿 · 스킬 곳곳에 남아 있었다. 템플릿은 AI 가 �
   3.67.0)과 Skill 수(v3.66.0 에서 12 로 잘못 올린 것을 11 로).
 
 **신규 테스트** — `tests/test_intent_only.py`(폐지 문서 토큰이 스킬 · 커맨드 · 에이전트 · 스크립트 · 템플릿에 다시
-들어오면 실패), `tests/test_templates.py`(템플릿 · 스킬 · 커맨드가 가리키는 `.templates/` 경로가 실재), 문서 폴더
+들어오면 실패), `tests/test_templates.py`(템플릿 · 스킬 · 커맨드가 가리키는 `.templates/` 경로가 실재 + 루트 템플릿의 `Docs` 링크 규칙), 문서 폴더
 대소문자 13건(Windows · WSL ext4 에서 수정 전 FAIL 확인), `tests/test_codenav_install_command.py`(문서 폴더 규칙 +
-레포 로컬 `.claude/commands/` 사본이 플러그인 커맨드와 같은지).
+레포 로컬 `.claude/commands/` 사본이 플러그인 커맨드와 같은지), `tests/test_branch_review_skill.py`(수집 glob 의 `Docs`).
 
 **이전 방법**: 매니페스트 없는 워크트리에서 `ddr-loop` 을 돌리려면 `/forge-init <Intent>` 로 다시 만든다. 제거된
 `docs_helpers.py` 서브커맨드는 대체가 없다.
 
-**검증**: `python -m pytest tests/ -q` → **424 passed, 3 skipped** (384 → 424).
+**검증**: `python -m pytest tests/ -q` → **426 passed, 3 skipped** (384 → 426).
 
 ### v3.66.0 — `/dispatch-session` 신설 · 세션 런처로 워크플로우의 마지막 구멍을 메움
 

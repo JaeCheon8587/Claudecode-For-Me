@@ -20,7 +20,7 @@
 
 새 레포를 세팅하거나 기존 레포를 이 체계에 맞출 때 이 절부터 읽는다.
 
-**문서 폴더 표기**: 새 레포는 `docs/` 로 만든다. 기존 레포가 `Docs/` 를 쓰면 그대로 둔다 — 플러그인 도구(`/requirement-spec` · `/forge-init` · forge-scope · `docs_helpers.py`)는 `docs`·`Docs` 를 같은 폴더로 보고, 이 가이드의 `docs/` 도 둘 다를 뜻한다. 표기를 맞추려고 이름만 바꾸지 않는다 — Windows·macOS 에서 탐색기로 바꾸면 git 은 옛 표기를 계속 쓴다.
+**문서 폴더 표기**: 새 레포는 `docs/` 로 만든다. 기존 레포가 `Docs/` 를 쓰면 그대로 둔다 — 플러그인 도구(`/requirement-spec` · `/forge-init` · forge-scope · `docs_helpers.py`)는 `docs`·`Docs` 를 같은 폴더로 보고, 이 가이드의 `docs/` 도 둘 다를 뜻한다. 표기를 맞추려고 이름만 바꾸지 않는다 — Windows·macOS 에서 탐색기로 바꾸면 git 은 옛 표기를 계속 쓴다. 링크 · 경로도 실제 표기로 쓴다 — `Docs` 레포에서는 템플릿의 `docs/…` 링크가 `Docs/…` 가 된다(GitHub · Linux 는 대소문자를 구분해 소문자 링크가 깨진다).
 
 ### 0.1 만드는 것
 
