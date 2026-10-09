@@ -1,6 +1,6 @@
 # codenav 사용 가이드 — {프로젝트명}
 
-> ⚠ **TEMPLATE** — `/codenav-install` 슬래시 커맨드가 본 파일을 사용자 워크스페이스의 `docs/codenav-guide.md` 로 복사한다. `{프로젝트명}` placeholder 는 cwd 디렉토리명으로 치환. 작성 후 본 경고 줄은 삭제한다.
+> ⚠ **TEMPLATE** — `/codenav-install` 슬래시 커맨드가 본 파일을 사용자 워크스페이스의 `docs/codenav-guide.md`(문서 폴더가 `Docs/` 면 그 폴더) 로 복사한다. `{프로젝트명}` placeholder 는 cwd 디렉토리명으로 치환. 작성 후 본 경고 줄은 삭제한다.
 
 이 워크스페이스는 [codenavigator](https://github.com/JaeCheon8587/codenavigator) 시맨틱 클래스 인덱스 도구를 사용해 C# 코드베이스를 빠르게 탐색한다.
 
