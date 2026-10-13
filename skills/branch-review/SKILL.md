@@ -26,7 +26,7 @@ HEAD ↔ 고정점(commit/branch/tag/merge-base) 사이 변경을 **bugs / style
 - `gh` CLI 선택적 — 없으면 Step 3에서 PR description fallback 건너뜀.
 - 이슈 트래커 MCP (Linear/Jira/GitHub Issues/Notion 등) 선택적 — 없으면 커밋 메시지 본문만으로 이슈 내용 추정.
 - 모든 서브에이전트는 `subagent_type: "general-purpose"` 사용. Read/Grep/Glob 권한 보유.
-- **read-only 계약**: "read-only"는 **소스 파일 미수정**을 의미한다. `.process/`·`.review/` 산출물 쓰기는 이 계약 밖이다(레포 관례 — `doc-driven-review`도 동일하게 `.review/`를 쓰면서 read-only를 표방). 소스 파일 편집·자동 fix·git commit은 하지 않는다.
+- **read-only 계약**: "read-only"는 **소스 파일 미수정**을 의미한다. `.process/`·`.review/` 산출물 쓰기는 이 계약 밖이다(리뷰 산출물은 소스가 아니다). 소스 파일 편집·자동 fix·git commit은 하지 않는다.
 
 ---
 
@@ -91,7 +91,7 @@ git log <ref>..HEAD --format='%H%n%B%n---'
 
 ### Step 2 — Diff 크기 측정 및 전략 선택
 
-**스크립트 호출** (부트스트랩 없음, in-place 실행 — doc-driven-review와 동일 관례):
+**스크립트 호출** (부트스트랩 없음, 플러그인 안의 스크립트를 그 자리에서 실행):
 ```bash
 SCRIPT="scripts/branch_review_chunk_plan.py"
 [ -f "$SCRIPT" ] || SCRIPT="${CLAUDE_PLUGIN_ROOT}/scripts/branch_review_chunk_plan.py"

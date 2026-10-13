@@ -37,7 +37,6 @@ SCAN = (
     ("commands", "**/*.md"),               # codenav-templates/ 포함
     ("agents", "*.md"),
     ("scripts", "*.py"),
-    ("scripts/ddr_templates", "*.md"),
     ("scripts/ext_preambles", "*.md"),
     ("docs/.templates", "**/*.md"),
     (".claude/agents", "*.md"),            # 레포 로컬 사본. .claude/worktrees/ 는 레포 복사본이라 넣지 않는다
@@ -90,7 +89,7 @@ def _hits() -> list[str]:
 
 def test_scan_covers_plugin_sources():
     rels = {p.relative_to(ROOT).as_posix() for p in _files()}
-    for must in ("skills/ddr-loop/SKILL.md", "agents/scribe.md", "scripts/ddr_loop.py",
+    for must in ("skills/forge-scope/SKILL.md", "agents/scribe.md", "scripts/worktree_setup.py",
                  "docs/.templates/CLAUDE-TEMPLATE.md", "docs/.templates/.rules/DDD_ARCHITECTURE_RULES.md",
                  "commands/codenav-templates/CODENAV-GUIDE-TEMPLATE.md", "scripts/ext_preambles/coder.md",
                  ".claude/commands/codenav-install.md"):

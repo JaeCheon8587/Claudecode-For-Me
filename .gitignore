@@ -4,7 +4,7 @@ __pycache__/
 .worktrees/
 .worktree/
 .process/
-# branch-review / doc-driven-review 리포트 — 일회성 작업 기록, 로컬 전용
+# branch-review 리포트 — 일회성 작업 기록, 로컬 전용
 .review/
 # 오케스트레이션 런타임 산출물 (스펙·리포트·raw 덤프·렛저) — 로컬 전용
 .orchestration/
@@ -17,7 +17,3 @@ Test/
 _inspect.py
 _dbg.py
 _debug_*.py
-.claude/doc-driven-review-logs/
-
-# Slack 채널·봇 실 ID (워크스페이스 비밀) — example만 커밋한다
-.claude/slack-channels.json

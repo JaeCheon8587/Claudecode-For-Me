@@ -1,8 +1,8 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v3.68.0 · 커스텀 스킬 11종 + 슬래시 커맨드 18종 + 에이전트 9종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v3.69.0 · 커스텀 스킬 7종 + 슬래시 커맨드 14종 + 에이전트 9종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
-`/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
+`/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
 ---
 
@@ -11,12 +11,12 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `3.68.0` |
+| 버전 | `3.69.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
 | 네임스페이스 | `/claudecode-for-me:<name>` |
-| 구성요소 | Skill 11 · Command 18 · Agent 9 (`agents/`) · Python helper 7 (`scripts/`) |
+| 구성요소 | Skill 7 · Command 14 · Agent 9 (`agents/`) · Python helper 5 (`scripts/`) |
 | 외부 연동 도구 | [`codenavigator`](https://github.com/JaeCheon8587/codenavigator) (PyPI) — codenav-bootstrap / codenav-frontmatter-gen 슬래시가 호출 |
 
 플러그인은 **글로벌 캐시**에 설치되므로 한 번 설치 후 모든 프로젝트의 **새 세션**에서 자동 노출된다. 프로젝트별 재설치 불필요.
@@ -66,6 +66,32 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v3.69.0 — 쓰지 않는 스킬 · 커맨드 4종 제거: slack-brief · acceptance-design · doc-driven-review · ddr-loop · BREAKING
+
+표준 흐름(`/requirement-spec` → `/forge-init` → `/forge-scope` → `/branch-review`)과 겹치거나 그 밖에 있는 구성요소를 걷어낸다.
+스킬 11 → 7, 커맨드 18 → 14, Python helper 7 → 5.
+
+- **slack-brief** — 사용자 결정으로 제거. 스킬 · 커맨드 · 채널 예시 · 메시지 템플릿 · 테스트와 `.gitignore` 의
+  `.claude/slack-channels.json` 항목. 사용자 레벨 채널 설정(`~/.claude/slack-channels.json`)은 레포 밖이라 남는다 —
+  필요 없으면 직접 지운다.
+- **acceptance-design** — 4축(완료조건 · 엣지케이스 · 오류케이스 · 검증방법)이 Intent Part 2 의 Acceptance · Edge cases ·
+  Error cases · Verification 과 같고, `/requirement-spec` 이 이미 작성 · 검증한다. 산출물이 별도 문서
+  (`.requirements/…-acceptance.md`)라 Intent 1문서 원칙(v3.58)과도 어긋났다. 다른 스킬 · 커맨드 · 템플릿 참조 0.
+- **ddr-loop · doc-driven-review** — 표준 흐름 밖의 부가 루프였다. `/forge-scope` 가 슬라이스마다 reviewer 검토와 A-n 증거로
+  마감하므로 "Intent 대비 확인 후 수정"이 이중 구조였고, Codex CLI 의존은 v3.65 의 Claude Code 서브에이전트 일원화와
+  어긋났다. ddr-loop 가 doc-driven-review 를 리뷰어로 호출하므로 함께 제거 — 스크립트 `ddr_loop.py` · `doc_driven_review.py` ·
+  `ddr_templates/`, 테스트 3파일, `.gitignore` 의 로그 폴더 항목 포함. branch-review 의 "doc-driven-review 와 동일 관례"
+  문구는 근거를 직접 쓰도록 고쳤다.
+- **재유입 가드 `tests/test_removed_components.py`** — 제거한 4종의 이름(하이픈 · 밑줄 표기)이 파일 · 플러그인 소스
+  (스킬 · 커맨드 · 에이전트 · 스크립트 · 템플릿 · 레포 로컬 `.claude/commands` · 매니페스트 · 테스트) · README 현행 설명
+  (변경로그 제외) · `.gitignore` 에 다시 나오면 실패.
+- `tests/test_session_brief_command.py` 의 커맨드 수 단정을 실제 파일 수에서 계산하도록 바꿨다(고정값 18 은 이번 제거로 깨진다).
+
+**이전 방법**: 대체 없음. 문서 대비 확인은 `/forge-scope` 마감(A-n 증거)과 reviewer 에이전트가, 완료조건 설계는
+`/requirement-spec` 의 Intent Part 2 가 맡는다.
+
+**검증**: `python -m pytest tests/ -q` → **379 passed, 2 skipped** (436 → 379 — 제거한 테스트만큼 줄고 가드 14건 추가). WSL ext4 → **377 passed, 4 skipped**.
 
 ### v3.68.0 — `/session-brief` 신설 · 세션이 자기 작업을 드릴다운으로 보고
 
@@ -1918,34 +1944,27 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 
 ## 5. 플러그인 구성요소
 
-### Skill 11종
+### Skill 7종
 
 | Skill | 슬래시 커맨드 | 역할 |
 |---|---|---|
-| `acceptance-design` | `/claudecode-for-me:acceptance-design <doc-path>` | 타겟 문서를 ground truth로 읽고 완료조건·엣지케이스·오류케이스·검증방법 4축을 1문1답으로 같이 설계. grill-me 질문 루프 재사용. 확정 시 `.requirements/{slug}-acceptance.md` 저장 |
 | `branch-review` | `/claudecode-for-me:branch-review [ref] [--spec <path>] [--resume]` | HEAD↔ref diff을 bugs/style/spec/perf 4 dimension 병렬 finder로 검토 |
 | `codenav-frontmatter-gen` | `/claudecode-for-me:codenav-frontmatter-gen [--limit N] [--apply]` | C# 클래스 description 빈칸을 AI로 일괄 채워 `// ---` frontmatter 블록 삽입 |
-| `doc-driven-review` | `/claudecode-for-me:doc-driven-review <doc-path>... [--worktree <ref>] [--commit <ref>]` | 첨부 문서 기준 working-tree/커밋 변경을 Codex CLI로 검증. Missing/Improve/Overengineered + Conformance(%) + 인용검증 보고. linked worktree·커밋 노드 지목 지원 |
-| `ddr-loop` | `/claudecode-for-me:ddr-loop <slug> [--docs <doc>...]` | forge 워크트리 브랜치를 Intent 또는 명시 docs와 codex로 대조(일치율%), 미달분을 세션이 워크트리 안에서 인라인 수정·재검. `--docs` 생략 시 forge-init 매니페스트의 Intent, `--base` 생략 시 매니페스트 `base_commit`. 최대 3회·99% 정지. 빌드는 `.csproj`만. 정리는 forge-cancel |
 | `forge-scope` | `/claudecode-for-me:forge-scope [<handoff.json>]` | `/forge-init` 이 만들어 둔 **워크트리 안에서** 오케스트레이터 세션(opus/fable-orchestrator)이 Intent 를 개발. 입력은 매니페스트(`.process/forge/handoff.json`), 슬라이스마다 coder RED → GREEN → reviewer → 커밋, A-n 증거로 마감. **워크트리를 만들지 않는다** — 환경 구성은 `/forge-init`(v3.64 분리). 메인 repo 에서 실행하면 진입 가드가 중단시킨다. Work Packet·TASK 입력은 v3.58 에서 폐지. 빌드는 `.csproj` 단위만(솔루션 금지). 정리는 `forge-cancel`. |
 | `grill-me` | `/claudecode-for-me:grill-me [주제]` | 1문 1답으로 요구사항 모호점 추적 |
 | `meta-prompter` | `/claudecode-for-me:meta-prompter [요청]` | 거친 요청 → 구조화된 메타 프롬프트 |
 | `requirement-spec` | `/claudecode-for-me:requirement-spec [--app <App>] [--type 기능개발\|리팩토링] [--no-gate]` | grill-me 인터뷰 → Intent Part 1/2 → 코드 체크리스트 + opus critic 검증 루프(≤3회) → 품질 지표 → 승인 1회. 산출물은 `docs/<App>/INTENT/<App>-INT-<NNN>.md` 1개 |
 | `safe-pull` | `/claudecode-for-me:safe-pull [원격/브랜치]` | git pull 전 fetch(비파괴)로 변경·충돌·사이드이펙트 브리핑 후 AskUserQuestion 컨펌 게이트 |
-| `slack-brief` | `/claudecode-for-me:slack-brief [--channels <key,key>] [--dry-run] [--max <N>]` | 대화에서 토픽을 뽑아 다중선택으로 확정받고 타입 5종 양식(기승전결)으로 정리해 Slack 채널 담당 봇을 멘션한 **작업 트리거**로 전송. 토픽 1개 = 메시지 1개, 본문에 작업 지시문 금지(봇이 담당 업무 기준으로 처리), 전송 전 승인 게이트. 단일 에이전트 |
 
-### Command 18종
+### Command 14종
 
 | Command | 설명 |
 |---|---|
-| `acceptance-design` | acceptance-design skill 진입. 타겟 doc 기준 4축(완료조건·엣지케이스·오류케이스·검증방법) 설계, `.requirements/{slug}-acceptance.md` 저장 |
 | `branch-review` | branch-review skill 진입 |
 | `codenav-bootstrap` | CodeNavigator parser-only 인덱싱 (frontmatter/XML doc만 읽어 SQLite 빌드, AI 호출 없음) |
 | `codenav-frontmatter-gen` | codenav-frontmatter-gen skill 진입 (AI가 .cs에 frontmatter 영구 삽입). `--projects` / `--files` / `--staged` 스코프 인자 |
 | `codenav-install` | 프로젝트 루트의 `tools/codenavigator/` 폴더에 codenavigator (PyPI) 격리 설치 + `codenav.ps1/codenav.sh` launcher + `.gitignore` 자동 작성 + `docs/codenav-guide.md` 작성(문서 폴더가 `Docs/` 면 그 폴더) + 루트 `CLAUDE.md` 링크 셋업 |
 | `dispatch-session` | **세션 런처** — 이미 있는 디렉터리에 herdr 페인을 열고 Claude 세션을 기동, 선택적으로 작업 지시. 워크트리를 만들지 않고 브랜치를 고르지 않는다(`/forge-init` 몫). 띄울 위치는 `AskUserQuestion` 으로 사용자가 고른다. `HERDR_ENV=1` 인 세션에서만 동작. 스킬 없이 커맨드 단독 |
-| `doc-driven-review` | doc-driven-review skill 진입. Codex CLI 위임 read-only 리뷰. `--worktree <branch\|path>` linked worktree / `--commit <ref>` 커밋 노드 지목 지원 |
-| `ddr-loop` | ddr-loop skill 진입. forge 워크트리 브랜치↔docs 수렴 루프(codex reviewer + 세션 fixer, 최대 3회·99%) |
 | `commit-analysis` | 배포 여부 확인 후 `[ADD]`/`[MOD]`/`[FIX]` 자동 판단 한글 커밋 생성 (배포 시 본문에 `[Deploy]`) |
 | `forge-cancel` | forge 워크트리와 거기 붙은 브랜치 제거 (서브모듈 메인 원본 보존). 브랜치는 `.process/forge/<slug>.json` 매니페스트에서 읽는다 — 추측하지 않는다. `<slug>` 지정 또는 생략 시 목록에서 선택. 스킬 없이 커맨드 단독 |
 | `forge-init` | **개발 환경 구성** — 승인 커밋 게이트 → base 브랜치 선택 → 워크트리/브랜치 생성 → `approved→in-dev` 전이 → 매니페스트 기록. **보고하고 끝낸다**(개발 세션을 띄우지 않는다). 스펙 세션·메인 repo 에서 실행. 스킬 없이 커맨드 단독 |
@@ -1955,7 +1974,6 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `requirement-spec` | requirement-spec skill 진입. grill-me 인터뷰 → Intent Part 1 → Part 2 파생 → 코드 체크리스트 + opus critic 검증 루프(≤3회) → 품질 지표 → 승인 1회. 산출물은 `docs/<App>/INTENT/<App>-INT-<NNN>.md` 1개(임시 파일은 `.process/intent-check/<ID>/`). `--no-gate` 로 루프 생략 |
 | `safe-pull` | safe-pull skill 진입. fetch 후 브리핑 → 컨펌 게이트 → pull |
 | `session-brief` | **세션 브리핑** — 이 세션의 현재 주제(마지막 대화 기준)를 기능 · 맥락 · 마지막 수행 내용 · 남은 일(결정 대기 · 미완료 · 작업 상태 · 이전 주제 미결) 드릴다운으로 한 화면 보고. 작업 상태는 호출 시점 git 실행 결과. 보고만 하고 파일을 고치지 않는다. 스킬 없이 커맨드 단독 |
-| `slack-brief` | slack-brief skill 진입. 토픽 모달 → 채널 모달 → 토픽당 메시지 작성 → self-check 8항목 → 프리뷰 승인 게이트 → `channel_id`로 순차 전송. `--dry-run`은 프리뷰까지만 |
 
 ### Agent 9종
 
@@ -2234,39 +2252,7 @@ init 이 워크트리의 `.gitignore` 에 아래를 추가한다.
 - 한글 커밋 메시지
 - **push 안 함** — 커밋까지만 수행. 푸쉬는 사용자가 직접
 
-### 6.8 doc-driven-review
-
-```
-/claudecode-for-me:doc-driven-review docs/spec-feature.md
-/claudecode-for-me:doc-driven-review docs/spec.md --wait --scope working-tree
-/claudecode-for-me:doc-driven-review docs/spec.md --worktree feat-cn-foo
-/claudecode-for-me:doc-driven-review docs/spec.md --worktree .worktrees/cn-foo --background
-# 특정 커밋(노드) 지목 — no-worktree forge 산출 검토 등
-/claudecode-for-me:doc-driven-review docs/TASK.md --commit <feat 커밋 sha>
-```
-
-- **Codex CLI 위임** — 첨부 문서 기준 working-tree + untracked 변경을 codex가 리뷰. read-only.
-- **산출**: Missing / Improve / Overengineered + **Conformance (0-100%)** 점수.
-- **strict 상태 판정**: ✓ 모든 시그니처/literal 일치 · ⚠ 외형 맞지만 일부 누락 · ✗ literal 부재 또는 완전 부재.
-- **Cross-file ripple**: public API 변경 시 patch + UNCHANGED CONTEXT(caller auto-detect) 모두 참조.
-- **Weighted Conformance**: Critical=4 / Major=2 / Minor=1, ✓=full ⚠=0.5× ✗=0. `pct = round(100 × passed / total)`.
-- **커밋 노드 지목**: `--commit <ref>` — 특정 커밋(또는 `A..B` 범위) 변경분만 doc 대조. working-tree/branch·`--base` 우회. no-worktree forge 처럼 변경이 이미 커밋된 경우 그 노드만 검토.
-- **워크트리 지정**: `--worktree <branch|path>` — forge-scope linked worktree 또는 임의 경로 직접 리뷰. `--repo-root` 와 mutex.
-- **scope**: `working-tree` (변경) / `branch` (HEAD↔base diff) / `auto` (변경 있으면 working-tree).
-- **인용 검증**: codex 인용 `file:line` 을 repo에 대조(파일존재+라인수). 미검증 시 `[doc-driven-review] CITATION-CHECK:` 라인 추가(advisory).
-- **결과 파일**: `<repo>/.review/<doc-stem>-review.md`.
-- **모드**: `--wait` (foreground) / `--background` (PID + log). background는 **detached foreground 재실행** — fg와 동일하게 스키마검증·인용검증·`.review/` 저장까지 수행(비대칭 없음). 오래된 bg 로그·patch 7일 자동 정리.
-- **dry-run**: `--dry-run`으로 codex 호출 없이 prompt만 stdout. `--keep-patch`로 디버깅용 patch 보존.
-
-#### 한계
-
-- Codex CLI 필수. 미설치 시 exit 2. `/codex:setup` 안내.
-- patch + background log는 main repo `.git/info/` 공유 (파일명 unique로 동시 실행 안전).
-- submodule / multi-repo 미지원.
-
----
-
-### 6.9 safe-pull
+### 6.8 safe-pull
 
 ```
 /claudecode-for-me:safe-pull                  # 현재 브랜치 추적 upstream 자동
@@ -2293,41 +2279,7 @@ init 이 워크트리의 `.gitignore` 에 아래를 추가한다.
 
 ---
 
-### 6.10 acceptance-design
-
-```
-/claudecode-for-me:acceptance-design docs/feature.md
-```
-
-타겟 문서(spec/Intent)는 "무엇을 만든다"는 적어도 **완료조건·엣지케이스·오류케이스·검증방법**이 비거나 모호한 경우가 많다. acceptance-design은 그 doc를 ground truth로 읽고 위 4축을 사용자와 같이 설계한다. 질문 방식은 grill-me(6.4)와 동일하되, 시작 시 doc를 읽고 질문 범위를 4축으로 고정한다는 점이 다르다.
-
-- **doc 입력 필수**: `$ARGUMENTS` doc 경로 → `Read` 1회. 경로 없음 "문서 경로 필수" / 파일 없음 "오류: 문서 파일 없음" 종료.
-- **4축 고정**: 완료조건(Acceptance Criteria) / 엣지케이스 / 오류케이스 / 검증방법. doc에 명시된 것은 확인, 빈 곳·모호한 곳 우선 질문.
-- **1문 1답** (`AskUserQuestion`)으로 추적, 추천 2개(`(Recommended)`) + auto-`Other`. **논리 모순 시 명시 지적**, doc 근거 있으면 인용 후 되묻기.
-- 3~4 교환마다 4축 트래커. 종료 시 **4축 설계본**(출처 라인 + 완료조건/엣지/오류/검증 + Open Items + 구체화 수준) 후 확정 리뷰.
-- 확정 시 **`.requirements/{slug}-acceptance.md` 자동 저장**(slug=doc stem 영어 kebab, 동명 시 번호 suffix).
-- 산출물은 설계본까지 — **구현 plan·`ExitPlanMode` 미수행**. 후속(meta-prompter·forge-scope 등)은 사용자가 설계본을 받아 진행.
-
----
-
-### 6.11 ddr-loop (문서↔코드 수렴 루프)
-
-```
-/claudecode-for-me:ddr-loop LOADER-INT-007   # forge-init 매니페스트의 Intent 를 비교 문서로
-/claudecode-for-me:ddr-loop LOADER-INT-007 --docs docs/spec.md docs/contract.md --base develop
-/claudecode-for-me:ddr-loop                # slug 생략 → forge 워크트리 목록에서 선택
-```
-
-forge-scope가 워크트리에 기능을 구현한 뒤, ddr-loop은 그 브랜치 변경점을 **Intent 또는 명시 문서(docs) 기준으로 수렴**시킨다. forge-scope→ddr-loop이 자연스러운 연계다.
-
-- **build-process 방식** — `.process/<docName>/ddr-loop-build.md`(루프 PLAN)·`ddr-loop-progress.md`(회차·일치율 추적)에 기록하며 진행. `ddr_loop.py init`은 `.process/<docName>/`를 지우지 않아 다른 산출물과 공존.
-- **입력은 forge-init 매니페스트** — 메인 repo `.process/forge/<slug>.json` 에서 브랜치·비교 문서·base 를 읽는다. `--docs`를 생략하면 매니페스트의 Intent(워크트리 안 사본 `intent_worktree`)가 `doc-driven-review` 입력이 되고, `--base`를 생략하면 매니페스트의 `base_commit` 이 기준점이 된다. 명시 `--docs`·`--base`는 override다. 매니페스트가 없으면 init 이 exit 2 로 중단한다 — 먼저 `/forge-init`.
-- **reviewer=codex / fixer=세션** — `doc_driven_review.py`(codex)가 `--worktree <매니페스트 branch> --scope branch`로 브랜치 diff↔docs 대조해 `Conformance: N%` 산정. 미달 항목(Top Priorities/Review Comments/Overengineered)을 **현재 세션이 워크트리 안에서 인라인 수정**(자식 spawn 없음).
-- **수렴 조건(고정)** — 최대 **3회**, 일치율 **≥ 99%** 도달 시 정지. 회차마다 빌드/테스트(**대상 `.csproj`만, 솔루션 금지**) 통과 후 `fix(ddr-<slug>): iter N 일치율 N%` 커밋.
-- **문서 자동수정 금지** — 일치율을 올리려 docs(Intent 등)를 고치지 않는다. 코드를 docs에 맞춘다.
-- **전제** — codex CLI 필수(미설치 시 첫 review exit 2 → 중단), forge 워크트리 존재(없으면 init exit 2). 정리는 `/forge-cancel`(서브모듈 메인 원본 보존).
-
-### 6.12 session-brief
+### 6.9 session-brief
 
 ```
 /claudecode-for-me:session-brief
@@ -2458,30 +2410,23 @@ Claudecode-For-Me/
 │   ├── reviewer.md              # Opus fresh-context 검증 (read-only)
 │   └── reviewer-lite.md         # Sonnet 스펙 대조 전용 (티어 밖은 ESCALATE)
 ├── skills/                      # Claude Code 스킬 (자연어 트리거)
-│   ├── acceptance-design/
 │   ├── branch-review/
 │   ├── codenav-frontmatter-gen/
-│   ├── ddr-loop/
-│   ├── doc-driven-review/
 │   ├── forge-scope/
 │   ├── grill-me/
 │   ├── meta-prompter/
 │   ├── requirement-spec/
-│   ├── safe-pull/
-│   └── slack-brief/
+│   └── safe-pull/
 ├── commands/                    # 슬래시 커맨드 (명시 호출)
 │   ├── codenav-templates/       # /codenav-install 이 워크스페이스로 복사하는 자산
 │   │   ├── CODENAV-GUIDE-TEMPLATE.md
 │   │   └── codenav-prefer.ps1
-│   ├── acceptance-design.md
 │   ├── branch-review.md
 │   ├── codenav-bootstrap.md
 │   ├── codenav-frontmatter-gen.md
 │   ├── codenav-install.md
 │   ├── commit-analysis.md
-│   ├── ddr-loop.md
 │   ├── dispatch-session.md
-│   ├── doc-driven-review.md
 │   ├── forge-cancel.md
 │   ├── forge-init.md
 │   ├── forge-scope.md
@@ -2489,21 +2434,17 @@ Claudecode-For-Me/
 │   ├── meta-prompter.md
 │   ├── requirement-spec.md
 │   ├── safe-pull.md
-│   ├── session-brief.md
-│   └── slack-brief.md
+│   └── session-brief.md
 ├── docs/                       # 문서 체계 참고 명세 (Intent 1문서 체계 — DOCUMENT_GUIDE v1.0)
 │   └── .templates/             # DOCUMENT_GUIDE + CLAUDE/README/PRD/ARCHITECTURE 양식 + App/ (PRD·ARCHITECTURE·INT-CATALOG·INTENT) + .rules/ (코드 룰 5종)
 ├── scripts/                     # Python deterministic helper
 │   ├── branch_review_chunk_plan.py  # branch-review diff 크기측정·모드판정·청크분할·patch 생성
-│   ├── ddr_loop.py              # ddr-loop 워크트리·docs 검증 + .process 스캐폴딩 (init)
-│   ├── doc_driven_review.py
 │   ├── docs_helpers.py          # Intent 검사 — check · check-intent · intent-checklist · intent-catalog
 │   ├── ext_dispatch.py          # (v3.65.0 미사용 — 외부 위임 폐지, 보존만)
 │   ├── herdr_name.py            # dispatch-session herdr 에이전트 이름 정규화 (단독)
 │   ├── worktree_setup.py        # forge-init 워크트리 셋업·검증·매니페스트·cancel
-│   ├── ddr_templates/           # ddr-loop build/progress 템플릿
 │   └── ext_preambles/           # (v3.65.0 미사용 — 보존만)
-├── tests/                       # pytest 스위트 (forge·docs·doc-driven-review)
+├── tests/                       # pytest 스위트 (forge·docs·커맨드 계약)
 ├── samples/                     # (gitignored) 로컬 C# 테스트 픽스처 — 미커밋
 ├── .gitattributes
 ├── .gitignore
@@ -2523,8 +2464,6 @@ Claudecode-For-Me/
 | `dispatch-session` 이 즉시 중단 | 호출한 세션이 herdr 밖이다 (`HERDR_ENV` != 1) | herdr 페인에서 세션을 다시 연다. 밖에서는 페인을 만들 수 없다 — 커맨드가 출력한 수동 명령 3줄을 직접 실행해도 된다 |
 | `dispatch-session` 이 "중복 기동" 으로 중단 | 같은 cwd 에 살아있는 에이전트가 있다 | 기존 세션을 쓰거나 종료한다. 오케스트레이터 둘이 한 워크트리에 붙으면 ledger·커밋이 경합한다. 의도한 것이면 명시적으로 진행을 지시한다 |
 | `forge-cancel` 이 "살아있는 세션" 으로 중단 | 지울 워크트리에서 세션이 돌고 있다 | 세션 종료 → 페인 닫기 → 재실행. 먼저 지우면 그 세션의 cwd 가 사라진다 |
-| `ddr-loop` init exit 2 "forge-init 매니페스트 없음" / "forge 워크트리 없음" | 해당 slug 를 `/forge-init` 으로 만들지 않았거나 워크트리가 지워졌다 | 먼저 `/forge-init <Intent-doc-path>` 실행, 또는 slug 확인 (`worktree_setup.py list`) |
-| `ddr-loop` 첫 review exit 2 | codex CLI 미설치 (리뷰는 codex 의존) | `/codex:setup` 후 재시도 |
 | `codenav frontmatter gen` 결과 `generated=0` | `claude` CLI 부재 또는 stdout JSON 키 mismatch | `where claude` 확인. v1.15.0+ 는 `result`/`response` 둘 다 처리 |
 | `codenav frontmatter gen` "git working tree is dirty" 거부 | 안전장치 | commit/stash 또는 `--allow-dirty` |
 | `codenav ui --port 8765` 실행 시 `WinError 10013` | Windows excluded port range (8601-8900 등) | 다른 포트 사용 (예: `--port 9876`). `netsh interface ipv4 show excludedportrange protocol=tcp` 로 확인 |

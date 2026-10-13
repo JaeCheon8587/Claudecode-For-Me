@@ -6,7 +6,6 @@
 `!` 주입은 명령이 실패하면 커맨드 전체가 실행되지 않는다(실측 — git 레포가 아닌 폴더에서
 `Shell command failed for pattern ...`, 턴 0). 그래서 주입마다 `2>&1 || echo "(…)"` 로 끝나야 한다.
 """
-import json
 import re
 from pathlib import Path
 
@@ -91,13 +90,15 @@ def test_accuracy_rules():
 
 
 def test_readme_lists_the_command():
+    # 커맨드 수는 실제 파일 수에서 계산한다 — 다른 커맨드를 추가 · 제거할 때마다 이 테스트를 고치지 않게.
     readme = read("README.md")
-    assert "슬래시 커맨드 18종" in readme
-    assert "Command 18" in readme and "### Command 18종" in readme
+    n = len(list((ROOT / "commands").glob("*.md")))
+    assert f"슬래시 커맨드 {n}종" in readme
+    assert f"Command {n} ·" in readme and f"### Command {n}종" in readme
     assert "| `session-brief` |" in readme
-    assert "│   ├── session-brief.md" in readme
+    assert re.search(r"│   [├└]── session-brief\.md", readme)
 
 
-def test_plugin_version_bumped():
-    assert json.loads(read(".claude-plugin/plugin.json"))["version"] == "3.68.0"
-    assert "### v3.68.0" in read("README.md")
+def test_changelog_records_introduction():
+    # 현재 버전 단정은 test_forge_scope_skill.py 가 맡는다. 여기서는 도입 기록만.
+    assert "### v3.68.0 — `/session-brief` 신설" in read("README.md")
