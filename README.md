@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v3.67.0 · 커스텀 스킬 11종 + 슬래시 커맨드 17종 + 에이전트 9종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v3.68.0 · 커스텀 스킬 11종 + 슬래시 커맨드 18종 + 에이전트 9종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 문서 기준 수렴 검증 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,12 +11,12 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `3.67.0` |
+| 버전 | `3.68.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
 | 네임스페이스 | `/claudecode-for-me:<name>` |
-| 구성요소 | Skill 11 · Command 17 · Agent 9 (`agents/`) · Python helper 7 (`scripts/`) |
+| 구성요소 | Skill 11 · Command 18 · Agent 9 (`agents/`) · Python helper 7 (`scripts/`) |
 | 외부 연동 도구 | [`codenavigator`](https://github.com/JaeCheon8587/codenavigator) (PyPI) — codenav-bootstrap / codenav-frontmatter-gen 슬래시가 호출 |
 
 플러그인은 **글로벌 캐시**에 설치되므로 한 번 설치 후 모든 프로젝트의 **새 세션**에서 자동 노출된다. 프로젝트별 재설치 불필요.
@@ -66,6 +66,36 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v3.68.0 — `/session-brief` 신설 · 세션이 자기 작업을 드릴다운으로 보고
+
+세션을 4~6개 오가면 돌아왔을 때 그 세션이 무엇을 하던 중이었는지 헷갈린다. 다른 세션 기록을 읽어 한꺼번에 정리하는
+관제탑 방식 대신, **그 세션이 자기 맥락으로** 현재 주제를 한 화면에 보고한다 — 자기 맥락이 가장 정확하고 구현이 단순하다.
+
+- **`/session-brief` 신설** (커맨드 단독, 스킬 없음 — 지시문 한 장이고 부속 파일이 없다).
+  - 양식 — `## <현재 주제>` 아래 `기능` · `맥락` · `마지막 수행 내용` · `남은 일 · 대기 중` 네 섹션, 드릴다운 최대 3단계.
+    남은 일은 `[결정 대기]` · `[미완료]` · `[작업 상태]` · `[이전: <주제>]` 태그.
+  - 주제는 마지막 대화 기준. 본문은 현재 주제만 쓰고, **남은 일만 세션 전체에서** 모은다(이후 해결된 항목 제외) —
+    이전 주제의 미결(재시작 필요 등)을 놓치지 않게.
+  - 상세도 — 기능 · 의도 · 이유 · 결정 수준, 코드 식별자 제외(남은 일에서 행동에 필요할 때만 허용). 한 화면 30줄 —
+    넘치면 기능부터 줄이고 마지막 수행 내용 · 남은 일은 줄이지 않는다.
+  - 정확성 — 증거(커밋 · 테스트 통과 · 사용자 승인) 없는 "완료" 금지("작업함 (검증 미확인)"), 작업 상태는 실행
+    결과로만, 압축으로 잃은 세부는 "(압축 이전 — 세부 불명)", 자기 호출과 그 출력은 제외.
+  - 보고만 한다 — 파일 수정 · 커밋 · 작업 재개 없음. 허용 도구는 읽기 전용 git(`git status` · `git log`)과 `echo`.
+- **`!` 주입이 실패하면 커맨드 전체가 멈춘다(실측)** — git 레포가 아닌 폴더에서 주입 명령이 실패하자
+  `Shell command failed for pattern ...` 으로 턴 0 에 끝났다. 그래서 주입마다 `2>&1 || echo "(…)"` 로 끝내고,
+  `tests/test_session_brief_command.py` 가 모든 주입에 이 형태를 강제한다.
+
+**검증**: `python -m pytest tests/ -q` → **436 passed, 3 skipped** (427 → 436). `tests/test_session_brief_command.py`
+9건은 **문서 단정**이다. 런타임은 임시 레포에서 `claude -p`(haiku)로 실측했다.
+- 직접 호출 — 주입된 git 상태와 `[결정 대기]` 를 반영해 양식대로 보고. 첫 실측에서 `맥락` 섹션이 통째로 빠져
+  "네 섹션 헤더는 항상 쓴다" 규칙을 더했다.
+- 모델 호출 경로(`Skill`) — 주입이 같이 돈다.
+- git 레포가 아닌 새 세션 — "이 세션에서 진행한 작업 없음" 한 줄, 작업 상태 생략.
+
+> **자동 발동은 보장되지 않는다.** "어디까지 했지?" · "지금까지 한 작업 정리해줘" 에 haiku · sonnet 모두 짧은 세션에서는
+> 커맨드를 부르지 않고 직접 답했다(설명문을 호출 지시형으로 고친 뒤에도). 모델이 부를 수 있다는 것은 확인했다.
+> 확실히 쓰려면 `/session-brief` 를 직접 친다. 긴 실세션 · opus 에서의 발동 여부는 측정하지 않았다.
 
 ### v3.67.0 — Intent 1문서 체계 마무리: 옛 문서 잔재 제거 · 템플릿 재작성 · 문서 폴더 `docs`·`Docs` 동일 취급 · BREAKING
 
@@ -1904,7 +1934,7 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `safe-pull` | `/claudecode-for-me:safe-pull [원격/브랜치]` | git pull 전 fetch(비파괴)로 변경·충돌·사이드이펙트 브리핑 후 AskUserQuestion 컨펌 게이트 |
 | `slack-brief` | `/claudecode-for-me:slack-brief [--channels <key,key>] [--dry-run] [--max <N>]` | 대화에서 토픽을 뽑아 다중선택으로 확정받고 타입 5종 양식(기승전결)으로 정리해 Slack 채널 담당 봇을 멘션한 **작업 트리거**로 전송. 토픽 1개 = 메시지 1개, 본문에 작업 지시문 금지(봇이 담당 업무 기준으로 처리), 전송 전 승인 게이트. 단일 에이전트 |
 
-### Command 17종
+### Command 18종
 
 | Command | 설명 |
 |---|---|
@@ -1924,6 +1954,7 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `meta-prompter` | meta-prompter skill 진입 |
 | `requirement-spec` | requirement-spec skill 진입. grill-me 인터뷰 → Intent Part 1 → Part 2 파생 → 코드 체크리스트 + opus critic 검증 루프(≤3회) → 품질 지표 → 승인 1회. 산출물은 `docs/<App>/INTENT/<App>-INT-<NNN>.md` 1개(임시 파일은 `.process/intent-check/<ID>/`). `--no-gate` 로 루프 생략 |
 | `safe-pull` | safe-pull skill 진입. fetch 후 브리핑 → 컨펌 게이트 → pull |
+| `session-brief` | **세션 브리핑** — 이 세션의 현재 주제(마지막 대화 기준)를 기능 · 맥락 · 마지막 수행 내용 · 남은 일(결정 대기 · 미완료 · 작업 상태 · 이전 주제 미결) 드릴다운으로 한 화면 보고. 작업 상태는 호출 시점 git 실행 결과. 보고만 하고 파일을 고치지 않는다. 스킬 없이 커맨드 단독 |
 | `slack-brief` | slack-brief skill 진입. 토픽 모달 → 채널 모달 → 토픽당 메시지 작성 → self-check 8항목 → 프리뷰 승인 게이트 → `channel_id`로 순차 전송. `--dry-run`은 프리뷰까지만 |
 
 ### Agent 9종
@@ -2296,6 +2327,22 @@ forge-scope가 워크트리에 기능을 구현한 뒤, ddr-loop은 그 브랜�
 - **문서 자동수정 금지** — 일치율을 올리려 docs(Intent 등)를 고치지 않는다. 코드를 docs에 맞춘다.
 - **전제** — codex CLI 필수(미설치 시 첫 review exit 2 → 중단), forge 워크트리 존재(없으면 init exit 2). 정리는 `/forge-cancel`(서브모듈 메인 원본 보존).
 
+### 6.12 session-brief
+
+```
+/claudecode-for-me:session-brief
+```
+
+세션을 여러 개 오가다 돌아왔을 때 "여기서 뭐 하고 있었지?" 를 한 화면으로 답한다.
+
+- **양식** — `## <현재 주제>` 아래 `기능` · `맥락` · `마지막 수행 내용` · `남은 일 · 대기 중` 네 섹션(작업이 없는 세션은 "작업 없음" 한 줄), 드릴다운 최대 3단계.
+  남은 일은 `[결정 대기]` · `[미완료]` · `[작업 상태]` · `[이전: <주제>]`
+- **주제는 마지막 대화 기준** — 본문은 현재 주제만, 남은 일만 세션 전체(이전 주제의 미결 포함)에서 모은다
+- **작업 상태는 호출 시점 git 실행 결과**(브랜치 · 미커밋 · 미푸시) — git 레포가 아니면 생략
+- **정확성** — 증거 없는 "완료" 금지, 압축으로 잃은 세부는 지어내지 않음, 30줄 이내(넘치면 기능부터 줄임)
+- **보고만** — 파일 수정 · 커밋 · 작업 재개 없음
+- 자동 발동은 모델 판단이라 보장되지 않는다 — 확실히 쓰려면 직접 호출
+
 ---
 
 ## 7. 외부 연동 도구: codenavigator
@@ -2442,6 +2489,7 @@ Claudecode-For-Me/
 │   ├── meta-prompter.md
 │   ├── requirement-spec.md
 │   ├── safe-pull.md
+│   ├── session-brief.md
 │   └── slack-brief.md
 ├── docs/                       # 문서 체계 참고 명세 (Intent 1문서 체계 — DOCUMENT_GUIDE v1.0)
 │   └── .templates/             # DOCUMENT_GUIDE + CLAUDE/README/PRD/ARCHITECTURE 양식 + App/ (PRD·ARCHITECTURE·INT-CATALOG·INTENT) + .rules/ (코드 룰 5종)
