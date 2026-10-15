@@ -77,3 +77,16 @@ def test_hard_limit_allowlist_matches_tools_frontmatter():
     assert declared == set(SATELLITES), declared
     for name in SATELLITES:
         assert f":{name}" in text, name
+
+
+def test_skill_tool_granted_with_plugin_only_limit():
+    """에이전트 모드에서 /claudecode-for-me:* 커맨드가 Skill 도구로 로드돼야 한다.
+    Skill 범위 지정 문법은 tools: 에서 문서화되지 않아 HARD LIMIT 9 로 제한한다."""
+    for p in (OPUS, FABLE):
+        lines = p.read_text(encoding="utf-8").splitlines()[:FRONTMATTER_LINES]
+        tools = next(l for l in lines if l.startswith("tools:"))
+        assert [t.strip() for t in tools.split(")", 1)[1].split(",")][-1] == "Skill", tools
+        text = p.read_text(encoding="utf-8")
+        assert "9. **Invoke a command or skill outside claudecode-for-me" in text
+        assert "Never call Skill unprompted" in text
+        assert "delegate those steps to\n     satellites" in text

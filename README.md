@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v3.70.0 · 커스텀 스킬 7종 + 슬래시 커맨드 17종 + 에이전트 9종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v3.71.0 · 커스텀 스킬 7종 + 슬래시 커맨드 17종 + 에이전트 9종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,7 +11,7 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `3.70.0` |
+| 버전 | `3.71.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
@@ -66,6 +66,20 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v3.71.0 — 오케스트레이터에서 플러그인 커맨드 · 스킬 호출 허용
+
+`opus-orchestrator` · `fable-orchestrator` 를 에이전트 모드로 띄우면 `tools:` 에 `Skill` 이 없어
+`/claudecode-for-me:forge-scope` 같은 커맨드가 로드조차 되지 않았다(forge-scope 는 오케스트레이터 전용인데도).
+
+- **`tools:` 에 `Skill` 추가** — 두 오케스트레이터 동일. `tools:` 의 `Skill(...)` 범위 지정 문법은 공식 문서에 없어
+  쓰지 않았다(무시되거나 Skill 자체가 빠질 위험).
+- **HARD LIMIT 9 신설** — ① `claudecode-for-me` 커맨드 · 스킬만 호출 ② 사용자가 부를 때만, 자발적 호출 금지
+  (본문이 매 턴 재과금) ③ 로드한 절차는 HARD LIMITS 아래 — 파일 수정 · 테스트 · 대량 읽기 단계는 위성에 위임,
+  없는 도구(MCP · AskUserQuestion · WebFetch)가 필요하면 멈추고 일반 세션 실행을 안내. 범위 제한은 도구 레벨이 아니라 프로토콜이다.
+- **테스트** — `tests/test_orchestrator_agents.py` 에 `Skill` 부여 · HARD LIMIT 9 단정 추가.
+
+**검증**: `python -m pytest tests/ -q` → **402 passed, 2 skipped**.
 
 ### v3.69.0 — 쓰지 않는 스킬 · 커맨드 4종 제거: slack-brief · acceptance-design · doc-driven-review · ddr-loop · BREAKING
 
