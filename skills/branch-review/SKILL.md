@@ -143,6 +143,7 @@ python "$SCRIPT" --ref <Step1에서 확정한 ref>
 2. **사용자 명시 경로** — `--spec <path>`로 받은 spec 파일(여러 번 가능). 위치 인자는 ref 전용이므로 bare file path를 spec으로 추측하지 않는다.
 3. **레포 표준 위치** — 최근 30일 내 변경된 매칭 문서:
    - `docs/**/*.md`, `specs/**/*.md`, `.scratch/**/*.md`
+   - `.task/TSK-*.md` — Task 문서(`/task-split` 이 만든다). Scope · Acceptance 가 이 브랜치의 요구사항이다 — 상태가 `approved` · `in-review` 인 Task 를 먼저 본다. 점으로 시작하는 폴더라 다른 glob 에 안 잡히므로 따로 수집한다. 문서 폴더 · `.task/` 는 커밋하지 않는 문서라 git 이력이 아니라 파일 자체로 고른다
    - 문서 폴더는 `docs` · `Docs` 를 같은 폴더로 본다. Glob 은 Windows 에서도 대소문자를 구분하므로 레포 루트 목록(`ls`)에서 확인한 실제 표기로 패턴을 만든다 — `Docs` 레포면 `Docs/**/*.md`. 존재 검사(`[ -d docs ]` · `Test-Path docs`)로 정하지 않는다 — Windows · macOS 는 `Docs` 에도 참이다. 둘 다 있으면 둘 다 수집한다.
    - 브랜치명과 유사 토큰 매칭 (e.g. `feature/auth` → `auth`, `authentication` 포함 파일).
 4. **PR description** — `gh pr view --json title,body` 가능 시 본문. 실패 시 건너뜀.

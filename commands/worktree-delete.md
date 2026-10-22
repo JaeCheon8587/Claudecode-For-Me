@@ -1,9 +1,9 @@
 ---
-description: /worktree-init 이 만든 워크트리와 그 브랜치를 제거한다. 브랜치 이름은 worktree-init 매니페스트에서 읽는다(추측하지 않는다). 링크된 서브모듈의 메인 repo 원본은 절대 제거하지 않는다(junction 링크만 해제). 인자 없으면 워크트리 목록에서 선택.
-argument-hint: "[<slug>] — 생략 시 목록에서 선택"
+description: /worktree-init 이 만든 워크트리를 지운다 — 브랜치가 base 에 머지됐는지 확인하고, 그 워크트리에서 마감한 Task 를 done 으로 바꾸고 진행 표시를 지운 뒤 워크트리 · 브랜치를 제거한다. 머지되지 않았거나 커밋 안 된 변경이 있으면 멈추고 묻는다. 링크된 서브모듈의 메인 repo 원본은 절대 제거하지 않는다(junction 링크만 해제). 인자 없으면 워크트리 목록에서 선택.
+argument-hint: "[<slug>] [--merged] [--force] — slug 생략 시 목록에서 선택"
 ---
 
-워크트리 정리 커맨드(`/worktree-init` 의 짝). 설정한 워크트리 + 브랜치를 제거하되 **서브모듈 메인 원본은 보존**한다.
+워크트리 정리 커맨드(`/worktree-init` 의 짝). **메인 repo 에서 실행한다.** 지우기 전에 잃을 것(커밋 안 된 변경 · 머지 안 된 커밋)이 없는지 보고, 머지가 확인되면 그 워크트리에서 마감한 Task 를 `done` 으로 바꾼다. **서브모듈 메인 원본은 보존**한다.
 
 helper 경로:
 
@@ -11,13 +11,13 @@ helper 경로:
 WT_SETUP="${CLAUDE_PLUGIN_ROOT}/scripts/worktree_setup.py"
 ```
 
-`$ARGUMENTS` 해석:
+`$ARGUMENTS` 해석 — `--merged` · `--force` 는 사용자가 직접 넣었을 때만 넘긴다:
 
 ## 인자 있음 (slug 지정)
-첫 토큰을 slug로 보고 바로 제거한다:
+첫 토큰을 slug로 보고 바로 실행한다:
 
 ```bash
-python "$WT_SETUP" delete <slug>
+python "$WT_SETUP" delete <slug> [--merged] [--force]
 ```
 
 ## 인자 없음 (목록에서 선택)
@@ -25,9 +25,9 @@ python "$WT_SETUP" delete <slug>
    ```bash
    python "$WT_SETUP" list
    ```
-   stdout 마지막 줄의 JSON 배열 `[{"slug","branch","worktree"}, ...]`를 파싱한다.
+   stdout 마지막 줄의 JSON 배열 `[{"slug","branch","worktree","base","tasks"}, ...]`를 파싱한다.
 2. 빈 배열(`[]`)이면 "제거할 워크트리가 없습니다" 보고 후 종료.
-3. 목록을 표로 보여주고 `AskUserQuestion`으로 **어느 워크트리를 제거할지** 사용자에게 확인한다 (여러 개 선택 허용).
+3. 목록을 표로 보여주고(`slug · branch · base · 마감한 Task`) `AskUserQuestion`으로 **어느 워크트리를 제거할지** 사용자에게 확인한다 (여러 개 선택 허용).
 4. 선택된 각 slug에 대해 `python "$WT_SETUP" delete <slug>` 실행.
 
 ## 제거 전 — 살아있는 세션 확인
@@ -42,10 +42,29 @@ herdr agent list
 - 제거 대상 워크트리를 cwd 로 가진 에이전트가 있으면 **중단**한다. 종료 순서를 안내한다: ① 그 세션을 종료 ② 페인을 닫음 ③ 이 커맨드를 다시 실행. **대신 종료해주지 않는다.**
 - 사용자가 "그래도 지워라" 라고 **명시**하면 진행한다.
 
+## 멈췄을 때 (exit 2 — `§F 삭제를 멈춘다`)
+
+사유를 그대로 전하고 **멈춘다.** 플래그를 임의로 붙여 다시 실행하지 않는다. 사유에 맞는 길을 표로 정리하고 추천을 달아 산문으로 묻는다:
+
+| 사유 | 길 |
+|---|---|
+| `머지되지 않았다` | ① **머지한다**(추천) — 사용자가 머지한 뒤 이 커맨드를 다시 실행한다. **대신 머지하지 않는다.** ② 이미 머지했다(squash · rebase 머지라 조상 검사에 안 잡힌다) → `--merged` 로 다시 실행 — Task `done` 전이까지 한다. ③ 버린다 → `--force` |
+| `커밋 안 된 변경이 있다` | ① 그 워크트리에서 커밋하거나 정리한 뒤 다시 실행(추천) ② 버린다 → `--force`. `--merged` 로는 풀리지 않는다 |
+| `워크트리 · 브랜치가 이미 없어 머지를 확인할 수 없다` | 손으로 지워 매니페스트만 남았고, 거기 마감한 Task 가 있다. ① 머지했다 → `--merged`(Task `done` 전이 후 매니페스트 삭제) ② 버렸다 → `--force`(매니페스트만 지운다 — Task 문서는 그대로) |
+| `Task 를 done 으로 바꾸지 못해 삭제를 멈춘다` | 줄마다 사유가 붙는다 — Task 메타 표의 상태 행이 깨졌다 · Task 나 대상 Intent 가 UTF-8 이 아니다 · 진행 표시 줄에 HTML 주석이 섞여 있다. 하나라도 있으면 아무것도 쓰거나 지우지 않는다(Task · Intent · 워크트리 · 브랜치 그대로). 사용자와 그 줄을 고친 뒤 같은 명령을 다시 실행한다 |
+| `문서를 쓰다가 멈춰 삭제를 멈춘다` | 다른 프로그램이 Task · Intent 파일을 잡고 있다(Windows 파일 잠금 등). 워크트리 · 브랜치는 그대로고, Task · Intent 는 일부만 바뀌었을 수 있다 — 그 프로그램을 닫고 같은 명령을 다시 실행하면 이어서 끝낸다(이미 done 인 Task 도 표시를 다시 정리하고 카탈로그를 다시 쓴다) |
+
+`--force` 는 커밋 안 된 변경과 머지 안 된 커밋을 **되돌릴 수 없게** 지운다 — 사용자가 버린다고 **명시**했을 때만 붙인다. 머지를 확인하지 못한 채 `--force` 로 지우면 Task 문서는 건드리지 않는다.
+
+**exit 1** → stderr 를 그대로 전하고 중단한다(브랜치를 특정할 수 없음 · cwd 가 워크트리 안 · git 명령 실패).
+
 ## 동작 / 보고
-- `delete`가 하는 일: 대상 브랜치 확정 → 워크트리 서브모듈 junction/symlink **링크만 해제**(메인 repo 서브모듈 원본은 100% 보존) → `git worktree remove`(dirty면 자동 `--force`) → `git branch -D <branch>` → 메인 매니페스트 삭제.
-- **브랜치 확정 순서**: ① `.process/worktree/<slug>.json`(worktree-init 이 기록한 사실) → ② `git worktree list` 역인덱싱 → ③ 둘 다 실패하면 "브랜치를 특정할 수 없다"로 **명시 실패**. 브랜치 이름은 Task Handoff로 정해지므로(기본값 `task/<문서 ID>`) slug에서 유도할 수 없다 — 추측하지 않는다.
-- 제거된 워크트리·브랜치·매니페스트를 한 줄씩 보고한다.
+- `delete`가 하는 일: 대상 브랜치 확정 → **안전 게이트**(워크트리의 커밋 안 된 변경, 브랜치가 base 에 머지됐는지) → 머지가 확인되면(또는 `--merged`) 매니페스트에 기록된 Task — 그 워크트리에서 `finish` 한 Task — 를 메인 정본에서 `in-review → done` 으로 바꾸고, 대상 Intent 에서 그 Task 의 진행 표시와 `삭제 예정` 항목 줄을 지우고, Task 카탈로그 · INT 카탈로그를 다시 만든다(커밋 없음 — 문서는 커밋하지 않는다) → 워크트리 서브모듈 junction/symlink **링크만 해제**(메인 repo 서브모듈 원본은 100% 보존) → `git worktree remove` → `git branch -D <branch>` → 메인 매니페스트 삭제.
+- **머지 확인**: 브랜치 끝 커밋이 base(매니페스트에 기록된 분기 ref)에 들어 있는지 본다. base 가 `origin/<X>` 면 로컬 `<X>` 도 본다(로컬에서 머지하고 아직 푸시하지 않은 경우). 매니페스트를 잃었으면 메인의 현재 브랜치를 base 로 본다. 개발 커밋이 없는 워크트리는 잃을 것이 없어 그대로 통과한다.
+- **브랜치 확정 순서**: ① `.process/worktree/<slug>.json`(worktree-init 이 기록한 사실) → ② `git worktree list` 역인덱싱 → ③ 둘 다 실패하면 "브랜치를 특정할 수 없다"로 **명시 실패**. 브랜치 이름은 `--branch` 로 바뀔 수 있으므로(기본값 `work/<slug>`) slug에서 유도하지 않는다 — 추측하지 않는다.
+- 보고는 출력 줄을 그대로 옮긴다: `merged into` · `task`(done 과 Intent 별 표시 · 삭제 줄 수) · `task skip` · `task 그대로` · 제거된 워크트리 · 브랜치 · 매니페스트.
+  - `task skip: … (approved — 마감하지 않았다)` → `finish` 하지 않은(또는 리뷰에서 되돌린) Task 다. 그대로 남는다 — 다른 워크트리에서 이어서 개발한다.
+  - `task 그대로` → 머지를 확인하지 못해 문서를 건드리지 않았다. 작업을 접는 것이면 사용자 확인을 받아 Task 를 `dropped` 로 바꾸고 Intent 를 되돌린다(신규 항목 삭제 · 변경 항목은 Task Scope 의 `이전` 문장으로 · 그 Task 의 진행 표시 삭제). **묻지 않고 고치지 않는다.**
 
 > **서브모듈 안전**: 메인 repo의 서브모듈 디렉토리·내용은 절대 건드리지 않는다. 링크 해제는 워크트리 쪽 junction만 끊는 것이며, 이를 안 하면 `git worktree remove`가 junction을 따라가 메인 서브모듈을 삭제하는 사고가 나므로 필수다.
 

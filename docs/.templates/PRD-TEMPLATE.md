@@ -96,7 +96,7 @@
 
 ## 10. 제약사항 (솔루션 공통)
 > 코드/레이어 제약은 [`DDD_ARCHITECTURE_RULES.md`](.rules/DDD_ARCHITECTURE_RULES.md) / [`OBJECT_ORIENTED_DESIGN_RULES.md`](.rules/OBJECT_ORIENTED_DESIGN_RULES.md) SSOT 인용. 본 절은 product/도메인 제약 + 룰 파일 인용만.
-> 솔루션 level 결정은 그 결정을 실행한 Intent 의 `Decisions` 가 SSOT — cross-app 영향 결정은 영향 App 중 하나의 Intent 를 인용 (`[{App}-INT-{NNN} D{n}]({App}/INTENT/{App}-INT-{NNN}.md#decisions)`).
+> 솔루션 level 결정은 그 결정이 속한 기능의 Intent `Decisions` 가 SSOT — cross-app 영향 결정은 영향 App 중 하나의 Intent 를 인용 (`[{App}-INT-{NNN} D{n}]({App}/INTENT/{App}-INT-{NNN}.md#decisions)`).
 
 - {도메인 제약 1 — cross-app 적용}
 - {기술 제약 — DDD/레이어 룰 인용}

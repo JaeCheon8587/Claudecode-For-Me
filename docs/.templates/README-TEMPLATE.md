@@ -1,6 +1,6 @@
 # {프로젝트명} ({SYSTEM_CODE})
 
-> ⚠ **TEMPLATE** — 모든 `{...}` placeholder를 실제 값으로 채우거나 해당 줄을 삭제한다. 본 파일은 레포 루트(`/README.md`)에 배치한다. 기존 레포의 문서 폴더가 `Docs/` 면 이 파일의 링크 · 경로의 `docs/` 를 모두 `Docs/` 로 쓴다 — 링크는 실제 폴더 표기와 같아야 GitHub · Linux 에서 열린다. 작성 후 본 경고 줄은 삭제한다.
+> ⚠ **TEMPLATE** — 모든 `{...}` placeholder를 실제 값으로 채우거나 해당 줄을 삭제한다. 본 파일은 레포 루트(`/README.md`)에 배치한다. 기존 레포의 문서 폴더가 `Docs/` 면 이 파일의 링크 · 경로의 `docs/` 를 모두 `Docs/` 로 쓴다 — 링크는 실제 폴더 표기와 같아야 Linux · WSL 에서도 열린다(대소문자 구분). 작성 후 본 경고 줄은 삭제한다.
 
 > {프로젝트 한 줄 요약 — 무엇을 하는 시스템인가, 누구를 위한 것인가}
 
@@ -49,18 +49,21 @@
 | 솔루션 아키텍처 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
 | App 요구사항 · 기능 목록 | [`docs/{SYSTEM_CODE}/{SYSTEM_CODE}-PRD.md`](docs/{SYSTEM_CODE}/{SYSTEM_CODE}-PRD.md) |
 | App 호스트 아키텍처 | [`docs/{SYSTEM_CODE}/{SYSTEM_CODE}-ARCHITECTURE.md`](docs/{SYSTEM_CODE}/{SYSTEM_CODE}-ARCHITECTURE.md) |
-| App 작업 단위 (Intent) | [`docs/{SYSTEM_CODE}/INTENT/`](docs/{SYSTEM_CODE}/INTENT/) |
+| App 기능 문서 (Intent) | [`docs/{SYSTEM_CODE}/INTENT/`](docs/{SYSTEM_CODE}/INTENT/) |
 | App Intent 카탈로그 (생성물) | [`docs/{SYSTEM_CODE}/{SYSTEM_CODE}-INT-CATALOG.md`](docs/{SYSTEM_CODE}/{SYSTEM_CODE}-INT-CATALOG.md) |
+| 작업 문서 (Task) 카탈로그 (생성물) | [`.task/task-catalog.md`](.task/task-catalog.md) |
 | 코드 룰 | [`docs/.rules/`](docs/.rules/) |
+
+> 설계 문서(`docs/` · `.task/`)는 커밋하지 않는다 — 위 링크는 문서를 가진 로컬 clone 에서만 열린다.
 
 > AI 에이전트(Claude Code 등)로 작업 시: 레포 루트 [`CLAUDE.md`](CLAUDE.md)를 참조한다.
 
 ## 기여
 
-{기여 정책. 예: 신규 기능·리팩토링은 `/requirement-spec` 으로 Intent 를 작성·승인한 뒤 착수한다 (`/worktree-init` → 워크트리에서 개발 · `worktree_setup.py finish` → `/branch-review`). 결정은 Intent 의 Decisions 에 남긴다. 기능 목록이 바뀌면 App PRD §7 을 갱신한다. 상세는 docs/DOCUMENT_GUIDE.md §2.}
+{기여 정책. 예: 기능 변경은 `/requirement-spec` 으로 Intent 를 고친 뒤 `/task-split` 으로 Task 를 잘라 승인받고 착수한다 (`/worktree-init` → 워크트리에서 개발 · `worktree_setup.py finish` → `/branch-review` → 머지 → `/worktree-delete`). 설계 문서(`docs/` · `.task/`)는 커밋하지 않는다. 결정은 Intent 의 Decisions 에 남긴다. 기능 목록이 바뀌면 App PRD §7 을 갱신한다. 상세는 docs/DOCUMENT_GUIDE.md §2.}
 
 - 커밋 메시지: {conventional commits 형식 — `feat:`, `fix:`, `docs:`, `refactor:` 등}
-- PR 전 체크리스트: [`docs/DOCUMENT_GUIDE.md` §8](docs/DOCUMENT_GUIDE.md#8-동기화-부담-위치) 동기화 위치 갱신 확인.
+- PR 전 체크리스트: 로컬 설계 문서를 코드에 맞췄는지 확인한다(`docs/DOCUMENT_GUIDE.md` §8 동기화 위치). 설계 문서는 커밋하지 않아 PR diff 에 나오지 않는다 — 리뷰어가 대신 확인할 수 없다.
 
 ## 라이선스
 

@@ -47,7 +47,7 @@ def test_template_refs_resolve():
 
 def test_root_templates_link_with_actual_docs_spelling():
     """CLAUDE · README 는 레포 루트에 놓여 링크가 `docs/…` 로 시작한다. 기존 레포의 문서 폴더가
-    Docs 면 링크도 Docs 로 달아야 한다 — GitHub · Linux 는 대소문자를 구분해 소문자 링크가 깨진다."""
+    Docs 면 링크도 Docs 로 달아야 한다 — Linux · WSL 은 대소문자를 구분해 소문자 링크가 깨진다."""
     for name in ("CLAUDE-TEMPLATE.md", "README-TEMPLATE.md"):
         warning = next(line for line in (TEMPLATES / name).read_text(encoding="utf-8").splitlines()
                        if "**TEMPLATE**" in line)

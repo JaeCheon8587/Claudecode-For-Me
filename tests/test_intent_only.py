@@ -7,8 +7,8 @@ pipeline-runner 제거). 그 토큰이 스킬 · 커맨드 · 에이전트 · �
 잔재 한 줄이 새 레포마다 옛 구조를 다시 심는다.
 
 면제는 두 가지뿐이다.
-- 폐지 안내 2줄 — 옛 입력을 받으면 막는 가드 (ALLOWED). 면제되는 것은 그 문구 자체다 —
-  같은 줄의 다른 토큰은 잡는다.
+- 폐지 안내 문구 — 옛 입력을 받으면 막는 가드 (ALLOWED). 면제되는 것은 그 문구 자체다 —
+  같은 줄의 다른 토큰은 잡는다. v3.75 에서 /worktree-init 이 문서 입력을 받지 않게 되어 지금은 없다.
 - DOCUMENT_GUIDE 의 retired-doc-types 블록 — 폐지 문서 → Intent 대응표. 다른 파일에 같은
   마커를 옮겨 적어도 면제되지 않고, 닫히지 않은 블록은 그 자체로 실패다.
 개념어 "ADR" 단독(Intent 템플릿의 "ADR 은 별도 파일 없이 …")은 토큰이 아니다.
@@ -43,10 +43,7 @@ SCAN = (
 )
 
 # 파일 → 그 파일에서 잔재 토큰을 써도 되는 문구. 면제는 이 문구에만 걸린다.
-ALLOWED = {
-    "commands/worktree-init.md": "Work Packet·TASK 입력은 … 폐지",
-    "scripts/worktree_setup.py": "Work Packet·TASK 입력은 v3.58 에서 폐지",
-}
+ALLOWED: dict[str, str] = {}
 BLOCK_FILE = "docs/.templates/DOCUMENT_GUIDE.md"
 BLOCK_BEGIN = "<!-- retired-doc-types:begin -->"
 BLOCK_END = "<!-- retired-doc-types:end -->"
@@ -135,7 +132,8 @@ def test_unclosed_marker_block_is_reported():
     assert _file_hits(BLOCK_FILE, [BLOCK_BEGIN, "FRD 폴더를 만든다"]), "닫히지 않은 블록이 파일 나머지를 면제한다"
 
 
-def test_allowed_phrase_exempts_only_itself():
-    rel = "commands/worktree-init.md"
-    assert _file_hits(rel, [f"- `{ALLOWED[rel]}` → Intent 를 작성한다"]) == []
-    assert _file_hits(rel, [f"- `{ALLOWED[rel]}` → FRD 를 작성한다"]), "같은 줄의 다른 토큰까지 면제된다"
+def test_allowed_phrase_exempts_only_itself(monkeypatch):
+    rel, phrase = "commands/x.md", "Work Packet 입력은 폐지"   # 면제 장치 자체의 검사 — 지금 ALLOWED 는 비어 있다
+    monkeypatch.setitem(ALLOWED, rel, phrase)
+    assert _file_hits(rel, [f"- `{phrase}` → Intent 를 작성한다"]) == []
+    assert _file_hits(rel, [f"- `{phrase}` → FRD 를 작성한다"]), "같은 줄의 다른 토큰까지 면제된다"

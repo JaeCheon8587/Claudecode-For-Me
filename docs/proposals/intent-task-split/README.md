@@ -1,11 +1,50 @@
-# Intent · Task 분리 개정안 (초안)
+# Intent · Task 분리 개정안
 
-> **상태: 초안.** 이 폴더의 문서는 검토용 초안입니다. 지금 쓰는 템플릿 · 스킬 · 스크립트는 바뀌지 않았습니다.
-> 이행(템플릿 교체와 스킬 · 스크립트 개편)은 이 초안이 확정된 뒤 별도 계획으로 한 번에 진행합니다. Intent 템플릿만 먼저 바꾸면 `requirement-spec`과 `check-intent`가 바로 깨지기 때문입니다.
+> **상태:** 1단계(개발 단계 입력을 Task 로)는 v3.72.0 에서 이행했습니다. forge-scope 는 v3.73.0 에서 제거했고, forge-init · forge-cancel 은 v3.74.0 에서 `/worktree-init` · `/worktree-delete` 로 이름을 바꿨습니다.
+> **개정 2(§0)가 그 뒤의 결정을 바꿉니다** — 문서는 커밋하지 않고, Task 는 `/task-split` 이 자르고, `/worktree-init` 은 Task 를 읽지 않습니다. §1 이하와 §0 이 다르면 §0 이 우선합니다. §6 은 1단계 이행 때의 영향 목록(기록)입니다.
+> **개정 2 는 v3.75.0 에서 이행했습니다** (§0.3 의 1~3). 이 폴더의 초안 파일(§2)은 이행 전 기록입니다 — 현행은 `docs/.templates/` 의 Intent v2.0 · Task 템플릿과 DOCUMENT_GUIDE 2.0 입니다.
 
-> **진행 상황:** 1단계(개발 단계: docs_helpers · worktree-init · forge-scope) 구현 — 브랜치 `feat/task-dev-stage`. requirement-spec · 템플릿 교체는 다음 단계입니다.
-> forge-scope 는 v3.73.0 에서 제거했습니다. 개발은 사용자가 워크트리에서 시작한 세션이 하고, 마감 전이는 `worktree_setup.py finish` 가 맡습니다.
-> forge-init · forge-cancel 은 v3.74.0 에서 `/worktree-init` · `/worktree-delete` 로 이름을 바꿨습니다(매니페스트 폴더 `.process/worktree/`).
+## 0. 개정 2 — 문서는 로컬에만, Task 는 잘라서, 워크트리는 환경만
+
+### 0.1 흐름
+
+```
+requirement-spec   Intent 를 쓰거나 고친다 — App 마다 1개. 계약이 바뀌면 호출하는 App · 제공하는 App 둘 다
+      ↓
+/task-split        고친 Intent 들의 바뀐 항목을 개발 단위 Task n 개로 자른다 (Intent : Task = 1:1 · 1:N · N:N)
+      ↓
+/worktree-init     <이름> 으로 워크트리만 만든다 — Task 를 읽지 않는다. 문서 폴더 · .task/ 를 복사해 넣는다
+      ↓
+개발 세션           /task-split 이 준 개발 프롬프트로 Task 들을 개발한다. Task 하나를 마칠 때마다 finish
+      ↓
+머지               사용자가 워크트리 브랜치를 base 에 머지한다
+      ↓
+/worktree-delete   머지를 확인하고, 마감한 Task 를 done 으로 바꾸고 진행 표시를 지운 뒤, 워크트리 · 브랜치를 지운다
+```
+
+### 0.2 결정
+
+| 항목 | 결정 | 이유 |
+|---|---|---|
+| 문서 공유 | 문서 폴더(`docs/` · `Docs/`)와 `.task/` 는 **커밋 · 푸시하지 않습니다.** `.git/info/exclude` 에 올려 `git add -A` 에도 잡히지 않게 합니다 | 팀 정책 — 설계 문서를 공유하지 않습니다. `info/exclude` 는 공유 `.gitignore` 를 고치지 않고, linked worktree 가 함께 씁니다 |
+| 정본 | 메인 작업트리의 문서가 정본입니다. 상태 전이 · 진행 표시 정리는 모두 정본에 씁니다(커밋 없음) | git 이력이 없습니다 |
+| 워크트리의 문서 | `/worktree-init` 이 정본을 **복사**합니다(워크트리에 없는 파일만). 개발 세션이 읽는 스냅샷입니다. 링크(junction)는 쓰지 않습니다 | 실측: junction 이 남은 채 `git worktree remove --force` 를 하면 링크 대상(정본)의 내용이 지워집니다 |
+| 스냅샷 갱신 | 하지 않습니다. 워크트리를 만든 뒤 생긴 Task 파일은 `/worktree-init` 을 같은 이름으로 다시 실행하면 복사됩니다(있는 파일은 덮지 않습니다) | 재복사 옵션은 나중에 검토합니다 |
+| `/worktree-init` 입력 | `<이름>` 하나. 브랜치는 `work/<이름>`(또는 `--branch`). Task 를 읽지 않습니다 — 승인 커밋 게이트 · 상태 전이가 없습니다 | 워크트리 하나에서 Task 여러 개를 개발합니다 |
+| Task 만들기 | `/task-split` — 바뀐 Intent 항목을 자르기 기준(task-split SKILL)으로 나눠 Task n 개를 쓰고, 진행 표시를 붙이고, 한 번에 승인받습니다 | requirement-spec 다음 단계가 비어 있었습니다 |
+| Intent 변경 기준선 | requirement-spec 이 기존 Intent 를 고치기 전 사본을 `.process/intent-base/<ID>.md` 에 남깁니다. `/task-split` 이 그 사본과 비교해 신규 · 변경(이전 문장) · 삭제를 뽑습니다. 사본이 없고 초안(`draft`)이 아닌 Task 가 가리킨 적 없는 Intent 는 새 Intent 라 전부 신규입니다(초안은 지금 자르는 중인 Task 라 세지 않습니다) | git 이력이 없어 비교 기준이 따로 있어야 합니다 |
+| 선행 Task | Task 메타에 `선행 Task`(`none` 또는 ` · ` 로 나열한 TSK ID)를 둡니다. 형식 · 자기 자신 · 없는 Task · 순환은 FAIL, 취소된 선행은 WARN(`TSK_DEPENDS`). E · X 가 기대는 FR 을 끝나지 않은 다른 Task 가 바꾸면 그 Task 가 선행(거쳐서도)이어야 합니다(`TSK_DEPENDS_ORDER`). 카탈로그에 `선행` 열을 둡니다 | 한 워크트리에서 Task 여러 개를 개발하므로 순서를 문서로 고정합니다 |
+| Task Handoff | `repo · app` · `손대지 말 영역` · `완료 보고 방식` 3행. `base branch` · `브랜치명` 은 뺍니다 | 브랜치는 `/worktree-init` 이 정하고, Task 하나가 브랜치 하나가 아닙니다 |
+| Task 상태 | `draft → approved → in-review → done`, 언제든 `dropped`. **`in-dev` 는 없앱니다** | Task 를 읽지 않는 init 은 in-dev 로 바꿀 수 없고, 달리 쓰는 곳이 없습니다 |
+| 마감(in-review) | 개발 세션이 워크트리 안에서 `worktree_setup.py finish TSK-<NNN> …` — 정본 Task 를 `approved → in-review` 로 바꾸고, Task 카탈로그를 다시 만들고, 메인 매니페스트에 Task ID 를 남깁니다. 커밋 안 된 변경이 있거나 개발 커밋이 없으면 멈춥니다 | |
+| 완료(done) · 진행 표시 정리 | `/worktree-delete` 가 브랜치가 base 에 머지됐는지 봅니다. 머지됐으면 그 워크트리에서 마감한 Task 를 `done` 으로 바꾸고, 대상 Intent 의 진행 표시와 `삭제 예정` 줄을 지우고, 카탈로그를 다시 만든 뒤 워크트리 · 브랜치를 지웁니다 | 머지 = 코드가 base 에 들어간 시점입니다. in-review 동안 표시가 남아 있어야 리뷰에서 돌려보낼 때 Intent 가 맞습니다 |
+| 머지 안 됨 | `/worktree-delete` 가 멈추고 사용자에게 묻습니다 — squash · rebase 머지라 조상 검사에 안 잡히면 `--merged`, 버리려면 `--force`(문서는 그대로) | 안전 게이트를 겸합니다 |
+
+### 0.3 이행 (v3.75.0)
+
+1. `worktree_setup.py` · `/worktree-init` · `/worktree-delete` — 위 결정대로. `docs_helpers.py ensure-exclude` 신설, Task 상태에서 `in-dev` 제거.
+2. `/task-split` 신설 — 자르기 기준 · 개발 프롬프트. Task · Task 카탈로그 템플릿을 `docs/.templates/.task/` 로 옮깁니다.
+3. `requirement-spec` 개편 — 기존 Intent 수정 모드(기준선 사본), 여러 App, Intent v2.0 템플릿, `check-intent` v2, DOCUMENT_GUIDE v2.0.
 
 ## 1. 무엇이 바뀌나
 
@@ -37,7 +76,7 @@
 | Scope 형식 | 사본을 기본으로, '변경' 항목에만 `이전` 문장 | Task 템플릿 Scope · 규칙 6 |
 | Edge · Error | Intent에 두고, Task는 Scope 사본과 A로 판정. 작업·배포 동안에만 생기는 상황은 Task Risks `R-n` | DOCUMENT_GUIDE §1.3, Task 템플릿 Risks |
 | 위치 · ID | `.task/TSK-{NNN}.md`, App 접두 없음, 레포 전체 번호열. 0.x `{App}-TASK-{NNN}`와 섞이지 않게 `TSK` | DOCUMENT_GUIDE §0 · §5 |
-| `.task/` 커밋 | 점 폴더지만 커밋한다. `git check-ignore`에 걸리면 Task 작성 전에 멈춘다 | DOCUMENT_GUIDE §0 |
+| `.task/` 커밋 | ~~점 폴더지만 커밋한다~~ → **개정 2: 커밋하지 않는다**(§0.2 문서 공유) | DOCUMENT_GUIDE §0 |
 | Task 유형 | 기능개발 · 버그수정('위반') · 리팩토링('보존') | DOCUMENT_GUIDE §1.3 |
 | 손대지 말 영역 | 폴더 · 프로젝트 단위 경로만 | DOCUMENT_GUIDE §1.4, Task 템플릿 Handoff |
 | 카탈로그 | 생성물. 열 = Task · 설명 · 유형 · 상태 · 대상 Intent | task-catalog 템플릿 |
@@ -49,7 +88,7 @@
 | # | 결정 | 초안의 기본값 | 반영 위치 | 다른 선택지 |
 |---|---|---|---|---|
 | 1 | Intent 메타의 `상태` | `active` · `retired`만 둡니다. `유형 · 승인 · 검증` 행은 Task로 옮깁니다. Intent 변경은 Task와 함께 승인되므로 Intent 자체 승인 행이 필요 없습니다 | Intent 템플릿 메타 · 규칙 11 | 상태 행을 아예 없앰 (retired 기능은 문서 삭제) |
-| 2 | 진행 표시를 지우는 시점 | 개발 마감(`worktree_setup.py finish` 의 `in-review` 전이 커밋)에서 **워크트리의** Intent 진행 표시를 지우고 삭제 예정 항목을 지웁니다. 머지되면 코드와 문서가 함께 main에 반영됩니다. 머지 전까지 main에는 표시가 남는데, 이는 main 코드에 아직 없다는 사실과 맞습니다 | DOCUMENT_GUIDE §2 3번, Intent 템플릿 규칙 9 | Task `done` 때 사람이 main에서 지움 (머지와 표시 제거 사이에 틈이 생김) |
+| 2 | 진행 표시를 지우는 시점 | ~~개발 마감(`finish`)에서 워크트리의 Intent 표시를 지우고 커밋~~ → **개정 2: `done` 때(`/worktree-delete` 가 머지를 확인한 뒤) 메인 정본에서 지웁니다.** 문서가 git 에 없어 머지로 옮길 수 없습니다 | DOCUMENT_GUIDE §2 3번, Intent 템플릿 규칙 9 | — |
 | 3 | Task 취소 | `dropped` 상태를 추가합니다. Scope로 Intent를 되돌립니다(신규 삭제, 변경은 `이전` 문장으로 복원, 표시 삭제). Intent를 먼저 고치는 흐름에서는 작업을 접으면 Intent가 거짓이 되므로 되돌리는 길이 필요합니다 | Task 템플릿 메타 · 규칙 6, DOCUMENT_GUIDE §1.3 · §2 · §8 | 취소된 Task를 파일째 지우고 Intent는 git revert |
 | 4 | done Task 보관 | `.task/`에 그대로 둡니다. 카탈로그가 전체 목록이자 Intent 역방향 찾기 수단입니다 | task-catalog 템플릿 | 일정 기간 뒤 `.task/archive/`로 옮김 |
 | 5 | 계약을 적는 곳 | 계약의 동작(API · 필드 · 오류 코드)은 **제공하는 App의 Intent FR**에 적습니다. errorCode · DTO 등재는 지금처럼 솔루션 PRD 부록에 두고 Task 승인과 같은 커밋에 넣습니다. Task Scope는 Intent 항목만 가리킵니다 | DOCUMENT_GUIDE §8 | 계약 전용 문서를 솔루션 레벨에 두고 Scope가 그 항목도 가리킴 |

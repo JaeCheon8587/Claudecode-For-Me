@@ -59,12 +59,12 @@
 |---|---|---|
 | S1 | {시나리오 이름} | {기대 결과} |
 
-> 기능별 상세 요구·결정은 §7 `근거 Intent` 열의 Intent 참조.
+> 기능별 동작·결정은 §7 `Intent` 열의 Intent(기능 문서) 참조.
 
 ## 7. 기능 목록 (본 App SSOT)
-> **본 App 기능 목록 SSOT** — 지금 존재하거나 계획된 기능을 행으로 둔다. Intent 가 끝나 기능이 생기거나 바뀌면 해당 행을 갱신하고 `근거 Intent` 에 ID 를 남긴다. 작업 이력·상태는 생성물 [`{App}-INT-CATALOG`]({App}-INT-CATALOG.md) 가 보유 — 본 표에 복제하지 않는다. 솔루션 전체 roll-up = [`../PRD.md` §8](../PRD.md#8-주요-기능-요약-솔루션-전체-roll-up) (있을 시).
+> **본 App 기능 목록 SSOT** — 지금 존재하거나 계획된 기능을 행으로 둔다. 기능 1개 = Intent 1개 — 새 기능의 Intent 를 만들면 행을 더하고 `Intent` 에 ID 를 남긴다(Intent 메타 `기능 ID` 가 이 행이다). 기능을 바꾼 Task 가 끝나면(`done`) 한 줄 설명 · 릴리즈 범위를 맞춘다. 진행 중 Task 는 생성물 [`{App}-INT-CATALOG`]({App}-INT-CATALOG.md), 작업 이력 · 상태는 `.task/task-catalog.md` 가 보유 — 본 표에 복제하지 않는다. 솔루션 전체 roll-up = [`../PRD.md` §8](../PRD.md#8-주요-기능-요약-솔루션-전체-roll-up) (있을 시).
 
-| 기능 ID | 기능명 | 한 줄 설명 | 릴리즈 범위 | 근거 Intent |
+| 기능 ID | 기능명 | 한 줄 설명 | 릴리즈 범위 | Intent |
 |---|---|---|---|---|
 | F001 | {기능명} | {한 줄 설명} | MVP / 이번 릴리즈 / Backlog | [`{App}-INT-{NNN}`](INTENT/{App}-INT-{NNN}.md) 또는 없음 |
 
@@ -76,13 +76,13 @@
 | {App 특화 분류} | {본 App 한정 요구사항} |
 
 ## 9. 제약사항 (App 특화)
-> 솔루션 공통 제약은 [`../PRD.md` §10](../PRD.md#10-제약사항-솔루션-공통) 인용 (있을 시). 본 절은 본 App 특화 제약만. 되돌리기 어려운 결정은 그 결정을 내린 Intent 의 `Decisions` 를 인용.
+> 솔루션 공통 제약은 [`../PRD.md` §10](../PRD.md#10-제약사항-솔루션-공통) 인용 (있을 시). 본 절은 본 App 특화 제약만. 되돌리기 어려운 결정은 그 결정이 속한 기능 Intent 의 `Decisions` 를 인용.
 
 - {본 App 한정 도메인 제약}
 - {결정 인용 — [`{App}-INT-{NNN}` D{n}](INTENT/{App}-INT-{NNN}.md#decisions)}
 
 ## 10. Intent 진입점
-> 본 App 의 작업 단위 문서(요구·결정) 진입점. 목록·상태는 생성물 [`{App}-INT-CATALOG`]({App}-INT-CATALOG.md) 가 SSOT — 본 절에 Intent 목록을 복제하지 않는다.
+> 본 App 의 기능 문서(동작·결정) 진입점. 목록은 생성물 [`{App}-INT-CATALOG`]({App}-INT-CATALOG.md) 가 SSOT — 본 절에 Intent 목록을 복제하지 않는다. 작업(Task)은 레포 루트 `.task/task-catalog.md` 에 있다.
 
 | Intent 카탈로그 | Intent 폴더 |
 |---|---|
