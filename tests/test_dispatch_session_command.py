@@ -1,8 +1,8 @@
 """`/dispatch-session` — herdr 페인에 Claude 세션을 띄우는 범용 런처.
 
 고정할 계약:
-1. **범용** — forge 매니페스트를 읽지 않는다.
-2. **만들지 않는다** — 워크트리 생성은 `/forge-init` 몫이다.
+1. **범용** — `/worktree-init` 매니페스트를 읽지 않는다.
+2. **만들지 않는다** — 워크트리 생성은 `/worktree-init` 몫이다.
 3. **위치는 사용자가 고른다** — 임의 선택 금지.
 4. **보고하고 끝낸다** — 폴링·대리 응답 금지.
 """
@@ -17,7 +17,7 @@ def read(rel: str) -> str:
 
 
 def test_command_exists_without_skill_dir():
-    """forge-cancel·forge-init 과 같은 커맨드 단독 구성."""
+    """worktree-delete·worktree-init 과 같은 커맨드 단독 구성."""
     assert COMMAND.is_file()
     assert not (ROOT / "skills" / "dispatch-session").exists()
 
@@ -45,19 +45,19 @@ def test_placement_is_always_asked():
 
 
 def test_does_not_create_worktrees():
-    """생성자가 둘이 되면 매니페스트 없는 워크트리가 생기고 /forge-cancel 이 브랜치를 못 찾는다."""
+    """생성자가 둘이 되면 매니페스트 없는 워크트리가 생기고 /worktree-delete 가 브랜치를 못 찾는다."""
     text = read("commands/dispatch-session.md")
     assert "herdr worktree open" in text
     assert "herdr worktree create` 를 쓰지 않는다" in text
     assert "워크트리를 생성하지 않고" in text
 
 
-def test_is_generic_and_does_not_read_forge_state():
-    """forge 전용 지식이 들어오면 herdr 의존이 forge 체인으로 번진다."""
+def test_is_generic_and_does_not_read_worktree_state():
+    """/worktree-init 전용 지식이 들어오면 herdr 의존이 워크트리 체인으로 번진다."""
     text = read("commands/dispatch-session.md")
-    assert "forge 를 모른다" in text
-    for forge_internal in ("worktree_setup.py", "INT-CATALOG", "in-dev", "handoff 를 파싱"):
-        assert forge_internal not in text, f"forge 내부를 참조한다: {forge_internal}"
+    assert "`/worktree-init` 을 모른다" in text
+    for internal in ("worktree_setup.py", "INT-CATALOG", "in-dev", "handoff 를 파싱"):
+        assert internal not in text, f"/worktree-init 내부를 참조한다: {internal}"
 
 
 def test_name_normalisation_is_delegated_to_the_script():
@@ -108,7 +108,7 @@ def test_reports_and_stops():
     assert "폴링하지 않" in text
     assert "포커스를 옮기지 않는다" in text
     # 정리 순서 — 워크트리를 먼저 지우면 세션의 cwd 가 사라진다.
-    assert "/forge-cancel" in text
+    assert "/worktree-delete" in text
     # 알림 구독이 없다는 사실을 사용자에게 넘긴다.
     assert "구독 기능이 없다" in text
 
@@ -121,11 +121,11 @@ def test_pane_id_comes_from_the_response():
     assert "지어내지 않는다" in text
 
 
-def test_forge_cancel_guards_live_sessions():
+def test_worktree_delete_guards_live_sessions():
     """세션이 도는 중에 워크트리를 지우면 그 세션의 cwd 가 사라진다."""
-    text = read("commands/forge-cancel.md")
+    text = read("commands/worktree-delete.md")
     assert "herdr agent list" in text
     assert "살아있는 세션" in text
     assert "대신 종료해주지 않는다" in text
-    # herdr 가 없는 환경에서도 /forge-cancel 은 그대로 동작해야 한다.
+    # herdr 가 없는 환경에서도 /worktree-delete 는 그대로 동작해야 한다.
     assert "건너뛴다" in text

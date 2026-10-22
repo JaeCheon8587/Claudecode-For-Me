@@ -26,7 +26,7 @@
 | **코드 룰** | [`docs/.rules/`](docs/.rules/) | 채택한 코드 룰 (DDD / OOP / 클래스 구조 / 로깅 / Behavioral). 채택하지 않은 룰 파일은 두지 않는다 |
 | **(선택) 솔루션 PRD** | [`docs/PRD.md`](docs/PRD.md) | 솔루션 단일 PRD (다중 S/W 통합 시). per-app PRD 만 사용 시 미배치 — 해당 행 삭제 |
 | **App: {SYSTEM_CODE}** | [`docs/{SYSTEM_CODE}/`](docs/{SYSTEM_CODE}/) | App PRD (기능 목록) · App ARCHITECTURE · `INTENT/` (작업 단위 문서) · `{SYSTEM_CODE}-INT-CATALOG.md` (생성물) |
-| {Forge/CI 자동화} | {경로 또는 "해당 없음"} | {도구 역할 한 줄} |
+| {CI · 자동화 도구} | {경로 또는 "해당 없음"} | {도구 역할 한 줄} |
 
 App 다수 시 `App: {SYSTEM_CODE}` 행 복제. 문서 종류 상세는 [`docs/DOCUMENT_GUIDE.md`](docs/DOCUMENT_GUIDE.md) §1.
 
@@ -44,7 +44,7 @@ App 다수 시 `App: {SYSTEM_CODE}` 행 복제. 문서 종류 상세는 [`docs/D
 - 코드 작성 전 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) 절대 금지 매트릭스 확인.
 - **신규 기능 · 리팩토링 흐름** ([DOCUMENT_GUIDE §2](docs/DOCUMENT_GUIDE.md#2-작성-순서) 준수):
   1. `/requirement-spec` — 인터뷰로 Intent 를 작성·검증·승인한다. 산출물 `docs/{SYSTEM_CODE}/INTENT/{SYSTEM_CODE}-INT-{NNN}.md`
-  2. `/forge-init` — 승인된 Intent 로 워크트리·브랜치 구성
+  2. `/worktree-init` — 승인된 Intent 로 워크트리·브랜치 구성
   3. 그 워크트리에서 개발 세션을 시작해 개발하고, 마치면 워크트리 안에서 `worktree_setup.py finish`
   4. `/branch-review`
   5. 기능 목록이 바뀌었으면 App PRD §7, 코드 규칙이 바뀌었으면 ARCHITECTURE · `.rules/` 갱신 (근거 Intent ID 기록)
@@ -74,4 +74,4 @@ App 다수 시 `App: {SYSTEM_CODE}` 행 복제. 문서 종류 상세는 [`docs/D
 - `docs/DOCUMENT_GUIDE.md`, `docs/ARCHITECTURE.md` — 가이드 SSOT. 사용자 승인 전 수정 금지.
 - `docs/{SYSTEM_CODE}/{SYSTEM_CODE}-INT-CATALOG.md` — 생성물. 손으로 고치지 않는다 (Intent 를 고치고 재생성).
 - `/CLAUDE.md`(본 파일), `MEMORY.md` — 사용자 승인 전 수정 금지.
-- {`README.md`, CI 설정, Forge 도구 등 도메인별 보존 항목}.
+- {`README.md`, CI 설정, 자동화 도구 등 도메인별 보존 항목}.

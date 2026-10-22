@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""worktree_setup — forge 워크트리 셋업 helper (/forge-init · /forge-cancel).
+"""worktree_setup — 워크트리 셋업 helper (/worktree-init · /worktree-delete).
 
 오케스트레이션은 하지 않는다. 셋업·검증·정리·마감 전이만 담당하고, 실제 개발은
 사용자가 워크트리 안에서 시작한 Claude Code 세션이 한다.
@@ -12,8 +12,8 @@ Subcommands
 - ``init``   : 검증 게이트(Task + 대상 Intent) → 워크트리(.worktree/<slug>) 생성 → 서브모듈 링크 →
                가드레일 복사 → Task 상태 전이(approved → in-dev) → JSON 매니페스트 출력.
 - ``branches``: base 후보 브랜치 나열 (로컬 + origin/*, JSON). 읽기 전용.
-- ``list``   : forge 워크트리 나열 (JSON).
-- ``cancel`` : 서브모듈 링크 해제(메인 타깃 보존) → worktree remove → branch -D.
+- ``list``   : /worktree-init 워크트리 나열 (JSON).
+- ``delete`` : 서브모듈 링크 해제(메인 타깃 보존) → worktree remove → branch -D.
 - ``finish`` : (워크트리 안에서) 마감 전이 — 대상 Intent 의 진행 표시 정리 → Task 상태
                in-dev → in-review → 카탈로그 재생성 → 커밋.
 
@@ -48,13 +48,13 @@ GUARDRAIL_FILES = ["CLAUDE.md", ".claude/settings.json"]
 GUARDRAIL_DIRS = [".claude/rules", "docs"]
 
 # init 이 남기는 매니페스트. 워크트리 사본은 개발 세션 인수인계용,
-# 메인 repo 사본은 cancel·list 조회용이다. 둘 다 .process/ 아래라 gitignore.
-MANIFEST_DIR = ".process/forge"
+# 메인 repo 사본은 delete·list 조회용이다. 둘 다 .process/ 아래라 gitignore.
+MANIFEST_DIR = ".process/worktree"
 HANDOFF_NAME = "handoff.json"
 
 
 # ============================================================================
-# 공통 git/링크 유틸 (v3.0 이전 forge 스크립트에서 포팅)
+# 공통 git/링크 유틸 (v3.0 이전 스크립트에서 포팅)
 # ============================================================================
 def _run(args: list[str], cwd: Path) -> subprocess.CompletedProcess:
     return subprocess.run(
@@ -114,7 +114,7 @@ def _repo_root(start: Path) -> Optional[Path]:
 
     `--show-toplevel` 만 쓰면 워크트리 안에서 그 워크트리 자신을 돌려줘
     `.worktree/<slug>` 계산이 전부 어긋난다 — list 가 항상 빈 배열이 되고
-    cancel 이 브랜치를 추측하게 된다.
+    delete 가 브랜치를 추측하게 된다.
 
     다만 `--git-common-dir` 의 부모를 무조건 쓰면 **서브모듈**에서 깨진다
     (common-dir 이 `<super>/.git/modules/<name>` 이라 부모가 루트가 아니다).
@@ -343,7 +343,7 @@ def _ensure_worktree(
         if registered.resolve() != wt.resolve():
             _err(f"ERROR: branch '{branch}'가 다른 워크트리에 attach됨: {registered}\n"
                  "  Hint: 그 워크트리를 정리한 뒤 재실행 — .worktree/ 아래면 "
-                 "`worktree_setup.py cancel <slug>`, 그 밖이면 `git worktree remove <경로>`. "
+                 "`worktree_setup.py delete <slug>`, 그 밖이면 `git worktree remove <경로>`. "
                  "브랜치는 Task Handoff 로 정해지므로 --name 으로는 피할 수 없다.")
         if not registered.exists():
             _err(f"ERROR: 워크트리 등록됐으나 디렉토리 없음(stale): {registered}\n"
@@ -356,7 +356,7 @@ def _ensure_worktree(
 
     if not force:
         st = _git(root, "status", "--porcelain")
-        # forge가 관리하는 워크트리/상태 디렉토리는 dirty 오탐에서 제외
+        # 이 helper 가 관리하는 워크트리/상태 디렉토리는 dirty 오탐에서 제외
         dirty = [
             l for l in st.stdout.splitlines()
             if l.strip() and not re.search(r"\.worktree/|\.process/", l)
@@ -374,7 +374,7 @@ def _ensure_worktree(
                   file=sys.stderr)
         r = _git(root, "worktree", "add", str(wt), branch)
     elif base:
-        # 원격 ref 에서 분기하면 git 이 upstream 을 잡는다. forge 는 push 하지 않으므로 끊는다.
+        # 원격 ref 에서 분기하면 git 이 upstream 을 잡는다. 이 helper 는 push 하지 않으므로 끊는다.
         extra = ["--no-track"] if _is_remote_ref(root, base) else []
         r = _git(root, "worktree", "add", *extra, "-b", branch, str(wt), base)
         base_applied = True
@@ -530,7 +530,7 @@ def _write_manifests(root: Path, wt: Path, slug: str, manifest: dict) -> list[st
     """매니페스트를 워크트리·메인 두 곳에 쓴다. 쓴 경로 목록을 돌려준다.
 
     한 번 정확히 알아낸 값(브랜치·base_commit·워크트리 경로)을 버리지 않기 위한 것이다.
-    이게 없으면 cancel·list 가 나중에 slug 로부터 브랜치를 추측하게 된다.
+    이게 없으면 delete·list 가 나중에 slug 로부터 브랜치를 추측하게 된다.
     """
     written: list[str] = []
     for target in (wt / MANIFEST_DIR / HANDOFF_NAME, _main_manifest_path(root, slug)):
@@ -740,26 +740,26 @@ def cmd_init(args: argparse.Namespace) -> int:
     manifest["manifests"] = _write_manifests(root, wt, slug, manifest)
 
     if not args.quiet:
-        print(f"[forge] worktree: {wt}")
-        print(f"[forge] branch:   {branch}")
+        print(f"[worktree] worktree: {wt}")
+        print(f"[worktree] branch:   {branch}")
         if base:
             mark = "" if base_applied else " (무시됨 — 브랜치 기존재)"
-            print(f"[forge] base:     {base} ({(base_commit or '')[:7]}){mark}")
-        print(f"[forge] status:   {status}")
+            print(f"[worktree] base:     {base} ({(base_commit or '')[:7]}){mark}")
+        print(f"[worktree] status:   {status}")
         if copied:
-            print(f"[forge] 복사:     {', '.join(copied)}")
+            print(f"[worktree] 복사:     {', '.join(copied)}")
         if skipped:
-            print(f"[forge] skip:     {', '.join(skipped)}")
+            print(f"[worktree] skip:     {', '.join(skipped)}")
         for m in manifest["manifests"]:
-            print(f"[forge] manifest: {m}")
+            print(f"[worktree] manifest: {m}")
         for l in log:
-            print(f"[forge] {l}")
+            print(f"[worktree] {l}")
     print(json.dumps(manifest, ensure_ascii=False))
     return EXIT_OK
 
 
 # ============================================================================
-# cancel
+# delete
 # ============================================================================
 def _unlink_submodule_links(worktree: Path) -> None:
     """워크트리 서브모듈 junction/symlink 만 제거(메인 타깃 보존)."""
@@ -804,7 +804,7 @@ def _worktree_branch(root: Path, wt: Path) -> Optional[str]:
 
 
 def cmd_list(args: argparse.Namespace) -> int:
-    """forge 워크트리 나열 — 매니페스트 우선, 없으면 .worktree/ 스캔 폴백."""
+    """/worktree-init 워크트리 나열 — 매니페스트 우선, 없으면 .worktree/ 스캔 폴백."""
     root = _repo_root(Path.cwd())
     if root is None:
         _err("ERROR: git repository가 아닙니다.")
@@ -847,7 +847,7 @@ def cmd_list(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
-def cmd_cancel(args: argparse.Namespace) -> int:
+def cmd_delete(args: argparse.Namespace) -> int:
     root = _repo_root(Path.cwd())
     if root is None:
         _err("ERROR: git repository가 아닙니다.")
@@ -862,7 +862,7 @@ def cmd_cancel(args: argparse.Namespace) -> int:
         else root / ".worktree" / slug
     branch = (manifest or {}).get("branch") or _worktree_branch(root, wt)
     if not branch:
-        _err(f"취소 대상 브랜치를 특정할 수 없다: slug={slug}, worktree={wt}\n"
+        _err(f"삭제 대상 브랜치를 특정할 수 없다: slug={slug}, worktree={wt}\n"
              f"  Hint: `python worktree_setup.py list` 로 slug 를 확인하거나, "
              f"브랜치명을 알면 `git worktree remove` + `git branch -D` 로 직접 정리한다.")
     registered = _registered_worktree_path(root, branch)
@@ -873,7 +873,7 @@ def cmd_cancel(args: argparse.Namespace) -> int:
 
     branch_exists = _git(root, "rev-parse", "--verify", "--quiet", branch).returncode == 0
     if not branch_exists and registered is None and not wt.exists():
-        _err(f"취소 대상 없음: branch={branch}, worktree={wt}")
+        _err(f"삭제 대상 없음: branch={branch}, worktree={wt}")
 
     cwd_real = Path.cwd().resolve()
     target = registered if registered is not None else (wt if wt.exists() else None)
@@ -889,7 +889,7 @@ def cmd_cancel(args: argparse.Namespace) -> int:
         # 메인 repo 서브모듈 원본은 절대 건드리지 않는다 (deinit 등 미수행).
         _unlink_submodule_links(target)
         # 워크트리는 .process/.gitignore 등 uncommitted 상태를 거의 항상 가짐 →
-        # dirty면 자동 --force (forge_cancel.py 원본 동작).
+        # dirty면 자동 --force (v3.0 이전 원본 동작).
         st = _run(["git", "status", "--porcelain"], cwd=target)
         wt_dirty = bool([l for l in st.stdout.splitlines() if l.strip()])
         cmd = ["worktree", "remove"]
@@ -920,7 +920,7 @@ def cmd_cancel(args: argparse.Namespace) -> int:
         except OSError as e:
             print(f"NOTE: 매니페스트를 지우지 못했다: {mpath} ({e})", file=sys.stderr)
 
-    print("worktree_setup: cancel 완료")
+    print("worktree_setup: delete 완료")
     if removed_worktree:
         print(f"- removed worktree: {wt}")
     if removed_branch:
@@ -998,7 +998,7 @@ def cmd_finish(args: argparse.Namespace) -> int:
     if git_dir is None or common_dir is None:
         _err("ERROR: git repository가 아닙니다.", EXIT_BLOCKED)
     if git_dir == common_dir:
-        _err("§F finish 는 /forge-init 이 만든 워크트리 안에서 실행한다 — 여기는 메인 repo(또는 서브모듈)다.",
+        _err("§F finish 는 /worktree-init 이 만든 워크트리 안에서 실행한다 — 여기는 메인 repo(또는 서브모듈)다.",
              EXIT_BLOCKED)
     wt = Path(_git(cwd, "rev-parse", "--show-toplevel").stdout.strip())
 
@@ -1006,10 +1006,10 @@ def cmd_finish(args: argparse.Namespace) -> int:
     try:
         manifest = json.loads(mf.read_text(encoding="utf-8", errors="replace"))
     except (OSError, ValueError) as e:
-        _err(f"§F 매니페스트를 읽지 못했다: {mf} ({e}) — /forge-init 이 만든 워크트리인지 확인한다.", EXIT_BLOCKED)
+        _err(f"§F 매니페스트를 읽지 못했다: {mf} ({e}) — /worktree-init 이 만든 워크트리인지 확인한다.", EXIT_BLOCKED)
     task_id = str(manifest.get("task_id") or "") if isinstance(manifest, dict) else ""
     if not re.fullmatch(r"TSK-\d{3}", task_id):
-        _err(f"§F 매니페스트에 Task ID 가 없다: {mf} — /forge-init 을 다시 실행한다.", EXIT_BLOCKED)
+        _err(f"§F 매니페스트에 Task ID 가 없다: {mf} — /worktree-init 을 다시 실행한다.", EXIT_BLOCKED)
 
     # 매니페스트의 절대경로는 쓰지 않는다 — Task ID 로 워크트리 안의 문서를 다시 찾는다.
     task_rel = f"{_dh.TASK_DIR}/{task_id}.md"
@@ -1077,10 +1077,10 @@ def cmd_finish(args: argparse.Namespace) -> int:
     result["committed"] = True
 
     if not args.quiet:
-        print(f"[forge] task:     {task_id} in-dev → in-review")
-        print(f"[forge] 표시 정리: {len(result['cleared'])}개, 삭제 줄 {len(result['deleted'])}개")
+        print(f"[worktree] task:     {task_id} in-dev → in-review")
+        print(f"[worktree] 표시 정리: {len(result['cleared'])}개, 삭제 줄 {len(result['deleted'])}개")
         for name in result["files"]:
-            print(f"[forge] 커밋:     {name}")
+            print(f"[worktree] 커밋:     {name}")
     print(json.dumps(result, ensure_ascii=False))
     return EXIT_OK
 
@@ -1089,7 +1089,7 @@ def cmd_finish(args: argparse.Namespace) -> int:
 # CLI
 # ============================================================================
 def main(argv: Optional[list[str]] = None) -> int:
-    p = argparse.ArgumentParser(prog="worktree_setup", description="forge 워크트리 셋업 helper")
+    p = argparse.ArgumentParser(prog="worktree_setup", description="워크트리 셋업 helper")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     pi = sub.add_parser("init", help="검증 게이트 + 워크트리 + 링크 + 복사 + 상태 전이")
@@ -1105,16 +1105,16 @@ def main(argv: Optional[list[str]] = None) -> int:
     pb.add_argument("--doc", default=None, help="Task 경로 (추천 base·대상 브랜치 계산용)")
     pb.set_defaults(func=cmd_branches)
 
-    pl = sub.add_parser("list", help="forge 워크트리 나열 (JSON)")
+    pl = sub.add_parser("list", help="/worktree-init 워크트리 나열 (JSON)")
     pl.set_defaults(func=cmd_list)
 
-    pc = sub.add_parser("cancel", help="워크트리 + 브랜치 정리 (서브모듈 메인 원본 보존)")
-    pc.add_argument("slug", help="docName/slug (워크트리 .worktree/<slug>)")
-    pc.add_argument("--force", action="store_true", help="dirty 워크트리 강제 제거")
-    pc.set_defaults(func=cmd_cancel)
+    pd = sub.add_parser("delete", help="워크트리 + 브랜치 정리 (서브모듈 메인 원본 보존)")
+    pd.add_argument("slug", help="docName/slug (워크트리 .worktree/<slug>)")
+    pd.add_argument("--force", action="store_true", help="dirty 워크트리 강제 제거")
+    pd.set_defaults(func=cmd_delete)
 
     pf = sub.add_parser("finish", help="(워크트리 안에서) 마감 전이 — 진행 표시 정리 + Task in-dev → in-review + 카탈로그 + 커밋")
-    pf.add_argument("--manifest", default=None, help="매니페스트 경로 (기본: <워크트리>/.process/forge/handoff.json)")
+    pf.add_argument("--manifest", default=None, help="매니페스트 경로 (기본: <워크트리>/.process/worktree/handoff.json)")
     pf.add_argument("--quiet", action="store_true", help="진행 로그 억제 (JSON만)")
     pf.set_defaults(func=cmd_finish)
 

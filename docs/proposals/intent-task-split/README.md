@@ -3,8 +3,9 @@
 > **상태: 초안.** 이 폴더의 문서는 검토용 초안입니다. 지금 쓰는 템플릿 · 스킬 · 스크립트는 바뀌지 않았습니다.
 > 이행(템플릿 교체와 스킬 · 스크립트 개편)은 이 초안이 확정된 뒤 별도 계획으로 한 번에 진행합니다. Intent 템플릿만 먼저 바꾸면 `requirement-spec`과 `check-intent`가 바로 깨지기 때문입니다.
 
-> **진행 상황:** 1단계(개발 단계: docs_helpers · forge-init · forge-scope) 구현 — 브랜치 `feat/task-dev-stage`. requirement-spec · 템플릿 교체는 다음 단계입니다.
+> **진행 상황:** 1단계(개발 단계: docs_helpers · worktree-init · forge-scope) 구현 — 브랜치 `feat/task-dev-stage`. requirement-spec · 템플릿 교체는 다음 단계입니다.
 > forge-scope 는 v3.73.0 에서 제거했습니다. 개발은 사용자가 워크트리에서 시작한 세션이 하고, 마감 전이는 `worktree_setup.py finish` 가 맡습니다.
+> forge-init · forge-cancel 은 v3.74.0 에서 `/worktree-init` · `/worktree-delete` 로 이름을 바꿨습니다(매니페스트 폴더 `.process/worktree/`).
 
 ## 1. 무엇이 바뀌나
 
@@ -12,7 +13,7 @@
 - **Task = 작업 계약서 (작업 단위, 레포 소속).** 레포 루트 `.task/TSK-{NNN}.md`에 둡니다.
   - Intent에서 바뀐 항목의 사본(Scope)과 Acceptance · Verification · Risks · Handoff를 담습니다.
   - 여러 App에 걸친 계약 변경도 Task 하나, 브랜치 하나로 묶습니다.
-  - `/forge-init`의 입력이 Intent에서 Task로 바뀝니다.
+  - `/worktree-init`의 입력이 Intent에서 Task로 바뀝니다.
 - **Task 카탈로그 `.task/task-catalog.md` (생성물).** Task 링크 · 설명 · 유형 · 상태 · 대상 Intent 링크를 담습니다.
 - **이름 규칙.** 내부 코드 이름(클래스 · 인터페이스 · 함수 · 속성 등)은 쓰지 않습니다. 밖에서 보이는 이름(API 경로 · 응답 필드 · 설정 키 · 오류 코드 등)은 `종류어 + 백틱`으로 씁니다.
 
@@ -109,16 +110,16 @@
 
 **`skills/requirement-spec/templates/intent-critic.md` · `intent-expector.md`**: 판정 대상이 Intent + Task 두 문서가 됩니다. EXP (b) 기준("Part 2로 내려왔나")은 "Task Scope · A로 내려왔나"로 바뀝니다.
 
-**`commands/forge-init.md`**
+**`commands/worktree-init.md`**
 - 인자가 `.task/TSK-{NNN}.md`가 됩니다.
 - 승인 커밋 대상: Task · `task-catalog.md` · 진행 표시가 붙은 Intent들 · 해당 INT 카탈로그들
 - `:(icase)` 스테이징 경로를 바꿉니다.
 
 **forge-scope**: 1단계에서 Task 입력으로 바꿨다가 v3.73.0 에서 제거했습니다. 마감 전이(Task 상태 · 진행 표시 제거 · 카탈로그 재생성 · 커밋)는 `worktree_setup.py finish` 가 단독으로 맡습니다 (1단계에서 구현).
 
-**`commands/forge-cancel.md` (`:47`)**: 브랜치 기본값 문구(`intent/<문서 ID>`)를 바꾸고, 취소 시 Task `dropped`와 Intent 되돌리기를 안내합니다.
+**`commands/worktree-delete.md` (`:47`)**: 브랜치 기본값 문구(`intent/<문서 ID>`)를 바꾸고, 작업을 접으려고 워크트리를 지울 때 Task `dropped`와 Intent 되돌리기를 안내합니다.
 
-**`skills/branch-review/SKILL.md` 3-1 Spec 위치 탐색**: `docs/**/*.md` glob에는 `.task/`가 잡히지 않습니다. `.task/*.md`를 추가하거나, forge 매니페스트가 있으면 그 Task를 spec으로 씁니다. finder 템플릿의 "Intent 블록"은 커밋 의도를 뜻하는 다른 개념이므로 바꾸지 않습니다.
+**`skills/branch-review/SKILL.md` 3-1 Spec 위치 탐색**: `docs/**/*.md` glob에는 `.task/`가 잡히지 않습니다. `.task/*.md`를 추가하거나, worktree-init 매니페스트가 있으면 그 Task를 spec으로 씁니다. finder 템플릿의 "Intent 블록"은 커밋 의도를 뜻하는 다른 개념이므로 바꾸지 않습니다.
 
 ### 6.3 템플릿
 
@@ -139,5 +140,5 @@
 - **테스트**:
   - `tests/test_intent_only.py`: RETIRED 정규식은 `-TASK-` · `TASK/`만 잡으므로 `TSK-` · `.task/`는 걸리지 않습니다. ALLOWED 문구만 6.1에 맞춰 고칩니다.
   - `tests/test_templates.py`: 새 템플릿 경로의 참조 무결성
-  - `tests/test_docs_helpers.py` · `test_worktree_setup.py` · `test_forge_init_command.py`: 입력이 Intent에서 Task로 바뀝니다.
+  - `tests/test_docs_helpers.py` · `test_worktree_setup.py` · `test_worktree_init_command.py`: 입력이 Intent에서 Task로 바뀝니다.
 - **플러그인 `README.md`**: 문서 체계 설명과 변경로그. `plugin.json` · `marketplace.json` 버전

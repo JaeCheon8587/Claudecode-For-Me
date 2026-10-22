@@ -20,7 +20,7 @@
 
 새 레포를 세팅하거나 기존 레포를 이 체계에 맞출 때 이 절부터 읽는다.
 
-**문서 폴더 표기**: 새 레포는 `docs/` 로 만든다. 기존 레포가 `Docs/` 를 쓰면 그대로 둔다 — 플러그인 도구(`/requirement-spec` · `/forge-init` · `worktree_setup.py` · `docs_helpers.py`)는 `docs`·`Docs` 를 같은 폴더로 보고, 이 가이드의 `docs/` 도 둘 다를 뜻한다. 표기를 맞추려고 이름만 바꾸지 않는다 — Windows·macOS 에서 탐색기로 바꾸면 git 은 옛 표기를 계속 쓴다. 링크 · 경로도 실제 표기로 쓴다 — `Docs` 레포에서는 템플릿의 `docs/…` 링크가 `Docs/…` 가 된다(GitHub · Linux 는 대소문자를 구분해 소문자 링크가 깨진다).
+**문서 폴더 표기**: 새 레포는 `docs/` 로 만든다. 기존 레포가 `Docs/` 를 쓰면 그대로 둔다 — 플러그인 도구(`/requirement-spec` · `/worktree-init` · `worktree_setup.py` · `docs_helpers.py`)는 `docs`·`Docs` 를 같은 폴더로 보고, 이 가이드의 `docs/` 도 둘 다를 뜻한다. 표기를 맞추려고 이름만 바꾸지 않는다 — Windows·macOS 에서 탐색기로 바꾸면 git 은 옛 표기를 계속 쓴다. 링크 · 경로도 실제 표기로 쓴다 — `Docs` 레포에서는 템플릿의 `docs/…` 링크가 `Docs/…` 가 된다(GitHub · Linux 는 대소문자를 구분해 소문자 링크가 깨진다).
 
 ### 0.1 만드는 것
 
@@ -41,7 +41,7 @@
 | 대상 | 이유 |
 |---|---|
 | `docs/{App}/INTENT/{App}-INT-{NNN}.md` | `/requirement-spec` 이 인터뷰로 작성한다. 손으로 만들지 않는다 |
-| `docs/{App}/{App}-INT-CATALOG.md` | 생성물 — `docs_helpers.py intent-catalog --write` 가 `INTENT/` 에서 파생한다. requirement-spec · `/forge-init` · `worktree_setup.py finish` 가 상태 전이 때 다시 쓴다 |
+| `docs/{App}/{App}-INT-CATALOG.md` | 생성물 — `docs_helpers.py intent-catalog --write` 가 `INTENT/` 에서 파생한다. requirement-spec · `/worktree-init` · `worktree_setup.py finish` 가 상태 전이 때 다시 쓴다 |
 | `docs/.templates/` | 플러그인 쪽 참고 명세다. 대상 레포에 둘 필요 없다. 단 `docs/.templates/App/INTENT/APP-INT-001-TEMPLATE.md` 를 두면 requirement-spec 이 플러그인 템플릿 대신 그것을 쓴다 (레포별 커스터마이즈) |
 
 <!-- retired-doc-types:begin -->
@@ -81,7 +81,7 @@
 | Intent | `docs/{App}/INTENT/{App}-INT-{NNN}.md` | 작업 단위 계약 — Part 1 기능 명세(무엇을·왜·결정) + Part 2 작업 지시(FR · 엣지 · 오류 · Acceptance · Verification · Handoff) | 작업 단위 | `.templates/App/INTENT/APP-INT-001-TEMPLATE.md` |
 | Intent 카탈로그 | `docs/{App}/{App}-INT-CATALOG.md` | Intent 목록·상태 인덱스. 모든 열이 Intent 에서 파생 | 생성물 | `.templates/App/APP-INT-CATALOG-TEMPLATE.md` (예시) |
 
-**Intent 생애주기**: `draft` → `approved` (requirement-spec 승인) → `in-dev` (`/forge-init`) → `in-review` (개발 마감) → `done` (사람이 전이). 전이마다 카탈로그를 다시 쓴다.
+**Intent 생애주기**: `draft` → `approved` (requirement-spec 승인) → `in-dev` (`/worktree-init`) → `in-review` (개발 마감) → `done` (사람이 전이). 전이마다 카탈로그를 다시 쓴다.
 
 **코드 상세 위치**: Intent 는 생성·수정 대상의 클래스명·메서드명·파일 경로·라이브러리 API 를 Handoff 표 밖에 쓰지 않는다 — 개발 세션 몫이다. PRD 는 product 시야라 코드 상세를 쓰지 않는다. 코드 구조 규칙은 ARCHITECTURE · `.rules/` 에 둔다.
 
@@ -93,7 +93,7 @@
 | FRD (기능 요구) | Intent Part 1 + Part 2 `Functional requirements` |
 | TASK (작업 범위 계약) | Intent Part 2 (`Edge cases` · `Error cases` · `Acceptance` · `Verification` · `Handoff`) |
 | RFD (리팩토링 계획) | Intent `유형 = 리팩토링` |
-| Work Packet (실행 manifest) | `/forge-init` 매니페스트 (`.process/forge/handoff.json`, 생성물) |
+| Work Packet (실행 manifest) | `/worktree-init` 매니페스트 (`.process/worktree/handoff.json`, 생성물) |
 | ADR (결정 기록) | Intent Part 1 `Decisions` (`D1.` …) |
 | ADR-CATALOG (결정 인덱스) | `{App}-INT-CATALOG.md` (생성물) |
 | FC (기능 레지스트리) | App PRD §7 기능 목록 |
@@ -105,7 +105,7 @@
 
 **신규 기능 · 리팩토링**:
 1. `/requirement-spec` — 인터뷰로 Intent 를 작성하고 검증·승인한다. 산출물 `docs/{App}/INTENT/{App}-INT-{NNN}.md` (+ 카탈로그).
-2. `/forge-init` — 승인된 Intent 로 워크트리·브랜치를 만들고 `in-dev` 로 전이한다.
+2. `/worktree-init` — 승인된 Intent 로 워크트리·브랜치를 만들고 `in-dev` 로 전이한다.
 3. 워크트리에서 개발 세션을 시작해 개발하고 마감한다.
 4. `/branch-review` — 워크트리 브랜치를 리뷰한다.
 5. Intent 가 끝나면 상시 문서를 맞춘다 — 기능 목록이 바뀌었으면 App PRD §7 (여러 App 이면 솔루션 PRD §8 도), 코드 규칙이 바뀌었으면 ARCHITECTURE · `.rules/`. 근거로 Intent ID 를 남긴다.
@@ -192,7 +192,7 @@ SYSTEM_CODE 후보는 [`/CLAUDE.md` Backend Services Overview](../CLAUDE.md) 표
 | 변경 | 갱신 위치 |
 |---|---|
 | 신규 Intent | `/requirement-spec` 이 `INTENT/` 에 작성 + 카탈로그 재생성 (자동) |
-| Intent 상태 전이 | 카탈로그 재생성 — requirement-spec · `/forge-init` · `worktree_setup.py finish` 가 자동 수행. 빠뜨리면 `docs_helpers.py check` 가 `INT_CATALOG stale` 로 잡는다 |
+| Intent 상태 전이 | 카탈로그 재생성 — requirement-spec · `/worktree-init` · `worktree_setup.py finish` 가 자동 수행. 빠뜨리면 `docs_helpers.py check` 가 `INT_CATALOG stale` 로 잡는다 |
 | Intent 완료로 기능 목록 변경 | App PRD §7 (+ 여러 App 이면 솔루션 PRD §8) |
 | Intent 완료로 cross-cutting 영향 | 위 + 솔루션 PRD §3.1 · 부록 B/D/E (영향 시) |
 | 결정으로 코드 규칙 변경 | ARCHITECTURE / `.rules/` 본문 + 변경 이력에 근거 Intent ID |
@@ -207,5 +207,5 @@ SYSTEM_CODE 후보는 [`/CLAUDE.md` Backend Services Overview](../CLAUDE.md) 표
 - **신규 기능 · 리팩토링 요청** → §2 흐름. 문서를 손으로 먼저 만들지 않는다 — `/requirement-spec` 이 Intent 를 만든다.
 - **결정 기록 요청** → §2 결정 기록.
 - **신규 App 추가 요청** → §2 신규 App 추가. Backend Services Overview 행 추가가 모든 다른 작업보다 선행.
-- **코드 작성 요청** → 승인된 Intent (개발 세션에서는 `/forge-init` 매니페스트) 를 먼저 읽는다. Part 2 가 범위, Constraints · Decisions · ARCHITECTURE · `.rules/` 가 제약이다. 충돌하면 구현하지 않고 보고한다. Intent 에 없는 요구는 구현하지 않는다. 공통 룰 파일의 4단계 마커 (반드시/허용/금지/절대 금지) 를 준수한다.
+- **코드 작성 요청** → 승인된 Intent (개발 세션에서는 `/worktree-init` 매니페스트) 를 먼저 읽는다. Part 2 가 범위, Constraints · Decisions · ARCHITECTURE · `.rules/` 가 제약이다. 충돌하면 구현하지 않고 보고한다. Intent 에 없는 요구는 구현하지 않는다. 공통 룰 파일의 4단계 마커 (반드시/허용/금지/절대 금지) 를 준수한다.
 - **0.x 문서가 남은 레포에서 작업 요청** → §1.3.

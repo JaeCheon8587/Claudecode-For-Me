@@ -1,14 +1,14 @@
 ---
-description: forge 워크트리와 그 브랜치를 제거한다. 브랜치 이름은 forge-init 매니페스트에서 읽는다(추측하지 않는다). 링크된 서브모듈의 메인 repo 원본은 절대 제거하지 않는다(junction 링크만 해제). 인자 없으면 forge 워크트리 목록에서 선택.
+description: /worktree-init 이 만든 워크트리와 그 브랜치를 제거한다. 브랜치 이름은 worktree-init 매니페스트에서 읽는다(추측하지 않는다). 링크된 서브모듈의 메인 repo 원본은 절대 제거하지 않는다(junction 링크만 해제). 인자 없으면 워크트리 목록에서 선택.
 argument-hint: "[<slug>] — 생략 시 목록에서 선택"
 ---
 
-forge 워크트리 정리 커맨드(`/forge-init` 의 짝). 설정한 워크트리 + 브랜치를 제거하되 **서브모듈 메인 원본은 보존**한다.
+워크트리 정리 커맨드(`/worktree-init` 의 짝). 설정한 워크트리 + 브랜치를 제거하되 **서브모듈 메인 원본은 보존**한다.
 
 helper 경로:
 
 ```bash
-FORGE="${CLAUDE_PLUGIN_ROOT}/scripts/worktree_setup.py"
+WT_SETUP="${CLAUDE_PLUGIN_ROOT}/scripts/worktree_setup.py"
 ```
 
 `$ARGUMENTS` 해석:
@@ -17,18 +17,18 @@ FORGE="${CLAUDE_PLUGIN_ROOT}/scripts/worktree_setup.py"
 첫 토큰을 slug로 보고 바로 제거한다:
 
 ```bash
-python "$FORGE" cancel <slug>
+python "$WT_SETUP" delete <slug>
 ```
 
 ## 인자 없음 (목록에서 선택)
-1. forge 워크트리 목록을 가져온다:
+1. `/worktree-init` 이 만든 워크트리 목록을 가져온다:
    ```bash
-   python "$FORGE" list
+   python "$WT_SETUP" list
    ```
    stdout 마지막 줄의 JSON 배열 `[{"slug","branch","worktree"}, ...]`를 파싱한다.
-2. 빈 배열(`[]`)이면 "제거할 forge 워크트리가 없습니다" 보고 후 종료.
+2. 빈 배열(`[]`)이면 "제거할 워크트리가 없습니다" 보고 후 종료.
 3. 목록을 표로 보여주고 `AskUserQuestion`으로 **어느 워크트리를 제거할지** 사용자에게 확인한다 (여러 개 선택 허용).
-4. 선택된 각 slug에 대해 `python "$FORGE" cancel <slug>` 실행.
+4. 선택된 각 slug에 대해 `python "$WT_SETUP" delete <slug>` 실행.
 
 ## 제거 전 — 살아있는 세션 확인
 
@@ -43,8 +43,8 @@ herdr agent list
 - 사용자가 "그래도 지워라" 라고 **명시**하면 진행한다.
 
 ## 동작 / 보고
-- `cancel`이 하는 일: 대상 브랜치 확정 → 워크트리 서브모듈 junction/symlink **링크만 해제**(메인 repo 서브모듈 원본은 100% 보존) → `git worktree remove`(dirty면 자동 `--force`) → `git branch -D <branch>` → 메인 매니페스트 삭제.
-- **브랜치 확정 순서**: ① `.process/forge/<slug>.json`(forge-init 이 기록한 사실) → ② `git worktree list` 역인덱싱 → ③ 둘 다 실패하면 "브랜치를 특정할 수 없다"로 **명시 실패**. 브랜치 이름은 Task Handoff로 정해지므로(기본값 `task/<문서 ID>`) slug에서 유도할 수 없다 — 추측하지 않는다.
+- `delete`가 하는 일: 대상 브랜치 확정 → 워크트리 서브모듈 junction/symlink **링크만 해제**(메인 repo 서브모듈 원본은 100% 보존) → `git worktree remove`(dirty면 자동 `--force`) → `git branch -D <branch>` → 메인 매니페스트 삭제.
+- **브랜치 확정 순서**: ① `.process/worktree/<slug>.json`(worktree-init 이 기록한 사실) → ② `git worktree list` 역인덱싱 → ③ 둘 다 실패하면 "브랜치를 특정할 수 없다"로 **명시 실패**. 브랜치 이름은 Task Handoff로 정해지므로(기본값 `task/<문서 ID>`) slug에서 유도할 수 없다 — 추측하지 않는다.
 - 제거된 워크트리·브랜치·매니페스트를 한 줄씩 보고한다.
 
 > **서브모듈 안전**: 메인 repo의 서브모듈 디렉토리·내용은 절대 건드리지 않는다. 링크 해제는 워크트리 쪽 junction만 끊는 것이며, 이를 안 하면 `git worktree remove`가 junction을 따라가 메인 서브모듈을 삭제하는 사고가 나므로 필수다.

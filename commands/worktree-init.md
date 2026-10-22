@@ -12,7 +12,7 @@ argument-hint: "<Task-doc-path> [--name <slug>] [--base <ref>] [--force]"
 helper 경로:
 
 ```bash
-FORGE="${CLAUDE_PLUGIN_ROOT}/scripts/worktree_setup.py"
+WT_SETUP="${CLAUDE_PLUGIN_ROOT}/scripts/worktree_setup.py"
 ```
 
 `$ARGUMENTS` 첫 인자 = Task 경로(`.task/TSK-<NNN>.md`, 레포 루트). `--name <slug>` · `--base <ref>` · `--force` 는 그대로 넘긴다.
@@ -45,7 +45,7 @@ Python 3.10+ 확인: `python --version`(없으면 `py -3 --version`). 없으면 
 ## 2 — base 브랜치 선택
 
 ```bash
-python "$FORGE" branches --doc <Task>
+python "$WT_SETUP" branches --doc <Task>
 ```
 
 읽기 전용이다. stdout 마지막 줄 JSON 을 파싱한다.
@@ -78,19 +78,19 @@ python "$FORGE" branches --doc <Task>
     3. 찍힌 경로(Task · task-catalog · 진행 표시를 붙인 Intent · INT 카탈로그)를 그대로 `git add -- <경로>` 해 커밋한다 — 표기를 바꿔 쓰면(`Docs` ↔ `docs`) 이미 커밋된 파일이 스테이징에서 빠진다 — Windows·macOS 에서는 오류도 없이.
   - **직접 커밋할게** — 중단하고, 커밋 후 다시 실행하도록 안내한다.
   - **중단**
-- **미커밋 + 고른 base ≠ 현재 브랜치** → **중단**한다. 승인 커밋이 그 base 에 올라가지 않아 어차피 게이트에 막힌다. 사용자에게 두 길을 제시한다: ① base 를 현재 브랜치(`current`)로 바꾼다 ② 그 base 브랜치로 체크아웃한 뒤 `/forge-init` 을 다시 실행한다. **대신 체크아웃해주지 않는다.**
+- **미커밋 + 고른 base ≠ 현재 브랜치** → **중단**한다. 승인 커밋이 그 base 에 올라가지 않아 어차피 게이트에 막힌다. 사용자에게 두 길을 제시한다: ① base 를 현재 브랜치(`current`)로 바꾼다 ② 그 base 브랜치로 체크아웃한 뒤 `/worktree-init` 을 다시 실행한다. **대신 체크아웃해주지 않는다.**
 
 커밋 후 `git status --porcelain` 을 다시 보고 **잔여 dirty 파일을 보고**한다. 남아 있으면 `init` 이 dirty 로 막히므로, 그 파일들이 이 Task 와 무관한지 사용자에게 확인해 `--force` 를 붙일지 정한다. **임의로 `--force` 를 붙이지 않는다.** (워크트리는 base 커밋의 사본이라 dirty 변경은 어차피 따라가지 않는다.)
 
 ## 4 — 워크트리 생성
 
 ```bash
-python "$FORGE" init --doc <Task> --quiet --base <선택한 ref> [--name <slug>] [--force]
+python "$WT_SETUP" init --doc <Task> --quiet --base <선택한 ref> [--name <slug>] [--force]
 ```
 
 - **exit 1** → 작업 공간 상태 문제. stderr 를 그대로 사용자에게 전하고 **중단**, 사용자 결정을 받는다:
   - `메인 repo 작업트리가 dirty` → 3 의 잔여 dirty 처리로 돌아간다. `--force` 는 dirty 파일이 이 Task 와 무관하다고 **사용자가 명시**했을 때만 붙인다.
-  - 브랜치가 다른 워크트리에 붙어 있음 → 그 워크트리를 `/forge-cancel <그 slug>` 로 정리한다(브랜치는 Task Handoff 로 정해지므로 `--name` 으로는 피할 수 없다. Task 는 고치지 않는다).
+  - 브랜치가 다른 워크트리에 붙어 있음 → 그 워크트리를 `/worktree-delete <그 slug>` 로 정리한다(브랜치는 Task Handoff 로 정해지므로 `--name` 으로는 피할 수 없다. Task 는 고치지 않는다).
   - `base '<ref>' 를 찾을 수 없다` / `쓸 수 없는 문자` → **2 로 돌아가 재선택.**
   - stale 워크트리 → `git worktree prune` 후 재실행.
   - 등록 안 된 `.worktree/<slug>` 디렉터리 → 사용자가 확인 후 수동 삭제하거나 `git worktree prune` 후 재실행.
@@ -107,8 +107,8 @@ python "$FORGE" init --doc <Task> --quiet --base <선택한 ref> [--name <slug>]
 
 **exit 0** → stdout 마지막 줄이 매니페스트 JSON 이다. `init` 이 이걸 두 곳에 파일로도 남긴다:
 
-- `<worktree>/.process/forge/handoff.json` — 개발 세션이 상대경로로 읽는다
-- `<메인 repo>/.process/forge/<slug>.json` — `/forge-cancel` · `list` 가 조회한다
+- `<worktree>/.process/worktree/handoff.json` — 개발 세션이 상대경로로 읽는다
+- `<메인 repo>/.process/worktree/<slug>.json` — `/worktree-delete` · `list` 가 조회한다
 
 둘 다 `.process/` 아래라 gitignore 대상이다. 매니페스트가 있으면 나중에 브랜치 이름을 추측할 필요가 없다.
 
@@ -122,8 +122,8 @@ python "$FORGE" init --doc <Task> --quiet --base <선택한 ref> [--name <slug>]
 - `submodule_log` 가 비어 있지 않으면 그대로 전달한다(메인 repo 에 populate 안 된 서브모듈은 링크되지 않고 로그만 남는다)
 - `copied` / `skipped` — 가드레일 복사 결과
 - **다음 단계 안내 2줄**:
-  - 개발: "이 워크트리에서 개발 세션을 시작해 개발을 지시한다 — 작업 계약은 워크트리 Task 와 매니페스트 `.process/forge/handoff.json`"
-  - 마감: "개발 커밋을 마친 뒤 워크트리 안에서 `python "<FORGE 절대경로>" finish` — 진행 표시 정리 · Task `in-dev → in-review` · 카탈로그 재생성 · 커밋 1개". `<FORGE 절대경로>` 는 위 helper 경로를 펼친 값으로 쓴다 — 개발 세션이 그대로 붙여 실행할 수 있게.
+  - 개발: "이 워크트리에서 개발 세션을 시작해 개발을 지시한다 — 작업 계약은 워크트리 Task 와 매니페스트 `.process/worktree/handoff.json`"
+  - 마감: "개발 커밋을 마친 뒤 워크트리 안에서 `python "<WT_SETUP 절대경로>" finish` — 진행 표시 정리 · Task `in-dev → in-review` · 카탈로그 재생성 · 커밋 1개". `<WT_SETUP 절대경로>` 는 위 helper 경로를 펼친 값으로 쓴다 — 개발 세션이 그대로 붙여 실행할 수 있게.
   - 세션을 띄우는 것도 커맨드로 할 수 있다 — 예: `/dispatch-session <워크트리 절대경로> --agent opus-orchestrator --prompt "<작업 지시>"`. **예시 문장일 뿐 여기서 실행하지 않는다.** 어디에 띄울지는 그 커맨드가 사용자에게 묻는다.
 
 여기서 종료한다. 개발 세션을 띄우지 않는다.
@@ -136,4 +136,4 @@ python "$FORGE" init --doc <Task> --quiet --base <선택한 ref> [--name <slug>]
 - `init` 의 `chore(<ID>): 상태 in-dev` 커밋은 스크립트의 결정적 전이다 — Task 와 `.task/task-catalog.md` 두 파일. Intent 는 바뀌지 않는다(진행 표시는 승인 커밋에 이미 있다).
 - 마감 전이(`in-dev → in-review`, 진행 표시 정리)는 개발을 마친 세션이 워크트리 안에서 `worktree_setup.py finish` 로 한다 — 자동으로 부르는 절차는 없다.
 - 가드레일 복사(`CLAUDE.md`·`.claude/settings.json`·`.claude/rules`·문서 폴더)는 base 와 무관하게 **메인 repo 작업트리**에서 온다. 작업 공간 수준 가드레일이라 의도된 동작이다. 문서 폴더는 `docs`·`Docs` 중 디스크에 있는 표기 하나로 복사하고 `copied`/`skipped` 에도 그 표기로 1번만 보고한다.
-- 정리는 `/forge-cancel <slug>` — 메인 repo 에서 실행한다.
+- 정리는 `/worktree-delete <slug>` — 메인 repo 에서 실행한다.

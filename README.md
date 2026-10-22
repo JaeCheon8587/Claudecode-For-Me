@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v3.73.0 · 커스텀 스킬 6종 + 슬래시 커맨드 16종 + 에이전트 9종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v3.74.0 · 커스텀 스킬 6종 + 슬래시 커맨드 16종 + 에이전트 9종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,7 +11,7 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `3.73.0` |
+| 버전 | `3.74.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
@@ -39,7 +39,7 @@
 
 # 4) 새 세션에서 슬래시 자동완성 확인
 /claudecode-for-me:meta-prompter ...
-/claudecode-for-me:forge-init ...
+/claudecode-for-me:worktree-init ...
 /claudecode-for-me:branch-review
 /claudecode-for-me:codenav-bootstrap
 ```
@@ -66,6 +66,36 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v3.74.0 — forge-init · forge-cancel 을 worktree-init · worktree-delete 로 · BREAKING
+
+forge-scope 를 지운 뒤(v3.73.0) "forge" 는 남은 두 커맨드가 하는 일(워크트리 구성 · 삭제)을 설명하지 못한다.
+이름과 어휘를 워크트리 기준으로 바꾼다. 동작은 같다.
+
+- **커맨드** — `/forge-init` → `/worktree-init`, `/forge-cancel` → `/worktree-delete`.
+- **`worktree_setup.py`** — 서브커맨드 `cancel` → `delete`(커맨드 이름과 맞춤), 매니페스트 폴더 `.process/forge/` →
+  `.process/worktree/`, 진행 로그 접두사 `[forge]` → `[worktree]`, 오류 메시지 "취소 대상" → "삭제 대상". 커맨드 본문의
+  helper 변수 `FORGE` → `WT_SETUP`.
+- **함께 고친 곳** — `/dispatch-session` · 템플릿(`CLAUDE` · `README` · `DOCUMENT_GUIDE` · `APP-INT-CATALOG`) · Intent·Task 분리
+  초안 · README 현행 절. `CLAUDE-TEMPLATE` 의 `{Forge/CI 자동화}` · `Forge 도구` 는 옛 forge 스캐폴드(v2.x) 잔재라
+  `{CI · 자동화 도구}` · `자동화 도구` 로 바꿨다.
+- **requirement-spec 종료 안내 정정** — `/forge-init <Intent 경로>` 를 안내하고 있었는데 v3.72 부터 Intent 경로는 exit 2 다.
+  바뀐 항목을 Task 로 옮겨 승인한 뒤 `/worktree-init .task/TSK-<NNN>.md` 로 안내한다.
+- **재유입 가드** — `tests/test_removed_components.py` 에 `forge-init` · `forge-cancel` 을 넣고, 낱말 `forge` 자체(`forget` 등은
+  제외)가 플러그인 소스 · README 현행 설명에 다시 나오면 실패하는 검사를 더했다. 테스트 파일 `test_forge_init_command.py` →
+  `test_worktree_init_command.py`.
+
+**이전 방법**: `/forge-init <Task>` → `/worktree-init <Task>`, `/forge-cancel [slug]` → `/worktree-delete [slug]`,
+`worktree_setup.py cancel <slug>` → `worktree_setup.py delete <slug>`. v3.73 이하로 만든 워크트리는 매니페스트가 `.process/forge/` 에 있다.
+
+- `/worktree-delete` 는 매니페스트를 못 찾으면 `git worktree list` 역인덱싱으로 브랜치를 찾으므로 그대로 지울 수 있다.
+  메인 repo 에 남는 `.process/forge/<slug>.json` 은 지워도 된다.
+- `list` 는 매니페스트 대신 `.worktree/` 스캔으로 보여 준다 — 브랜치가 `task/` · `intent/` · `feat-` 로 시작할 때만. 그 밖의
+  브랜치명이면 목록에는 안 나오지만 `/worktree-delete <slug>` 로 지울 수 있다.
+- `finish` 는 기본 경로 `.process/worktree/handoff.json` 을 찾지 못하므로 워크트리 루트에서 `--manifest .process/forge/handoff.json` 을
+  준다(상대경로는 cwd 기준).
+
+**검증**: `python -m pytest tests/ -q` → **507 passed, 2 skipped** (499 → 507 — 가드 8건 추가). WSL ext4 → **505 passed, 4 skipped**.
 
 ### v3.73.0 — forge-scope 제거 · BREAKING
 
@@ -2029,15 +2059,15 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `codenav-bootstrap` | CodeNavigator parser-only 인덱싱 (frontmatter/XML doc만 읽어 SQLite 빌드, AI 호출 없음) |
 | `codenav-frontmatter-gen` | codenav-frontmatter-gen skill 진입 (AI가 .cs에 frontmatter 영구 삽입). `--projects` / `--files` / `--staged` 스코프 인자 |
 | `codenav-install` | 프로젝트 루트의 `tools/codenavigator/` 폴더에 codenavigator (PyPI) 격리 설치 + `codenav.ps1/codenav.sh` launcher + `.gitignore` 자동 작성 + `docs/codenav-guide.md` 작성(문서 폴더가 `Docs/` 면 그 폴더) + 루트 `CLAUDE.md` 링크 셋업 |
-| `dispatch-session` | **세션 런처** — 이미 있는 디렉터리에 herdr 페인을 열고 Claude 세션을 기동, 선택적으로 작업 지시. 워크트리를 만들지 않고 브랜치를 고르지 않는다(`/forge-init` 몫). 띄울 위치는 `AskUserQuestion` 으로 사용자가 고른다. `HERDR_ENV=1` 인 세션에서만 동작. 스킬 없이 커맨드 단독 |
+| `dispatch-session` | **세션 런처** — 이미 있는 디렉터리에 herdr 페인을 열고 Claude 세션을 기동, 선택적으로 작업 지시. 워크트리를 만들지 않고 브랜치를 고르지 않는다(`/worktree-init` 몫). 띄울 위치는 `AskUserQuestion` 으로 사용자가 고른다. `HERDR_ENV=1` 인 세션에서만 동작. 스킬 없이 커맨드 단독 |
 | `commit-analysis` | 배포 여부 확인 후 `[ADD]`/`[MOD]`/`[FIX]` 자동 판단 한글 커밋 생성 (배포 시 본문에 `[Deploy]`) |
-| `forge-cancel` | forge 워크트리와 거기 붙은 브랜치 제거 (서브모듈 메인 원본 보존). 브랜치는 `.process/forge/<slug>.json` 매니페스트에서 읽는다 — 추측하지 않는다. `<slug>` 지정 또는 생략 시 목록에서 선택. 스킬 없이 커맨드 단독 |
-| `forge-init` | **개발 환경 구성** — 승인된 Task(`.task/TSK-<NNN>.md`)로 승인 커밋 게이트 → base 브랜치 선택 → 워크트리/브랜치 생성 → `approved→in-dev` 전이 → 매니페스트 기록. **보고하고 끝낸다**(개발 세션을 띄우지 않는다). 스펙 세션·메인 repo 에서 실행. 스킬 없이 커맨드 단독 |
 | `grill-me` | grill-me skill 진입 |
 | `meta-prompter` | meta-prompter skill 진입 |
 | `requirement-spec` | requirement-spec skill 진입. grill-me 인터뷰 → Intent Part 1 → Part 2 파생 → 코드 체크리스트 + opus critic 검증 루프(≤3회) → 품질 지표 → 승인 1회. 산출물은 `docs/<App>/INTENT/<App>-INT-<NNN>.md` 1개(임시 파일은 `.process/intent-check/<ID>/`). `--no-gate` 로 루프 생략 |
 | `safe-pull` | safe-pull skill 진입. fetch 후 브리핑 → 컨펌 게이트 → pull |
 | `session-brief` | **세션 브리핑** — 이 세션의 현재 주제(마지막 대화 기준)를 기능 · 맥락 · 마지막 수행 내용 · 남은 일(결정 대기 · 미완료 · 작업 상태 · 이전 주제 미결) 드릴다운으로 한 화면 보고. 작업 상태는 호출 시점 git 실행 결과. 보고만 하고 파일을 고치지 않는다. 스킬 없이 커맨드 단독 |
+| `worktree-delete` | `/worktree-init` 이 만든 워크트리와 거기 붙은 브랜치 제거 (서브모듈 메인 원본 보존). 브랜치는 `.process/worktree/<slug>.json` 매니페스트에서 읽는다 — 추측하지 않는다. `<slug>` 지정 또는 생략 시 목록에서 선택. 스킬 없이 커맨드 단독 |
+| `worktree-init` | **개발 환경 구성** — 승인된 Task(`.task/TSK-<NNN>.md`)로 승인 커밋 게이트 → base 브랜치 선택 → 워크트리/브랜치 생성 → `approved→in-dev` 전이 → 매니페스트 기록. **보고하고 끝낸다**(개발 세션을 띄우지 않는다). 스펙 세션·메인 repo 에서 실행. 스킬 없이 커맨드 단독 |
 
 ### Agent 9종
 
@@ -2154,27 +2184,27 @@ codenav --root <repo> ui --port 9876
 
 상세는 [codenavigator README](https://github.com/JaeCheon8587/codenavigator#readme) 및 [frontmatter 규약](https://github.com/JaeCheon8587/codenavigator/blob/main/docs/frontmatter.md) 참조.
 
-### 6.3 forge-init / forge-cancel (harness_framework 임베디드)
+### 6.3 worktree-init / worktree-delete (harness_framework 임베디드)
 
 개발 환경 구성은 **개발 세션보다 앞에 온다**(v3.64). 세션의 cwd 는 프로세스 시작 시점에 고정되므로, 워크트리 안에서 개발 세션을 시작하려면 **그 전에 워크트리가 존재해야** 한다. 개발 절차는 플러그인이 정하지 않는다 — 사용자가 그 워크트리에서 세션을 시작해 지시하고, 마감 전이만 `worktree_setup.py finish` 가 결정적으로 한다.
 
 | | 어디서 | 무엇을 |
 |---|---|---|
-| `/forge-init <Task>` | 스펙 세션 · **메인 repo** | 승인 커밋 게이트 → base 선택 → 워크트리/브랜치 → `approved→in-dev` → 매니페스트. **보고하고 끝낸다** |
-| *(개발 세션)* | 사용자 | 그 워크트리를 cwd 로 하는 세션을 띄워 개발을 지시한다. 손으로 해도 되고 `/dispatch-session <워크트리> --agent opus-orchestrator --prompt "<작업 지시>"` 로 해도 된다(herdr 안에서만). 작업 계약은 워크트리 Task 와 매니페스트 `.process/forge/handoff.json` |
-| `worktree_setup.py finish` | 개발 세션 · **워크트리** | 개발 커밋을 마친 뒤 마감 전이 — 진행 표시 정리 · Task `in-dev → in-review` · 카탈로그 2종 · 커밋 1개. 스크립트 절대경로는 `/forge-init` 보고에 나온다 |
-| `/forge-cancel [slug]` | 스펙 세션 · **메인 repo** | 워크트리·브랜치·매니페스트 정리. 제거 전 그 워크트리에 살아있는 세션이 있는지 확인한다(v3.66) |
+| `/worktree-init <Task>` | 스펙 세션 · **메인 repo** | 승인 커밋 게이트 → base 선택 → 워크트리/브랜치 → `approved→in-dev` → 매니페스트. **보고하고 끝낸다** |
+| *(개발 세션)* | 사용자 | 그 워크트리를 cwd 로 하는 세션을 띄워 개발을 지시한다. 손으로 해도 되고 `/dispatch-session <워크트리> --agent opus-orchestrator --prompt "<작업 지시>"` 로 해도 된다(herdr 안에서만). 작업 계약은 워크트리 Task 와 매니페스트 `.process/worktree/handoff.json` |
+| `worktree_setup.py finish` | 개발 세션 · **워크트리** | 개발 커밋을 마친 뒤 마감 전이 — 진행 표시 정리 · Task `in-dev → in-review` · 카탈로그 2종 · 커밋 1개. 스크립트 절대경로는 `/worktree-init` 보고에 나온다 |
+| `/worktree-delete [slug]` | 스펙 세션 · **메인 repo** | 워크트리·브랜치·매니페스트 정리. 제거 전 그 워크트리에 살아있는 세션이 있는지 확인한다(v3.66) |
 
-`/forge-init` 은 후속 단계를 실행하지 않는다 — 어디서 어떤 에이전트로 개발을 시작할지는 사용자가 정한다. `/dispatch-session` 은 그 **사용자 행위를 대신 타이핑해 주는 별도 커맨드**이지 `/forge-init` 이 자동으로 부르는 다음 칸이 아니다. Work Packet·TASK 입력은 v3.58 에서 폐지됐다.
+`/worktree-init` 은 후속 단계를 실행하지 않는다 — 어디서 어떤 에이전트로 개발을 시작할지는 사용자가 정한다. `/dispatch-session` 은 그 **사용자 행위를 대신 타이핑해 주는 별도 커맨드**이지 `/worktree-init` 이 자동으로 부르는 다음 칸이 아니다. Work Packet·TASK 입력은 v3.58 에서 폐지됐다.
 
 #### 흐름
 
 | 단계 | 누가 | 무엇 |
 |---|---|---|
-| **init-1** 승인 커밋 | `/forge-init` · 사용자 | Task `상태 = approved` 확인 → `check-task` FAIL 0 → Task · task-catalog · 대상 Intent · INT 카탈로그가 미커밋이면 카탈로그를 다시 만들어 `docs(<ID>): Task 승인` 커밋. 잔여 dirty 보고 |
+| **init-1** 승인 커밋 | `/worktree-init` · 사용자 | Task `상태 = approved` 확인 → `check-task` FAIL 0 → Task · task-catalog · 대상 Intent · INT 카탈로그가 미커밋이면 카탈로그를 다시 만들어 `docs(<ID>): Task 승인` 커밋. 잔여 dirty 보고 |
 | **init-2** base 선택 | `worktree_setup.py branches` · 사용자 | 후보(로컬 + `origin/*`) 나열 → `AskUserQuestion` 으로 분기점 선택. 임의 선택 금지 |
 | **init-3** 워크트리 | `worktree_setup.py init` | 승인 게이트·시작 조건 → 워크트리·브랜치(고른 base 에서 분기) → `approved → in-dev` 커밋(Handoff `base branch` 동봉) |
-| **init-4** 보고 | `/forge-init` | 매니페스트를 `<워크트리>/.process/forge/handoff.json` · `<메인>/.process/forge/<slug>.json` 두 곳에 기록하고 경로를 보고. **여기서 종료** |
+| **init-4** 보고 | `/worktree-init` | 매니페스트를 `<워크트리>/.process/worktree/handoff.json` · `<메인>/.process/worktree/<slug>.json` 두 곳에 기록하고 경로를 보고. **여기서 종료** |
 | *(개발)* | 사용자 · 개발 세션 | 워크트리 안에서 사용자 지시대로 개발 · 커밋 |
 | **finish** 마감 | 개발 세션 · `worktree_setup.py finish` | 개발 커밋을 마친 뒤 워크트리 안에서 실행 → 진행 표시 정리 · Task `in-dev → in-review` · 카탈로그 2종 · 커밋. 다음 단계는 그 워크트리에서 `/branch-review <base_commit>`. 머지 뒤 사람이 Task 를 `done` 으로 바꾸고 `task-catalog --write` |
 
@@ -2192,26 +2222,26 @@ codenav --root <repo> ui --port 9876
 ```bash
 # ① 스펙 세션(메인 repo) — 환경 구성. 워크트리 .worktree/<문서 ID>,
 #    브랜치 = Task Handoff 브랜치명 또는 task/<문서 ID>. 여기서 끝난다.
-/claudecode-for-me:forge-init .task/TSK-001.md
+/claudecode-for-me:worktree-init .task/TSK-001.md
 
 # ② 사용자가 그 워크트리에서 개발 세션을 시작해 개발을 지시한다 (예: 오케스트레이터 에이전트 모드).
 #    개발 커밋을 마치면 워크트리 안에서 마감 전이 — 스크립트 절대경로는 ① 의 보고에도 나온다
 python "$HOME/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/scripts/worktree_setup.py" finish
 
 # ③ 워크트리·브랜치·매니페스트 정리 — 메인 repo 에서. slug 생략 시 목록에서 선택
-/claudecode-for-me:forge-cancel TSK-001
-/claudecode-for-me:forge-cancel
+/claudecode-for-me:worktree-delete TSK-001
+/claudecode-for-me:worktree-delete
 ```
 
 #### 옵션
 
 | 커맨드 | 인자 | 설명 |
 |---|---|---|
-| `forge-init` | `<Task-doc-path>` | **필수**. `.task/TSK-<NNN>.md`(레포 루트). 대상 Intent 의 문서 폴더 `docs`·`Docs` 는 같은 폴더로 본다 |
+| `worktree-init` | `<Task-doc-path>` | **필수**. `.task/TSK-<NNN>.md`(레포 루트). 대상 Intent 의 문서 폴더 `docs`·`Docs` 는 같은 폴더로 본다 |
 | | `--name <slug>` | 워크트리 slug 명시 (기본: Task 문서 ID) |
 | | `--base <ref>` | 워크트리 분기점 — 주면 선택 질문을 건너뛴다. 로컬·`origin/*` 모두 가능. 브랜치가 이미 있으면 무시되고 `base_applied: false` |
 | | `--force` | 메인 repo dirty 검사만 우회 (커밋·승인 조건은 우회 불가) |
-| `forge-cancel` | `[<slug>]` | 제거할 워크트리 slug. 생략 시 목록에서 선택. 브랜치는 매니페스트에서 읽고, 없으면 `git worktree list` 역인덱싱. 둘 다 실패하면 명시 실패 |
+| `worktree-delete` | `[<slug>]` | 제거할 워크트리 slug. 생략 시 목록에서 선택. 브랜치는 매니페스트에서 읽고, 없으면 `git worktree list` 역인덱싱. 둘 다 실패하면 명시 실패 |
 
 #### init 이 하는 일
 
@@ -2229,7 +2259,7 @@ python "$HOME/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version
 
 #### 워크트리 서브모듈
 
-`git submodule update`(네트워크) 대신 **메인 repo 서브모듈을 junction(Windows)/symlink(Unix)로 링크** → 오프라인·내부망 동작. `submodule.<name>.ignore=all`로 커밋/상태 무시. 메인 미populate면 skip. **`forge-cancel`은 워크트리 링크만 해제하고 메인 repo 서브모듈 원본은 절대 건드리지 않는다**(링크 미해제 시 `git worktree remove`가 junction 따라 메인 삭제하는 사고 방지).
+`git submodule update`(네트워크) 대신 **메인 repo 서브모듈을 junction(Windows)/symlink(Unix)로 링크** → 오프라인·내부망 동작. `submodule.<name>.ignore=all`로 커밋/상태 무시. 메인 미populate면 skip. **`worktree-delete`는 워크트리 링크만 해제하고 메인 repo 서브모듈 원본은 절대 건드리지 않는다**(링크 미해제 시 `git worktree remove`가 junction 따라 메인 삭제하는 사고 방지).
 
 #### .gitignore
 
@@ -2293,7 +2323,7 @@ init 이 워크트리의 `.gitignore` 에 아래를 추가한다.
 - **Phase 5 승인(1회)**: 진입 직후 `intent-catalog --repo . --app <App> --write` 로 카탈로그를 재생성한다(승인 여부와 무관 — 이 시점이면 제목·`검증`·FR/A 가 모두 확정돼 있다). 이어 `AskUserQuestion` 본문에 Intent 경로·`검증` 행·최종 체크리스트 경로와 `<PASS 행>/<전체 행> PASS`·`인터뷰 반영 <covered>/<expected> · 누락 <EXP 키>`·잔존 MAJOR/MINOR 키·critic의 `IMPROVE` 목록(차단 아님)·Part 1 변경 diff(≤10줄)·SKIPPED 경고를 싣는다. 승인 조건은 `Open questions`가 `none` ∧ Handoff에 `pending` 없음 ∧ `유형`이 단일값 ∧ `검증`이 `PASS`·`OVERRIDE`·`SKIPPED` 중 하나로 시작. 총평이 `FAIL`이면 옵션은 수동 수정 후 재검증 1회 / OVERRIDE 승인 / 중단이고, OVERRIDE 승인 시 `검증` 총평과 `quality.json` 의 `final` 을 `OVERRIDE` 로 쓴다. 충족 시 `상태`=`approved`, 거절·중단 시 `draft` 유지
 - **`--no-gate`**: Phase 3·4를 건너뛰고 `검증` 행을 `SKIPPED — --no-gate` 로 둔 채 Phase 5만 수행
 - **Intent 템플릿**: `docs/.templates/App/INTENT/APP-INT-001-TEMPLATE.md` — 메타 표 7행(`검증` 포함) + Part 1 기능 명세 6섹션(Problem / Outcome / Affected / Constraints / Decisions / Open questions) + Part 2 작업 지시 7섹션
-- **Intent 카탈로그**: `docs/<App>/<App>-INT-CATALOG.md` — `INTENT/` 를 훑어 `docs_helpers.py intent-catalog --repo . --app <App> --write` 가 생성하는 **파생 인덱스**. 행은 `Intent · 제목 · 유형 · 상태 · 검증 · 요약 · 규모`(요약 = Outcome 첫 줄 50자, 규모 = FR·A 개수). 고유 정보가 0 인 생성물이라 손으로 쓰지 않는다 — 상태 전이 4 지점(Phase 5 진입 · Phase 5 승인 · `/forge-init` 승인 커밋 · `worktree_setup.py finish` 마감)에서 재생성하고, 빠뜨리면 `check --app <App>` 이 `INT_CATALOG stale` FAIL 로 잡는다. 참고 양식은 `docs/.templates/App/APP-INT-CATALOG-TEMPLATE.md`
+- **Intent 카탈로그**: `docs/<App>/<App>-INT-CATALOG.md` — `INTENT/` 를 훑어 `docs_helpers.py intent-catalog --repo . --app <App> --write` 가 생성하는 **파생 인덱스**. 행은 `Intent · 제목 · 유형 · 상태 · 검증 · 요약 · 규모`(요약 = Outcome 첫 줄 50자, 규모 = FR·A 개수). 고유 정보가 0 인 생성물이라 손으로 쓰지 않는다 — 상태 전이 4 지점(Phase 5 진입 · Phase 5 승인 · `/worktree-init` 승인 커밋 · `worktree_setup.py finish` 마감)에서 재생성하고, 빠뜨리면 `check --app <App>` 이 `INT_CATALOG stale` FAIL 로 잡는다. 참고 양식은 `docs/.templates/App/APP-INT-CATALOG-TEMPLATE.md`
 - **경계**: 클래스명·파일명·구현 방법은 어느 Part에도 쓰지 않는다(개발 세션 몫). 후속 스킬 자동 호출 없음, `ExitPlanMode` 미호출
 
 ### 6.7 commit-analysis
@@ -2484,13 +2514,13 @@ Claudecode-For-Me/
 │   ├── codenav-install.md
 │   ├── commit-analysis.md
 │   ├── dispatch-session.md
-│   ├── forge-cancel.md
-│   ├── forge-init.md
 │   ├── grill-me.md
 │   ├── meta-prompter.md
 │   ├── requirement-spec.md
 │   ├── safe-pull.md
-│   └── session-brief.md
+│   ├── session-brief.md
+│   ├── worktree-delete.md
+│   └── worktree-init.md
 ├── docs/                       # 문서 체계 참고 명세 (Intent 1문서 체계 — DOCUMENT_GUIDE v1.0)
 │   └── .templates/             # DOCUMENT_GUIDE + CLAUDE/README/PRD/ARCHITECTURE 양식 + App/ (PRD·ARCHITECTURE·INT-CATALOG·INTENT) + .rules/ (코드 룰 5종)
 ├── scripts/                     # Python deterministic helper
@@ -2498,9 +2528,9 @@ Claudecode-For-Me/
 │   ├── docs_helpers.py          # Intent 검사 — check · check-intent · intent-checklist · intent-catalog
 │   ├── ext_dispatch.py          # (v3.65.0 미사용 — 외부 위임 폐지, 보존만)
 │   ├── herdr_name.py            # dispatch-session herdr 에이전트 이름 정규화 (단독)
-│   ├── worktree_setup.py        # forge-init 워크트리 셋업·검증·매니페스트·cancel·finish
+│   ├── worktree_setup.py        # worktree-init · worktree-delete 워크트리 셋업·검증·매니페스트·delete·finish
 │   └── ext_preambles/           # (v3.65.0 미사용 — 보존만)
-├── tests/                       # pytest 스위트 (forge·docs·커맨드 계약)
+├── tests/                       # pytest 스위트 (워크트리·docs·커맨드 계약)
 ├── samples/                     # (gitignored) 로컬 C# 테스트 픽스처 — 미커밋
 ├── .gitattributes
 ├── .gitignore
@@ -2515,11 +2545,11 @@ Claudecode-For-Me/
 |---|---|---|
 | install 직후 슬래시 자동완성에 안 보임 | 매니페스트는 세션 시작 시 1회 로드 | 세션 종료 → 재시작 |
 | update 후 신규 스킬 호출 불가 | 동일 — 캐시는 갱신됐으나 세션은 구버전 보유 | 세션 재시작 |
-| `forge-init` 이 워크트리 안 만들고 종료(exit 2) | Task 가 `approved`/`in-dev` 아님, `TSK_*` FAIL, 커밋 0 또는 Task · Intent 미커밋, Intent 경로 입력, Work Packet 입력 | `docs_helpers.py check-task --repo . --file .task/TSK-<NNN>.md` 로 사유 확인 후 Task · Intent 를 고쳐 다시 승인. 미커밋이면 `/forge-init` 1번(승인 커밋 게이트)에서 커밋한다 |
+| `worktree-init` 이 워크트리 안 만들고 종료(exit 2) | Task 가 `approved`/`in-dev` 아님, `TSK_*` FAIL, 커밋 0 또는 Task · Intent 미커밋, Intent 경로 입력, Work Packet 입력 | `docs_helpers.py check-task --repo . --file .task/TSK-<NNN>.md` 로 사유 확인 후 Task · Intent 를 고쳐 다시 승인. 미커밋이면 `/worktree-init` 1번(승인 커밋 게이트)에서 커밋한다 |
 | `worktree_setup.py finish` 가 exit 2 | 메인 repo 에서 실행, 스테이징된 변경, Task · Intent 미커밋 변경, Task 가 in-dev 아님 | 워크트리 안에서, 개발 커밋을 먼저 끝낸 뒤 다시 실행. 상태 · 진행 표시를 손으로 고치지 않는다 |
 | `dispatch-session` 이 즉시 중단 | 호출한 세션이 herdr 밖이다 (`HERDR_ENV` != 1) | herdr 페인에서 세션을 다시 연다. 밖에서는 페인을 만들 수 없다 — 커맨드가 출력한 수동 명령 3줄을 직접 실행해도 된다 |
 | `dispatch-session` 이 "중복 기동" 으로 중단 | 같은 cwd 에 살아있는 에이전트가 있다 | 기존 세션을 쓰거나 종료한다. 오케스트레이터 둘이 한 워크트리에 붙으면 ledger·커밋이 경합한다. 의도한 것이면 명시적으로 진행을 지시한다 |
-| `forge-cancel` 이 "살아있는 세션" 으로 중단 | 지울 워크트리에서 세션이 돌고 있다 | 세션 종료 → 페인 닫기 → 재실행. 먼저 지우면 그 세션의 cwd 가 사라진다 |
+| `worktree-delete` 가 "살아있는 세션" 으로 중단 | 지울 워크트리에서 세션이 돌고 있다 | 세션 종료 → 페인 닫기 → 재실행. 먼저 지우면 그 세션의 cwd 가 사라진다 |
 | `codenav frontmatter gen` 결과 `generated=0` | `claude` CLI 부재 또는 stdout JSON 키 mismatch | `where claude` 확인. v1.15.0+ 는 `result`/`response` 둘 다 처리 |
 | `codenav frontmatter gen` "git working tree is dirty" 거부 | 안전장치 | commit/stash 또는 `--allow-dirty` |
 | `codenav ui --port 8765` 실행 시 `WinError 10013` | Windows excluded port range (8601-8900 등) | 다른 포트 사용 (예: `--port 9876`). `netsh interface ipv4 show excludedportrange protocol=tcp` 로 확인 |

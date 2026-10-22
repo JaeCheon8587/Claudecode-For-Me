@@ -44,7 +44,7 @@ SCAN = (
 
 # 파일 → 그 파일에서 잔재 토큰을 써도 되는 문구. 면제는 이 문구에만 걸린다.
 ALLOWED = {
-    "commands/forge-init.md": "Work Packet·TASK 입력은 … 폐지",
+    "commands/worktree-init.md": "Work Packet·TASK 입력은 … 폐지",
     "scripts/worktree_setup.py": "Work Packet·TASK 입력은 v3.58 에서 폐지",
 }
 BLOCK_FILE = "docs/.templates/DOCUMENT_GUIDE.md"
@@ -136,6 +136,6 @@ def test_unclosed_marker_block_is_reported():
 
 
 def test_allowed_phrase_exempts_only_itself():
-    rel = "commands/forge-init.md"
+    rel = "commands/worktree-init.md"
     assert _file_hits(rel, [f"- `{ALLOWED[rel]}` → Intent 를 작성한다"]) == []
     assert _file_hits(rel, [f"- `{ALLOWED[rel]}` → FRD 를 작성한다"]), "같은 줄의 다른 토큰까지 면제된다"

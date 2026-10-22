@@ -23,8 +23,8 @@ def run_git(repo: Path, *args: str) -> subprocess.CompletedProcess:
 @pytest.fixture
 def git_repo(tmp_path: Path) -> Path:
     run_git(tmp_path, "init", "-q")
-    run_git(tmp_path, "config", "user.email", "forge-test@example.invalid")
-    run_git(tmp_path, "config", "user.name", "Forge Test")
+    run_git(tmp_path, "config", "user.email", "worktree-test@example.invalid")
+    run_git(tmp_path, "config", "user.name", "Worktree Test")
     run_git(tmp_path, "config", "commit.gpgsign", "false")
     run_git(tmp_path, "config", "core.autocrlf", "false")
     (tmp_path / "README.md").write_text("# Test repo\n", encoding="utf-8")
@@ -135,7 +135,7 @@ TASK_TEXT = """# TSK-001 — 업로드 응답 정리
 ## Handoff
 | 항목 | 값 |
 |---|---|
-| repo · app | forge-test · Demo |
+| repo · app | worktree-test · Demo |
 | base branch | main |
 | 브랜치명 | task/TSK-001 |
 | 손대지 말 영역 | docs/Demo |
@@ -164,7 +164,7 @@ def write_intent(repo: Path, docs_dir: str = "docs", eol: str = "\n", replace: d
 
 
 def write_catalogs(repo: Path) -> None:
-    """/forge-init §3 처럼 승인 커밋 직전에 생성물 두 개를 다시 만든다."""
+    """/worktree-init §3 처럼 승인 커밋 직전에 생성물 두 개를 다시 만든다."""
     assert _dh.main(["intent-catalog", "--repo", str(repo), "--app", "Demo", "--write"]) == 0
     assert _dh.main(["task-catalog", "--repo", str(repo), "--write"]) == 0
 
@@ -365,8 +365,8 @@ def test_zero_commit_repo_blocks_with_and_without_force(tmp_path: Path):
     repo = tmp_path / "empty"
     repo.mkdir()
     run_git(repo, "init", "-q")
-    run_git(repo, "config", "user.email", "forge-test@example.invalid")
-    run_git(repo, "config", "user.name", "Forge Test")
+    run_git(repo, "config", "user.email", "worktree-test@example.invalid")
+    run_git(repo, "config", "user.name", "Worktree Test")
     run_git(repo, "config", "commit.gpgsign", "false")
     run_git(repo, "config", "core.autocrlf", "false")
     task = write_task(repo)
@@ -540,7 +540,7 @@ def test_list_scan_fallback_finds_task_branch(git_repo: Path):
     task = write_task(git_repo)
     commit_all(git_repo)
     slug = manifest_from(run_init(git_repo, task))["slug"]
-    (git_repo / ".process" / "forge" / f"{slug}.json").unlink()
+    (git_repo / ".process" / "worktree" / f"{slug}.json").unlink()
 
     result = run_script(git_repo, "list")
 
@@ -549,14 +549,14 @@ def test_list_scan_fallback_finds_task_branch(git_repo: Path):
     assert [(e["slug"], e["branch"], e["source"]) for e in entries] == [(slug, "task/TSK-001", "scan")]
 
 
-def test_cancel_removes_task_worktree_and_branch(git_repo: Path):
+def test_delete_removes_task_worktree_and_branch(git_repo: Path):
     task = write_task(git_repo)
     commit_all(git_repo)
     init_result = run_init(git_repo, task)
     assert init_result.returncode == 0, init_result.stderr
     slug = manifest_from(init_result)["slug"]
 
-    result = run_script(git_repo, "cancel", slug)
+    result = run_script(git_repo, "delete", slug)
 
     assert result.returncode == 0, result.stderr
     probe = subprocess.run(
@@ -900,7 +900,7 @@ def test_refresh_int_catalog_writes_catalog_for_intent_path(tmp_path: Path):
 # 매니페스트 · cwd 독립성
 #
 # `init` 은 고른 base·만든 브랜치·워크트리 경로를 알고 있다. 그걸 파일로 남기지
-# 않으면 cancel·list 가 나중에 slug 로부터 브랜치를 추측하게 되고, 기본 브랜치가
+# 않으면 delete·list 가 나중에 slug 로부터 브랜치를 추측하게 되고, 기본 브랜치가
 # task/<ID> 인 지금은 그 추측(feat-<slug>)이 항상 틀린다.
 # ============================================================================
 def test_init_writes_manifest_to_worktree_and_main(git_repo: Path):
@@ -909,8 +909,8 @@ def test_init_writes_manifest_to_worktree_and_main(git_repo: Path):
 
     manifest = manifest_from(run_init(git_repo, task))
 
-    wt_manifest = Path(manifest["worktree"]) / ".process" / "forge" / "handoff.json"
-    main_manifest = git_repo / ".process" / "forge" / f"{manifest['slug']}.json"
+    wt_manifest = Path(manifest["worktree"]) / ".process" / "worktree" / "handoff.json"
+    main_manifest = git_repo / ".process" / "worktree" / f"{manifest['slug']}.json"
     assert wt_manifest.is_file(), "워크트리 인수인계 사본이 없다"
     assert main_manifest.is_file(), "메인 repo 조회용 사본이 없다"
 
@@ -967,38 +967,38 @@ def test_list_works_from_inside_worktree(git_repo: Path):
     assert entries[0]["source"] == "manifest"
 
 
-def test_cancel_uses_manifest_branch_not_feat_guess(git_repo: Path):
+def test_delete_uses_manifest_branch_not_feat_guess(git_repo: Path):
     task = write_task(git_repo)
     commit_all(git_repo)
     manifest = manifest_from(run_init(git_repo, task))
     slug = manifest["slug"]
 
-    result = run_script(git_repo, "cancel", slug)
+    result = run_script(git_repo, "delete", slug)
 
     assert result.returncode == 0, result.stderr
     assert "task/TSK-001" in result.stdout
     assert "feat-" not in result.stdout
     assert not Path(manifest["worktree"]).exists()
-    assert not (git_repo / ".process" / "forge" / f"{slug}.json").exists()
+    assert not (git_repo / ".process" / "worktree" / f"{slug}.json").exists()
     branches = run_git(git_repo, "branch", "--format=%(refname:short)").stdout
     assert "task/TSK-001" not in branches.split()
 
 
-def test_cancel_falls_back_to_reverse_index_without_manifest(git_repo: Path):
+def test_delete_falls_back_to_reverse_index_without_manifest(git_repo: Path):
     task = write_task(git_repo)
     commit_all(git_repo)
     manifest = manifest_from(run_init(git_repo, task))
     slug = manifest["slug"]
-    (git_repo / ".process" / "forge" / f"{slug}.json").unlink()
+    (git_repo / ".process" / "worktree" / f"{slug}.json").unlink()
 
-    result = run_script(git_repo, "cancel", slug)
+    result = run_script(git_repo, "delete", slug)
 
     assert result.returncode == 0, result.stderr
     assert not Path(manifest["worktree"]).exists()
 
 
-def test_cancel_fails_loudly_when_branch_cannot_be_determined(git_repo: Path):
-    result = run_script(git_repo, "cancel", "no-such-slug")
+def test_delete_fails_loudly_when_branch_cannot_be_determined(git_repo: Path):
+    result = run_script(git_repo, "delete", "no-such-slug")
 
     assert result.returncode != 0
     assert "특정할 수 없다" in result.stderr
@@ -1166,14 +1166,14 @@ def test_finish_twice_reports_already(git_repo: Path):
 
 def test_finish_reads_task_id_from_manifest(git_repo: Path):
     manifest, wt = init_worktree(git_repo)
-    (wt / ".process" / "forge" / "handoff.json").unlink()
+    (wt / ".process" / "worktree" / "handoff.json").unlink()
 
     missing = run_finish(wt)
 
     assert missing.returncode == 2
     assert "매니페스트" in missing.stderr
 
-    main_copy = git_repo / ".process" / "forge" / f"{manifest['slug']}.json"
+    main_copy = git_repo / ".process" / "worktree" / f"{manifest['slug']}.json"
     result = run_finish(wt, "--manifest", str(main_copy))
 
     assert result.returncode == 0, result.stderr
