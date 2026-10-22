@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v3.71.0 · 커스텀 스킬 7종 + 슬래시 커맨드 17종 + 에이전트 9종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v3.72.0 · 커스텀 스킬 7종 + 슬래시 커맨드 17종 + 에이전트 9종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,7 +11,7 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `3.71.0` |
+| 버전 | `3.72.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
@@ -66,6 +66,32 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v3.72.0 — 개발 입력을 Intent 에서 Task 로: check-task · task-catalog · worktree_setup finish · BREAKING
+
+Intent 는 기능 문서(상시, `docs/<App>/INTENT/`)가 되고, 작업 계약은 레포 루트 `.task/TSK-<NNN>.md` 의 **Task** 가 맡는다.
+기능이 바뀌면 Intent 를 먼저 고치고 바뀐 항목 끝에 진행 표시(`[TSK-001 진행 중]` · `[TSK-001 삭제 예정]`)를 붙인 뒤,
+그 항목들을 Task Scope 에 사본으로 옮겨 승인한다. 개발 단계(`/forge-init` · `/forge-scope`)는 그 Task 를 입력으로 받는다.
+설계 초안은 `docs/proposals/intent-task-split/`.
+
+- **`docs_helpers.py check-task`(신규)** — 형식(메타 7행 · 섹션 6개 · Handoff) · Scope(유형별 변경 종류 · `이전` 줄 · 중복) ·
+  Acceptance 근거(`<App>-INT-NNN FR-n` · `R-n`) · 이름 규칙(내부 코드 이름 금지, 밖에서 보이는 이름은 종류어 + 백틱) ·
+  레포 대조(Scope 문장 = Intent 항목 · 진행 표시 1:1 · 끝나지 않은 다른 Task 와 충돌 · approved 조건 = 대상 Intent Open questions none).
+- **`docs_helpers.py task-catalog`(신규)** — `.task/task-catalog.md` 생성물(`--write` · `--check` · `--json`). `check` 는
+  Task 가 있으면 `TSK_CATALOG` 로 stale 을 잡는다(`--app` 을 줘도 레포 단위로 본다).
+- **`/forge-init <Task>`** — 인자가 `.task/TSK-<NNN>.md` 로 바뀐다. **Intent 경로는 exit 2**("Intent 는 기능 문서라 개발 입력이
+  아니다"). 승인 커밋 전에 `check-task` 를 돌리고 두 카탈로그를 다시 만든다. 기본 브랜치 `task/<문서 ID>`, in-dev 커밋은
+  Task + task-catalog 2파일. 매니페스트 키 `intent*` → `task` · `task_worktree` · `task_id` · `intents` · `scope`.
+- **`worktree_setup.py finish`(신규)** — forge-scope F5 의 마감 전이를 scribe 대신 결정적 스크립트가 한다: 이 Task 의 진행 표시
+  제거 · 삭제 예정 줄 삭제(섹션이 비면 `none`) · Task `in-dev → in-review` · 카탈로그 2종 재생성 · 커밋 1개. 워크트리 밖 ·
+  스테이징된 변경 · 고칠 문서의 미커밋 변경이면 exit 2. 줄바꿈(LF/CRLF)을 보존하고, 두 번 실행하면 `already`.
+- **아직 바뀌지 않은 것** — requirement-spec 은 여전히 Intent 를 쓰고 Task 를 만들지 않는다(다음 단계). 그 사이 Task 는
+  초안 템플릿(`docs/proposals/intent-task-split/TSK-001-TEMPLATE.md`)대로 손으로 쓴다.
+
+**이전 방법**: `/forge-init docs/<App>/INTENT/<ID>.md` → Intent 에서 바뀐 항목을 Task 로 옮겨 승인한 뒤
+`/forge-init .task/TSK-<NNN>.md`. 진행 중인 `intent/*` 워크트리는 `/forge-cancel` 로 정리하고 다시 만든다.
+
+**검증**: `python -m pytest tests/ -q` → **505 passed, 2 skipped**.
 
 ### v3.71.0 — 오케스트레이터에서 플러그인 커맨드 · 스킬 호출 허용
 
@@ -1964,7 +1990,7 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 |---|---|---|
 | `branch-review` | `/claudecode-for-me:branch-review [ref] [--spec <path>] [--resume]` | HEAD↔ref diff을 bugs/style/spec/perf 4 dimension 병렬 finder로 검토 |
 | `codenav-frontmatter-gen` | `/claudecode-for-me:codenav-frontmatter-gen [--limit N] [--apply]` | C# 클래스 description 빈칸을 AI로 일괄 채워 `// ---` frontmatter 블록 삽입 |
-| `forge-scope` | `/claudecode-for-me:forge-scope [<handoff.json>]` | `/forge-init` 이 만들어 둔 **워크트리 안에서** 오케스트레이터 세션(opus/fable-orchestrator)이 Intent 를 개발. 입력은 매니페스트(`.process/forge/handoff.json`), 슬라이스마다 coder RED → GREEN → reviewer → 커밋, A-n 증거로 마감. **워크트리를 만들지 않는다** — 환경 구성은 `/forge-init`(v3.64 분리). 메인 repo 에서 실행하면 진입 가드가 중단시킨다. Work Packet·TASK 입력은 v3.58 에서 폐지. 빌드는 `.csproj` 단위만(솔루션 금지). 정리는 `forge-cancel`. |
+| `forge-scope` | `/claudecode-for-me:forge-scope [<handoff.json>]` | `/forge-init` 이 만들어 둔 **워크트리 안에서** 오케스트레이터 세션(opus/fable-orchestrator)이 승인된 Task 를 개발. 입력은 매니페스트(`.process/forge/handoff.json`), 슬라이스마다 coder RED → GREEN → reviewer → 커밋, A-n 증거와 `worktree_setup.py finish`(마감 전이)로 마감. **워크트리를 만들지 않는다** — 환경 구성은 `/forge-init`(v3.64 분리). 메인 repo 에서 실행하면 진입 가드가 중단시킨다. Work Packet·TASK 입력은 v3.58 에서 폐지. 빌드는 `.csproj` 단위만(솔루션 금지). 정리는 `forge-cancel`. |
 | `grill-me` | `/claudecode-for-me:grill-me [주제]` | 1문 1답으로 요구사항 모호점 추적 |
 | `meta-prompter` | `/claudecode-for-me:meta-prompter [요청]` | 거친 요청 → 구조화된 메타 프롬프트 |
 | `requirement-spec` | `/claudecode-for-me:requirement-spec [--app <App>] [--type 기능개발\|리팩토링] [--no-gate]` | grill-me 인터뷰 → Intent Part 1/2 → 코드 체크리스트 + opus critic 검증 루프(≤3회) → 품질 지표 → 승인 1회. 산출물은 `docs/<App>/INTENT/<App>-INT-<NNN>.md` 1개 |
@@ -1981,7 +2007,7 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `dispatch-session` | **세션 런처** — 이미 있는 디렉터리에 herdr 페인을 열고 Claude 세션을 기동, 선택적으로 작업 지시. 워크트리를 만들지 않고 브랜치를 고르지 않는다(`/forge-init` 몫). 띄울 위치는 `AskUserQuestion` 으로 사용자가 고른다. `HERDR_ENV=1` 인 세션에서만 동작. 스킬 없이 커맨드 단독 |
 | `commit-analysis` | 배포 여부 확인 후 `[ADD]`/`[MOD]`/`[FIX]` 자동 판단 한글 커밋 생성 (배포 시 본문에 `[Deploy]`) |
 | `forge-cancel` | forge 워크트리와 거기 붙은 브랜치 제거 (서브모듈 메인 원본 보존). 브랜치는 `.process/forge/<slug>.json` 매니페스트에서 읽는다 — 추측하지 않는다. `<slug>` 지정 또는 생략 시 목록에서 선택. 스킬 없이 커맨드 단독 |
-| `forge-init` | **개발 환경 구성** — 승인 커밋 게이트 → base 브랜치 선택 → 워크트리/브랜치 생성 → `approved→in-dev` 전이 → 매니페스트 기록. **보고하고 끝낸다**(개발 세션을 띄우지 않는다). 스펙 세션·메인 repo 에서 실행. 스킬 없이 커맨드 단독 |
+| `forge-init` | **개발 환경 구성** — 승인된 Task(`.task/TSK-<NNN>.md`)로 승인 커밋 게이트 → base 브랜치 선택 → 워크트리/브랜치 생성 → `approved→in-dev` 전이 → 매니페스트 기록. **보고하고 끝낸다**(개발 세션을 띄우지 않는다). 스펙 세션·메인 repo 에서 실행. 스킬 없이 커맨드 단독 |
 | `forge-scope` | forge-scope skill 진입. **워크트리 안에서** 실행 |
 | `grill-me` | grill-me skill 진입 |
 | `meta-prompter` | meta-prompter skill 진입 |
@@ -2110,7 +2136,7 @@ codenav --root <repo> ui --port 9876
 
 | | 어디서 | 무엇을 |
 |---|---|---|
-| `/forge-init <Intent>` | 스펙 세션 · **메인 repo** | 승인 커밋 게이트 → base 선택 → 워크트리/브랜치 → `approved→in-dev` → 매니페스트. **보고하고 끝낸다** |
+| `/forge-init <Task>` | 스펙 세션 · **메인 repo** | 승인 커밋 게이트 → base 선택 → 워크트리/브랜치 → `approved→in-dev` → 매니페스트. **보고하고 끝낸다** |
 | *(개발 세션 시작)* | 사용자 | 그 워크트리를 cwd 로 하는 세션을 띄운다. 손으로 해도 되고 `/dispatch-session <워크트리> --agent opus-orchestrator --prompt "/forge-scope .process/forge/handoff.json"` 로 해도 된다(herdr 안에서만) |
 | `/forge-scope [handoff.json]` | 개발 세션 · **워크트리** | F0~F5 개발 절차. 워크트리를 만들지 않는다 |
 | `/forge-cancel [slug]` | 스펙 세션 · **메인 repo** | 워크트리·브랜치·매니페스트 정리. 제거 전 그 워크트리에 살아있는 세션이 있는지 확인한다(v3.66) |
@@ -2121,15 +2147,15 @@ codenav --root <repo> ui --port 9876
 
 | 단계 | 누가 | 무엇 |
 |---|---|---|
-| **init-1** 승인 커밋 | `/forge-init` · 사용자 | Intent `상태 = approved` 확인, Intent + INT-CATALOG 미커밋이면 `docs(<ID>): Intent 승인` 커밋. 잔여 dirty 보고 |
+| **init-1** 승인 커밋 | `/forge-init` · 사용자 | Task `상태 = approved` 확인 → `check-task` FAIL 0 → Task · task-catalog · 대상 Intent · INT 카탈로그가 미커밋이면 카탈로그를 다시 만들어 `docs(<ID>): Task 승인` 커밋. 잔여 dirty 보고 |
 | **init-2** base 선택 | `worktree_setup.py branches` · 사용자 | 후보(로컬 + `origin/*`) 나열 → `AskUserQuestion` 으로 분기점 선택. 임의 선택 금지 |
 | **init-3** 워크트리 | `worktree_setup.py init` | 승인 게이트·시작 조건 → 워크트리·브랜치(고른 base 에서 분기) → `approved → in-dev` 커밋(Handoff `base branch` 동봉) |
 | **init-4** 보고 | `/forge-init` | 매니페스트를 `<워크트리>/.process/forge/handoff.json` · `<메인>/.process/forge/<slug>.json` 두 곳에 기록하고 경로를 보고. **여기서 종료** |
 | F0 진입 | 팀장 | 워크트리 안인지 가드(`--git-common-dir`), 매니페스트 로드, `<워크트리>/.orchestration/ledgers/` 에 ledger 생성 — 수용 기준 = `A-1..A-n` 원문 + 대상 test.csproj 전체 green |
-| F2 개발 플랜 | explorer → (analyst) → 팀장 | 설계 결정 + 슬라이스 표. 위험 도메인이면 analyst 감사 의무. Intent 부족 → **멈추고 requirement-spec 으로 되돌린다** |
+| F2 개발 플랜 | explorer → (analyst) → 팀장 | 설계 결정 + 슬라이스 표. 위험 도메인이면 analyst 감사 의무. Task · Intent 부족 → **멈추고 requirement-spec 으로 되돌린다** |
 | F3 슬라이스 | coder ×2 → reviewer → 커밋 | RED(테스트, `Failed` ≥1 · `error CS` 0) → GREEN(최소 구현, exit 0) → review → `feat(<ID>): S<k> …` |
 | F4 통합 | coder · 팀장 | test.csproj 전체 VERIFY, A-n 마다 증거 포인터. 환경 의존 A 는 확인 불가면 "미충족 + 사유" |
-| F5 마감 | scribe · reviewer(opus) · 팀장 | scribe 가 Intent `in-dev → in-review` 1줄, 브랜치 전체 diff(`base_commit...HEAD`) 리뷰 → 커밋 → `.review/forge-<ID>.md` 로 완료 기록 → 보고. 다음 단계(`/branch-review <base_commit>`)는 안내만 |
+| F5 마감 | reviewer(opus) · `worktree_setup.py finish` · 팀장 | 브랜치 전체 diff(`base_commit...HEAD`)를 Task · 대상 Intent 에 대조해 리뷰 → APPROVE 면 `finish`(진행 표시 정리 · Task `in-dev → in-review` · 카탈로그 2종 · 커밋) → `.review/forge-<ID>.md` 로 완료 기록 → 보고. 다음 단계(`/branch-review <base_commit>`)는 안내만. 머지 뒤 사람이 Task 를 `done` 으로 바꾸고 `task-catalog --write` |
 
 > "슬라이스"는 오케스트레이터 프로토콜의 `wave`(한 메시지 동시 스폰)와 구분하기 위한 이름이다. forge 의 슬라이스는 **순차** 단위다 — RED 와 GREEN 을 병렬로 던지지 않는다.
 
@@ -2139,16 +2165,16 @@ codenav --root <repo> ui --port 9876
 |---|---|---|
 | Python 3.10+ (`python` 또는 `py -3`) | **필수** | 미설치 시 가이드 출력 후 중단 |
 | git repository + 커밋 1개 이상 | **필수** | 워크트리는 **분기점(base) 커밋**의 사본 — 커밋 안 된 소스·테스트는 따라오지 않는다 |
-| Intent 가 분기점에 있고 그 사본이 디스크와 동일 | **필수** | 분기점 = `--base <ref>`, 미지정 시 현재 HEAD. 사본이 다르면 워크트리에 승인 상태가 반영되지 않으므로 차단. `--force` 로도 우회 불가 |
-| Intent `상태` = `approved`(신규) 또는 `in-dev`(재개) | **필수** | `check-intent` FAIL 0 (`INT_APPROVED_GATE` 포함) |
+| Task · 대상 Intent 가 분기점에 있고 그 사본이 디스크와 동일 | **필수** | 분기점 = `--base <ref>`, 미지정 시 현재 HEAD. 사본이 다르면 워크트리에 승인 상태가 반영되지 않으므로 차단. `--force` 로도 우회 불가 |
+| Task `상태` = `approved`(신규) 또는 `in-dev`(재개) | **필수** | `check-task` FAIL 0 (Scope 대조 · 진행 표시 · 충돌 · `TSK_APPROVED_GATE` 포함) |
 | 오케스트레이터 세션 | 전제 | 인라인(세션 직접 코딩) 모드는 없다 |
 
 #### 사용 예시
 
 ```bash
 # ① 스펙 세션(메인 repo) — 환경 구성. 워크트리 .worktree/<문서 ID>,
-#    브랜치 = Handoff 브랜치명 또는 intent/<문서 ID>. 여기서 끝난다.
-/claudecode-for-me:forge-init docs/OrderApi/INTENT/OrderApi-INT-001.md
+#    브랜치 = Task Handoff 브랜치명 또는 task/<문서 ID>. 여기서 끝난다.
+/claudecode-for-me:forge-init .task/TSK-001.md
 
 # ② 사용자가 그 워크트리에서 개발 세션을 시작한 뒤 (예: 오케스트레이터 에이전트 모드)
 #    → 워크트리 안에서
@@ -2158,7 +2184,7 @@ codenav --root <repo> ui --port 9876
 /claudecode-for-me:forge-scope .process/forge/handoff.json
 
 # ③ 워크트리·브랜치·매니페스트 정리 — 메인 repo 에서. slug 생략 시 목록에서 선택
-/claudecode-for-me:forge-cancel OrderApi-INT-001
+/claudecode-for-me:forge-cancel TSK-001
 /claudecode-for-me:forge-cancel
 ```
 
@@ -2166,8 +2192,8 @@ codenav --root <repo> ui --port 9876
 
 | 커맨드 | 인자 | 설명 |
 |---|---|---|
-| `forge-init` | `<Intent-doc-path>` | **필수**. `docs/<App>/INTENT/<ID>.md` — 문서 폴더 `docs`·`Docs` 는 같은 폴더로 본다(어느 표기로 줘도 된다) |
-| | `--name <slug>` | 워크트리 slug 명시 (기본: Intent 문서 ID) |
+| `forge-init` | `<Task-doc-path>` | **필수**. `.task/TSK-<NNN>.md`(레포 루트). 대상 Intent 의 문서 폴더 `docs`·`Docs` 는 같은 폴더로 본다 |
+| | `--name <slug>` | 워크트리 slug 명시 (기본: Task 문서 ID) |
 | | `--base <ref>` | 워크트리 분기점 — 주면 선택 질문을 건너뛴다. 로컬·`origin/*` 모두 가능. 브랜치가 이미 있으면 무시되고 `base_applied: false` |
 | | `--force` | 메인 repo dirty 검사만 우회 (커밋·승인 조건은 우회 불가) |
 | `forge-scope` | `[<handoff.json>]` | 생략 시 `<cwd>/.process/forge/handoff.json`. 워크트리 안에서만 동작 |
@@ -2175,13 +2201,17 @@ codenav --root <repo> ui --port 9876
 
 #### init 이 하는 일
 
-1. **입력 판별** — 경로에 `INTENT` 폴더가 있거나 파일명이 `<App>-INT-<nnn>` 이면 Intent. 그 밖(Work Packet·TASK)은 exit 2 "v3.58 에서 폐지".
-2. **승인 게이트** — `상태 ∈ {approved, in-dev}` + `docs_helpers` 의 Intent 검사 FAIL 0. 미통과면 exit 2 + 사유, 워크트리를 만들지 않는다.
-3. **시작 조건** — 분기점(`--base`, 기본 HEAD) 존재 + Intent 가 그 분기점에 tracked(대소문자 무시로 찾는다 — 탐색기 rename 으로 디스크 `Docs`·커밋 `docs` 처럼 어긋나도 커밋된 표기를 쓴다) + **그 사본이 디스크 Intent 와 동일** (다르면 워크트리에 승인 상태가 반영되지 않으므로 exit 2).
-4. **워크트리** — `.worktree/<slug>`, 브랜치 = Handoff `브랜치명`(유효한 ref 일 때) 아니면 `intent/<문서 ID>`. 분기점은 `--base` 로 고른 ref — 브랜치 이름과 별개다. 후보는 `branches` 서브커맨드로 나열한다.
+1. **입력 판별** — 레포 루트 `.task/` 의 `TSK-<NNN>.md` 면 Task. Intent 경로는 exit 2 "Intent 는 기능 문서라 개발 입력이 아니다", 그 밖(Work Packet 등)은 exit 2 "v3.58 에서 폐지".
+2. **승인 게이트** — Task `상태 ∈ {approved, in-dev}` + `docs_helpers.py check-task` FAIL 0(대상 Intent 대조 포함). 미통과면 exit 2 + 사유, 워크트리를 만들지 않는다.
+3. **시작 조건** — 분기점(`--base`, 기본 HEAD) 존재 + Task · 대상 Intent 가 그 분기점에 tracked(대소문자 무시로 찾는다 — 탐색기 rename 으로 디스크 `Docs`·커밋 `docs` 처럼 어긋나도 커밋된 표기를 쓴다) + **그 사본이 디스크 문서와 동일** (다르면 워크트리에 승인 상태가 반영되지 않으므로 exit 2).
+4. **워크트리** — `.worktree/<slug>`, 브랜치 = Task Handoff `브랜치명`(유효한 ref 일 때) 아니면 `task/<문서 ID>`. 분기점은 `--base` 로 고른 ref — 브랜치 이름과 별개다. 후보는 `branches` 서브커맨드로 나열한다.
 5. **가드레일 복사** — 메인의 `CLAUDE.md`·`.claude/settings.json`·`.claude/rules`·문서 폴더(`docs`·`Docs` 중 디스크에 있는 표기 하나) 중 워크트리에 **없는 파일만** 복사(덮어쓰지 않음).
-6. **상태 전이** — 신규 생성일 때만 워크트리 Intent `approved → in-dev` + `<App>-INT-CATALOG.md` 재생성 + 두 파일 커밋 `chore(<ID>): 상태 in-dev` (문서 폴더 표기 무관). 메인 repo 의 Intent 는 그대로.
-7. **매니페스트** — stdout 마지막 줄 JSON: `worktree`·`branch`·`base`·`base_commit`·`base_applied`·`intent_worktree`·`intent_id`·`status`·`created`·`status_committed`·`acceptance`(A-n)·`handoff`(5행) 등. `.process/<slug>/` 스캐폴딩(build.md·progress.md)은 v3.61.0 에서 제거 — 계획·진행 상태는 팀장 ledger 하나다.
+6. **상태 전이** — 신규 생성일 때만 워크트리 Task `approved → in-dev` + `.task/task-catalog.md` 재생성 + 두 파일 커밋 `chore(<ID>): 상태 in-dev`. Intent 는 바뀌지 않는다(진행 표시는 승인 커밋에 이미 있다). 메인 repo 의 Task 는 그대로.
+7. **매니페스트** — stdout 마지막 줄 JSON: `worktree`·`branch`·`base`·`base_commit`·`base_applied`·`task_worktree`·`task_id`·`intents`(대상 Intent 워크트리 경로)·`scope`(Scope 항목)·`status`·`created`·`status_committed`·`acceptance`(A-n · 근거)·`handoff`(5행) 등. `.process/<slug>/` 스캐폴딩(build.md·progress.md)은 v3.61.0 에서 제거 — 계획·진행 상태는 팀장 ledger 하나다.
+
+#### finish 가 하는 일 (워크트리 안에서, forge-scope F5)
+
+`python worktree_setup.py finish [--manifest <path>] [--quiet]` — 매니페스트의 `task_id` 로 워크트리 안의 Task · 대상 Intent 를 다시 찾는다. 이 Task 의 `진행 중` 표시를 지우고 `삭제 예정` 항목 줄을 지운다(섹션이 비면 `none`, 다른 Task 의 표시는 그대로). Task 를 `in-dev → in-review` 로 바꾸고 task-catalog · INT 카탈로그를 다시 만들어 커밋 `chore(<ID>): 상태 in-review` 1개로 남긴다(커밋된 docs·Docs 표기로 스테이징, 줄바꿈 보존). 메인 repo 에서 실행 · 스테이징된 변경 · 고칠 문서의 미커밋 변경 · Task 가 in-dev 아님 → exit 2. 이미 in-review 면 `already: true` 로 exit 0.
 
 #### 워크트리 서브모듈
 
@@ -2249,7 +2279,7 @@ init 이 워크트리의 `.gitignore` 에 아래를 추가한다.
 - **Phase 5 승인(1회)**: 진입 직후 `intent-catalog --repo . --app <App> --write` 로 카탈로그를 재생성한다(승인 여부와 무관 — 이 시점이면 제목·`검증`·FR/A 가 모두 확정돼 있다). 이어 `AskUserQuestion` 본문에 Intent 경로·`검증` 행·최종 체크리스트 경로와 `<PASS 행>/<전체 행> PASS`·`인터뷰 반영 <covered>/<expected> · 누락 <EXP 키>`·잔존 MAJOR/MINOR 키·critic의 `IMPROVE` 목록(차단 아님)·Part 1 변경 diff(≤10줄)·SKIPPED 경고를 싣는다. 승인 조건은 `Open questions`가 `none` ∧ Handoff에 `pending` 없음 ∧ `유형`이 단일값 ∧ `검증`이 `PASS`·`OVERRIDE`·`SKIPPED` 중 하나로 시작. 총평이 `FAIL`이면 옵션은 수동 수정 후 재검증 1회 / OVERRIDE 승인 / 중단이고, OVERRIDE 승인 시 `검증` 총평과 `quality.json` 의 `final` 을 `OVERRIDE` 로 쓴다. 충족 시 `상태`=`approved`, 거절·중단 시 `draft` 유지
 - **`--no-gate`**: Phase 3·4를 건너뛰고 `검증` 행을 `SKIPPED — --no-gate` 로 둔 채 Phase 5만 수행
 - **Intent 템플릿**: `docs/.templates/App/INTENT/APP-INT-001-TEMPLATE.md` — 메타 표 7행(`검증` 포함) + Part 1 기능 명세 6섹션(Problem / Outcome / Affected / Constraints / Decisions / Open questions) + Part 2 작업 지시 7섹션
-- **Intent 카탈로그**: `docs/<App>/<App>-INT-CATALOG.md` — `INTENT/` 를 훑어 `docs_helpers.py intent-catalog --repo . --app <App> --write` 가 생성하는 **파생 인덱스**. 행은 `Intent · 제목 · 유형 · 상태 · 검증 · 요약 · 규모`(요약 = Outcome 첫 줄 50자, 규모 = FR·A 개수). 고유 정보가 0 인 생성물이라 손으로 쓰지 않는다 — 상태 전이 4 지점(Phase 5 진입 · Phase 5 승인 · `/forge-init` 의 in-dev · forge-scope F5 의 in-review)에서 재생성하고, 빠뜨리면 `check --app <App>` 이 `INT_CATALOG stale` FAIL 로 잡는다. 참고 양식은 `docs/.templates/App/APP-INT-CATALOG-TEMPLATE.md`
+- **Intent 카탈로그**: `docs/<App>/<App>-INT-CATALOG.md` — `INTENT/` 를 훑어 `docs_helpers.py intent-catalog --repo . --app <App> --write` 가 생성하는 **파생 인덱스**. 행은 `Intent · 제목 · 유형 · 상태 · 검증 · 요약 · 규모`(요약 = Outcome 첫 줄 50자, 규모 = FR·A 개수). 고유 정보가 0 인 생성물이라 손으로 쓰지 않는다 — 상태 전이 4 지점(Phase 5 진입 · Phase 5 승인 · `/forge-init` 승인 커밋 · `worktree_setup.py finish` 마감)에서 재생성하고, 빠뜨리면 `check --app <App>` 이 `INT_CATALOG stale` FAIL 로 잡는다. 참고 양식은 `docs/.templates/App/APP-INT-CATALOG-TEMPLATE.md`
 - **경계**: 클래스명·파일명·구현 방법은 어느 Part에도 쓰지 않는다(개발 세션 몫). 후속 스킬 자동 호출 없음, `ExitPlanMode` 미호출
 
 ### 6.7 commit-analysis
@@ -2456,7 +2486,7 @@ Claudecode-For-Me/
 │   ├── docs_helpers.py          # Intent 검사 — check · check-intent · intent-checklist · intent-catalog
 │   ├── ext_dispatch.py          # (v3.65.0 미사용 — 외부 위임 폐지, 보존만)
 │   ├── herdr_name.py            # dispatch-session herdr 에이전트 이름 정규화 (단독)
-│   ├── worktree_setup.py        # forge-init 워크트리 셋업·검증·매니페스트·cancel
+│   ├── worktree_setup.py        # forge-init 워크트리 셋업·검증·매니페스트·cancel·finish
 │   └── ext_preambles/           # (v3.65.0 미사용 — 보존만)
 ├── tests/                       # pytest 스위트 (forge·docs·커맨드 계약)
 ├── samples/                     # (gitignored) 로컬 C# 테스트 픽스처 — 미커밋
@@ -2473,8 +2503,9 @@ Claudecode-For-Me/
 |---|---|---|
 | install 직후 슬래시 자동완성에 안 보임 | 매니페스트는 세션 시작 시 1회 로드 | 세션 종료 → 재시작 |
 | update 후 신규 스킬 호출 불가 | 동일 — 캐시는 갱신됐으나 세션은 구버전 보유 | 세션 재시작 |
-| `forge-init` 이 워크트리 안 만들고 종료(exit 2) | Intent 가 `approved`/`in-dev` 아님, `INT_*` FAIL, 커밋 0 또는 Intent 미커밋, Work Packet·TASK 입력 | requirement-spec 으로 Intent 승인·재검증. 미커밋이면 `/forge-init` 1번(승인 커밋 게이트)에서 커밋한다 |
-| `forge-scope` 가 시작하자마자 중단 | 메인 repo 에서 실행했거나 매니페스트가 없다 | 먼저 `/forge-init <Intent>`, 그 워크트리에서 세션을 시작한 뒤 `/forge-scope .process/forge/handoff.json` |
+| `forge-init` 이 워크트리 안 만들고 종료(exit 2) | Task 가 `approved`/`in-dev` 아님, `TSK_*` FAIL, 커밋 0 또는 Task · Intent 미커밋, Intent 경로 입력, Work Packet 입력 | `docs_helpers.py check-task --repo . --file .task/TSK-<NNN>.md` 로 사유 확인 후 Task · Intent 를 고쳐 다시 승인. 미커밋이면 `/forge-init` 1번(승인 커밋 게이트)에서 커밋한다 |
+| `worktree_setup.py finish` 가 exit 2 | 메인 repo 에서 실행, 스테이징된 변경, Task · Intent 미커밋 변경, Task 가 in-dev 아님 | 워크트리 안에서, 개발 커밋을 먼저 끝낸 뒤 다시 실행. 상태 · 진행 표시를 손으로 고치지 않는다 |
+| `forge-scope` 가 시작하자마자 중단 | 메인 repo 에서 실행했거나 매니페스트가 없다 | 먼저 `/forge-init <Task>`, 그 워크트리에서 세션을 시작한 뒤 `/forge-scope .process/forge/handoff.json` |
 | `dispatch-session` 이 즉시 중단 | 호출한 세션이 herdr 밖이다 (`HERDR_ENV` != 1) | herdr 페인에서 세션을 다시 연다. 밖에서는 페인을 만들 수 없다 — 커맨드가 출력한 수동 명령 3줄을 직접 실행해도 된다 |
 | `dispatch-session` 이 "중복 기동" 으로 중단 | 같은 cwd 에 살아있는 에이전트가 있다 | 기존 세션을 쓰거나 종료한다. 오케스트레이터 둘이 한 워크트리에 붙으면 ledger·커밋이 경합한다. 의도한 것이면 명시적으로 진행을 지시한다 |
 | `forge-cancel` 이 "살아있는 세션" 으로 중단 | 지울 워크트리에서 세션이 돌고 있다 | 세션 종료 → 페인 닫기 → 재실행. 먼저 지우면 그 세션의 cwd 가 사라진다 |
