@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""worktree_setup — forge-scope 워크트리 셋업 helper.
+"""worktree_setup — forge 워크트리 셋업 helper (/forge-init · /forge-cancel).
 
-오케스트레이션은 하지 않는다. 셋업·검증·정리만 담당하고, 고정 계약-TDD
-파이프라인의 실제 코딩은 호출한 Claude Code 세션이 워크트리 안에서 인라인으로
-수행한다.
+오케스트레이션은 하지 않는다. 셋업·검증·정리·마감 전이만 담당하고, 실제 개발은
+사용자가 워크트리 안에서 시작한 Claude Code 세션이 한다.
 
 입력은 승인된 Task(``.task/TSK-<NNN>.md``)다. Intent 는 기능 문서라 개발 입력이 아니다 —
 Task 가 바꾸는 Intent 항목(Scope)과 완료 조건(Acceptance)을 정한다.
@@ -55,7 +54,7 @@ HANDOFF_NAME = "handoff.json"
 
 
 # ============================================================================
-# 공통 git/링크 유틸 (forge_scope.py / forge_cancel.py 에서 포팅)
+# 공통 git/링크 유틸 (v3.0 이전 forge 스크립트에서 포팅)
 # ============================================================================
 def _run(args: list[str], cwd: Path) -> subprocess.CompletedProcess:
     return subprocess.run(
@@ -990,7 +989,7 @@ def _clear_task_marks(text: str, task_id: str) -> tuple[str, list[str], list[str
 def cmd_finish(args: argparse.Namespace) -> int:
     """마감 전이 — 진행 표시 정리 + Task in-dev → in-review + 카탈로그 재생성 + 커밋 1개.
 
-    개발 세션(forge-scope F5)이 reviewer APPROVE 뒤에 워크트리 안에서 부른다. 문서를 고치는 유일한
+    개발을 마친 세션이 워크트리 안에서 부른다. 문서를 고치는 유일한
     개발 단계 경로라서, 무엇을 바꾸는지 고정하고 다른 변경이 섞이지 않게 막는다.
     """
     cwd = Path.cwd()
@@ -1090,7 +1089,7 @@ def cmd_finish(args: argparse.Namespace) -> int:
 # CLI
 # ============================================================================
 def main(argv: Optional[list[str]] = None) -> int:
-    p = argparse.ArgumentParser(prog="worktree_setup", description="forge-scope 워크트리 셋업 helper")
+    p = argparse.ArgumentParser(prog="worktree_setup", description="forge 워크트리 셋업 helper")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     pi = sub.add_parser("init", help="검증 게이트 + 워크트리 + 링크 + 복사 + 상태 전이")

@@ -55,7 +55,7 @@ tasks: 3
 | 승인 질의 전 (`draft` 확정) | requirement-spec | 없음 (승인 전) |
 | `draft` → `approved` | requirement-spec | 없음 — `/forge-init` 의 승인 커밋 게이트가 `docs(TSK-{NNN}): Task 승인` 으로 커밋 (Task · 진행 표시가 붙은 Intent · 두 카탈로그) |
 | `approved` → `in-dev` | `/forge-init` | `chore(TSK-{NNN}): 상태 in-dev` 에 동봉 |
-| `in-dev` → `in-review` | forge-scope 마감 | `chore(TSK-{NNN}): 상태 in-review` 에 동봉 (진행 표시 제거와 함께) |
+| `in-dev` → `in-review` | 개발 마감 (`worktree_setup.py finish`) | `chore(TSK-{NNN}): 상태 in-review` 에 동봉 (진행 표시 제거와 함께) |
 | `in-review` → `done` | 사람 (머지 후) | 사람이 커밋 |
 | → `dropped` | 사람 | Intent 되돌리기와 같은 커밋 |
 

@@ -57,7 +57,7 @@
 
 ## 기여
 
-{기여 정책. 예: 신규 기능·리팩토링은 `/requirement-spec` 으로 Intent 를 작성·승인한 뒤 착수한다 (`/forge-init` → `/forge-scope` → `/branch-review`). 결정은 Intent 의 Decisions 에 남긴다. 기능 목록이 바뀌면 App PRD §7 을 갱신한다. 상세는 docs/DOCUMENT_GUIDE.md §2.}
+{기여 정책. 예: 신규 기능·리팩토링은 `/requirement-spec` 으로 Intent 를 작성·승인한 뒤 착수한다 (`/forge-init` → 워크트리에서 개발 · `worktree_setup.py finish` → `/branch-review`). 결정은 Intent 의 Decisions 에 남긴다. 기능 목록이 바뀌면 App PRD §7 을 갱신한다. 상세는 docs/DOCUMENT_GUIDE.md §2.}
 
 - 커밋 메시지: {conventional commits 형식 — `feat:`, `fix:`, `docs:`, `refactor:` 등}
 - PR 전 체크리스트: [`docs/DOCUMENT_GUIDE.md` §8](docs/DOCUMENT_GUIDE.md#8-동기화-부담-위치) 동기화 위치 갱신 확인.

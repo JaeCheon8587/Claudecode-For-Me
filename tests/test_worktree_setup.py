@@ -1043,7 +1043,7 @@ def init_worktree(repo: Path, **kwargs) -> tuple[dict, Path]:
 
 
 def dev_commit(wt: Path) -> None:
-    """개발 세션이 남기는 슬라이스 커밋 흉내."""
+    """개발 세션이 남기는 개발 커밋 흉내."""
     (wt / "feature.txt").write_text("done\n", encoding="utf-8")
     run_git(wt, "add", "feature.txt")
     run_git(wt, "commit", "-q", "-m", "feat(TSK-001): S1")

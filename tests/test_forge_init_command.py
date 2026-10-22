@@ -85,9 +85,9 @@ def test_does_not_chain_into_another_skill():
     assert "후속 단계를 실행하지 않는다" in text
     assert "보고하고 끝낸다" in text
 
-    # /forge-scope 는 안내 문구 안에서만 언급된다 — 실행 지시가 아니다.
-    assert "/forge-scope .process/forge/handoff.json" in text
-    assert "먼저 skills/forge-scope/SKILL.md" not in text
+    # 다음 단계는 개발 세션 시작과 마감(finish) 안내뿐이다 — 개발 절차 스킬은 없다.
+    assert ".process/forge/handoff.json" in text
+    assert '`python "<FORGE 절대경로>" finish`' in text
 
     # /dispatch-session 도 마찬가지로 예시일 뿐임이 본문에 박혀 있어야 한다.
     assert "/dispatch-session" in text

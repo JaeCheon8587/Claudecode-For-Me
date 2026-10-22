@@ -9,13 +9,14 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# 이름 → 스킬 · 커맨드 밖에 함께 지운 경로. 모두 v3.69.0 에서 제거.
+# 이름 → 스킬 · 커맨드 밖에 함께 지운 경로. forge-scope 는 v3.73.0, 나머지는 v3.69.0 에서 제거.
 REMOVED = {
     "slack-brief": ["tests/test_slack_brief_skill.py"],
     "acceptance-design": [],
     "doc-driven-review": ["scripts/doc_driven_review.py", "tests/test_doc_driven_review.py"],
     "ddr-loop": ["scripts/ddr_loop.py", "scripts/ddr_templates", "tests/test_ddr_loop.py",
                  "tests/test_ddr_loop_skill.py"],
+    "forge-scope": ["tests/test_forge_scope_skill.py", "scripts/forge_templates"],
 }
 
 
@@ -31,6 +32,7 @@ SOURCES = (
     ("scripts", "**/*.py"),
     ("scripts", "**/*.md"),
     ("docs/.templates", "**/*.md"),
+    (".claude/agents", "*.md"),
     (".claude/commands", "*.md"),
     (".claude-plugin", "*.json"),
     ("tests", "*.py"),
@@ -80,6 +82,6 @@ def test_gitignore_has_no_entries_for_removed():
 
 def test_scan_reaches_sources():
     rels = {p.relative_to(ROOT).as_posix() for p in _sources()}
-    for must in ("commands/session-brief.md", "skills/forge-scope/SKILL.md", "scripts/docs_helpers.py",
+    for must in ("commands/session-brief.md", "skills/requirement-spec/SKILL.md", "scripts/docs_helpers.py",
                  ".claude/commands/codenav-install.md", "tests/test_intent_only.py"):
         assert must in rels, must

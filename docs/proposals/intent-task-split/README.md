@@ -4,6 +4,7 @@
 > 이행(템플릿 교체와 스킬 · 스크립트 개편)은 이 초안이 확정된 뒤 별도 계획으로 한 번에 진행합니다. Intent 템플릿만 먼저 바꾸면 `requirement-spec`과 `check-intent`가 바로 깨지기 때문입니다.
 
 > **진행 상황:** 1단계(개발 단계: docs_helpers · forge-init · forge-scope) 구현 — 브랜치 `feat/task-dev-stage`. requirement-spec · 템플릿 교체는 다음 단계입니다.
+> forge-scope 는 v3.73.0 에서 제거했습니다. 개발은 사용자가 워크트리에서 시작한 세션이 하고, 마감 전이는 `worktree_setup.py finish` 가 맡습니다.
 
 ## 1. 무엇이 바뀌나
 
@@ -47,7 +48,7 @@
 | # | 결정 | 초안의 기본값 | 반영 위치 | 다른 선택지 |
 |---|---|---|---|---|
 | 1 | Intent 메타의 `상태` | `active` · `retired`만 둡니다. `유형 · 승인 · 검증` 행은 Task로 옮깁니다. Intent 변경은 Task와 함께 승인되므로 Intent 자체 승인 행이 필요 없습니다 | Intent 템플릿 메타 · 규칙 11 | 상태 행을 아예 없앰 (retired 기능은 문서 삭제) |
-| 2 | 진행 표시를 지우는 시점 | forge-scope 마감(`in-review` 전이 커밋)에서 **워크트리의** Intent 진행 표시를 지우고 삭제 예정 항목을 지웁니다. 머지되면 코드와 문서가 함께 main에 반영됩니다. 머지 전까지 main에는 표시가 남는데, 이는 main 코드에 아직 없다는 사실과 맞습니다 | DOCUMENT_GUIDE §2 3번, Intent 템플릿 규칙 9 | Task `done` 때 사람이 main에서 지움 (머지와 표시 제거 사이에 틈이 생김) |
+| 2 | 진행 표시를 지우는 시점 | 개발 마감(`worktree_setup.py finish` 의 `in-review` 전이 커밋)에서 **워크트리의** Intent 진행 표시를 지우고 삭제 예정 항목을 지웁니다. 머지되면 코드와 문서가 함께 main에 반영됩니다. 머지 전까지 main에는 표시가 남는데, 이는 main 코드에 아직 없다는 사실과 맞습니다 | DOCUMENT_GUIDE §2 3번, Intent 템플릿 규칙 9 | Task `done` 때 사람이 main에서 지움 (머지와 표시 제거 사이에 틈이 생김) |
 | 3 | Task 취소 | `dropped` 상태를 추가합니다. Scope로 Intent를 되돌립니다(신규 삭제, 변경은 `이전` 문장으로 복원, 표시 삭제). Intent를 먼저 고치는 흐름에서는 작업을 접으면 Intent가 거짓이 되므로 되돌리는 길이 필요합니다 | Task 템플릿 메타 · 규칙 6, DOCUMENT_GUIDE §1.3 · §2 · §8 | 취소된 Task를 파일째 지우고 Intent는 git revert |
 | 4 | done Task 보관 | `.task/`에 그대로 둡니다. 카탈로그가 전체 목록이자 Intent 역방향 찾기 수단입니다 | task-catalog 템플릿 | 일정 기간 뒤 `.task/archive/`로 옮김 |
 | 5 | 계약을 적는 곳 | 계약의 동작(API · 필드 · 오류 코드)은 **제공하는 App의 Intent FR**에 적습니다. errorCode · DTO 등재는 지금처럼 솔루션 PRD 부록에 두고 Task 승인과 같은 커밋에 넣습니다. Task Scope는 Intent 항목만 가리킵니다 | DOCUMENT_GUIDE §8 | 계약 전용 문서를 솔루션 레벨에 두고 Scope가 그 항목도 가리킴 |
@@ -113,13 +114,7 @@
 - 승인 커밋 대상: Task · `task-catalog.md` · 진행 표시가 붙은 Intent들 · 해당 INT 카탈로그들
 - `:(icase)` 스테이징 경로를 바꿉니다.
 
-**`skills/forge-scope/SKILL.md`** (+ `commands/forge-scope.md` 설명)
-- F0: 매니페스트 키가 바뀝니다.
-- F2: 슬라이스 표의 "담당 FR/E/X"가 "담당 Scope 항목"이 됩니다.
-- 불변 규칙 "Intent는 고치지 않는다"에 예외를 둡니다 (마감의 진행 표시 제거).
-- F5:
-  - Task 상태 · 진행 표시 제거 · 카탈로그 재생성 · 커밋은 scribe 대신 결정적 스크립트 `worktree_setup.py finish`가 처리합니다 (1단계에서 구현).
-  - 스테이징 경로를 바꿉니다.
+**forge-scope**: 1단계에서 Task 입력으로 바꿨다가 v3.73.0 에서 제거했습니다. 마감 전이(Task 상태 · 진행 표시 제거 · 카탈로그 재생성 · 커밋)는 `worktree_setup.py finish` 가 단독으로 맡습니다 (1단계에서 구현).
 
 **`commands/forge-cancel.md` (`:47`)**: 브랜치 기본값 문구(`intent/<문서 ID>`)를 바꾸고, 취소 시 Task `dropped`와 Intent 되돌리기를 안내합니다.
 
@@ -144,5 +139,5 @@
 - **테스트**:
   - `tests/test_intent_only.py`: RETIRED 정규식은 `-TASK-` · `TASK/`만 잡으므로 `TSK-` · `.task/`는 걸리지 않습니다. ALLOWED 문구만 6.1에 맞춰 고칩니다.
   - `tests/test_templates.py`: 새 템플릿 경로의 참조 무결성
-  - `tests/test_docs_helpers.py` · `test_worktree_setup.py` · `test_forge_init_command.py` · `test_forge_scope_skill.py`: 입력이 Intent에서 Task로 바뀝니다.
+  - `tests/test_docs_helpers.py` · `test_worktree_setup.py` · `test_forge_init_command.py`: 입력이 Intent에서 Task로 바뀝니다.
 - **플러그인 `README.md`**: 문서 체계 설명과 변경로그. `plugin.json` · `marketplace.json` 버전

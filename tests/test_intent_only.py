@@ -7,7 +7,7 @@ pipeline-runner 제거). 그 토큰이 스킬 · 커맨드 · 에이전트 · �
 잔재 한 줄이 새 레포마다 옛 구조를 다시 심는다.
 
 면제는 두 가지뿐이다.
-- 폐지 안내 3줄 — 옛 입력을 받으면 막는 가드 (ALLOWED). 면제되는 것은 그 문구 자체다 —
+- 폐지 안내 2줄 — 옛 입력을 받으면 막는 가드 (ALLOWED). 면제되는 것은 그 문구 자체다 —
   같은 줄의 다른 토큰은 잡는다.
 - DOCUMENT_GUIDE 의 retired-doc-types 블록 — 폐지 문서 → Intent 대응표. 다른 파일에 같은
   마커를 옮겨 적어도 면제되지 않고, 닫히지 않은 블록은 그 자체로 실패다.
@@ -26,7 +26,6 @@ RETIRED = re.compile(
     r"|ADR-CATALOG|ADR/|-ADR-"
     r"|TASK/|-TASK-"
     r"|WORK_PACKET|Work Packet|work[-_]packet"
-    r"|forge-scope-build"
     r"|ssot-write|task-write|pipeline-runner"    # 제거한 스킬 — work-packet-write 는 work[-_]packet 이 잡는다
     r"|ssot-critic|ssot-planner",                # 제거한 에이전트 — ssot-writer 는 ssot-write 가 잡는다
     re.ASCII,
@@ -45,7 +44,6 @@ SCAN = (
 
 # 파일 → 그 파일에서 잔재 토큰을 써도 되는 문구. 면제는 이 문구에만 걸린다.
 ALLOWED = {
-    "skills/forge-scope/SKILL.md": "Work Packet·TASK 입력은 v3.58 에서 폐지",
     "commands/forge-init.md": "Work Packet·TASK 입력은 … 폐지",
     "scripts/worktree_setup.py": "Work Packet·TASK 입력은 v3.58 에서 폐지",
 }
@@ -89,7 +87,7 @@ def _hits() -> list[str]:
 
 def test_scan_covers_plugin_sources():
     rels = {p.relative_to(ROOT).as_posix() for p in _files()}
-    for must in ("skills/forge-scope/SKILL.md", "agents/scribe.md", "scripts/worktree_setup.py",
+    for must in ("skills/requirement-spec/SKILL.md", "agents/scribe.md", "scripts/worktree_setup.py",
                  "docs/.templates/CLAUDE-TEMPLATE.md", "docs/.templates/.rules/DDD_ARCHITECTURE_RULES.md",
                  "commands/codenav-templates/CODENAV-GUIDE-TEMPLATE.md", "scripts/ext_preambles/coder.md",
                  ".claude/commands/codenav-install.md"):

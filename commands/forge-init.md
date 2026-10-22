@@ -5,9 +5,9 @@ argument-hint: "<Task-doc-path> [--name <slug>] [--base <ref>] [--force]"
 
 개발 환경 구성 커맨드. **스펙 세션(메인 repo cwd)에서 실행한다.**
 
-워크트리를 만들어 놓는 것까지가 이 커맨드의 일이다. 개발 절차는 `/forge-scope` 가 워크트리 안에서 수행한다 — 세션의 cwd 는 프로세스 시작 시점에 고정되므로, **워크트리 안에서 개발 세션을 시작하려면 그 전에 워크트리가 존재해야 한다.** 그래서 두 단계로 나눠져 있다.
+워크트리를 만들어 놓는 것까지가 이 커맨드의 일이다. 개발은 사용자가 그 워크트리에서 시작한 세션이 한다 — 세션의 cwd 는 프로세스 시작 시점에 고정되므로, **워크트리 안에서 개발 세션을 시작하려면 그 전에 워크트리가 존재해야 한다.** 그래서 두 단계로 나눠져 있다.
 
-> **후속 단계를 실행하지 않는다.** 페인·탭을 만들거나, 에이전트를 띄우거나, `/forge-scope` 를 대신 호출하지 않는다. 경로를 보고하고 끝낸다. 어디서 어떤 에이전트로 개발을 시작할지는 사용자가 정한다.
+> **후속 단계를 실행하지 않는다.** 페인·탭을 만들거나, 에이전트를 띄우거나, 개발을 대신 시작하지 않는다. 경로를 보고하고 끝낸다. 어디서 어떤 에이전트로 개발을 시작할지는 사용자가 정한다.
 
 helper 경로:
 
@@ -121,8 +121,10 @@ python "$FORGE" init --doc <Task> --quiet --base <선택한 ref> [--name <slug>]
 - 매니페스트 두 경로
 - `submodule_log` 가 비어 있지 않으면 그대로 전달한다(메인 repo 에 populate 안 된 서브모듈은 링크되지 않고 로그만 남는다)
 - `copied` / `skipped` — 가드레일 복사 결과
-- **다음 단계 안내 1줄**: "이 워크트리에서 개발 세션을 시작한 뒤 `/forge-scope .process/forge/handoff.json`"
-  - 세션을 띄우는 것도 커맨드로 할 수 있다 — 예: `/dispatch-session <워크트리 절대경로> --agent opus-orchestrator --prompt "/forge-scope .process/forge/handoff.json"`. **예시 문장일 뿐 여기서 실행하지 않는다.** 어디에 띄울지는 그 커맨드가 사용자에게 묻는다.
+- **다음 단계 안내 2줄**:
+  - 개발: "이 워크트리에서 개발 세션을 시작해 개발을 지시한다 — 작업 계약은 워크트리 Task 와 매니페스트 `.process/forge/handoff.json`"
+  - 마감: "개발 커밋을 마친 뒤 워크트리 안에서 `python "<FORGE 절대경로>" finish` — 진행 표시 정리 · Task `in-dev → in-review` · 카탈로그 재생성 · 커밋 1개". `<FORGE 절대경로>` 는 위 helper 경로를 펼친 값으로 쓴다 — 개발 세션이 그대로 붙여 실행할 수 있게.
+  - 세션을 띄우는 것도 커맨드로 할 수 있다 — 예: `/dispatch-session <워크트리 절대경로> --agent opus-orchestrator --prompt "<작업 지시>"`. **예시 문장일 뿐 여기서 실행하지 않는다.** 어디에 띄울지는 그 커맨드가 사용자에게 묻는다.
 
 여기서 종료한다. 개발 세션을 띄우지 않는다.
 
@@ -132,6 +134,6 @@ python "$FORGE" init --doc <Task> --quiet --base <선택한 ref> [--name <slug>]
 
 - 브랜치는 Task Handoff 의 `브랜치명`(유효한 ref 일 때), 아니면 `task/<문서 ID>` 다. **분기점(base)과 브랜치 이름은 별개다** — base 는 2 에서 고른 ref 이고, `init` 이 워크트리 Task 의 Handoff `base branch` 행을 그 값으로 치환해 `in-dev` 전이 커밋에 함께 넣는다.
 - `init` 의 `chore(<ID>): 상태 in-dev` 커밋은 스크립트의 결정적 전이다 — Task 와 `.task/task-catalog.md` 두 파일. Intent 는 바뀌지 않는다(진행 표시는 승인 커밋에 이미 있다).
-- 마감 전이(`in-dev → in-review`, 진행 표시 정리)는 개발 세션이 워크트리 안에서 `worktree_setup.py finish` 로 한다 — `/forge-scope` F5.
+- 마감 전이(`in-dev → in-review`, 진행 표시 정리)는 개발을 마친 세션이 워크트리 안에서 `worktree_setup.py finish` 로 한다 — 자동으로 부르는 절차는 없다.
 - 가드레일 복사(`CLAUDE.md`·`.claude/settings.json`·`.claude/rules`·문서 폴더)는 base 와 무관하게 **메인 repo 작업트리**에서 온다. 작업 공간 수준 가드레일이라 의도된 동작이다. 문서 폴더는 `docs`·`Docs` 중 디스크에 있는 표기 하나로 복사하고 `copied`/`skipped` 에도 그 표기로 1번만 보고한다.
 - 정리는 `/forge-cancel <slug>` — 메인 repo 에서 실행한다.

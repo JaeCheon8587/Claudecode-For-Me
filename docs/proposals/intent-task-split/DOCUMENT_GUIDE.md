@@ -21,7 +21,7 @@
 
 새 레포를 세팅하거나 기존 레포를 이 체계에 맞출 때 이 절부터 읽는다.
 
-**문서 폴더 표기**: 새 레포는 `docs/` 로 만든다. 기존 레포가 `Docs/` 를 쓰면 그대로 둔다 — 플러그인 도구(`/requirement-spec` · `/forge-init` · forge-scope · `docs_helpers.py`)는 `docs`·`Docs` 를 같은 폴더로 보고, 이 가이드의 `docs/` 도 둘 다를 뜻한다. 표기를 맞추려고 이름만 바꾸지 않는다 — Windows·macOS 에서 탐색기로 바꾸면 git 은 옛 표기를 계속 쓴다. 링크 · 경로도 실제 표기로 쓴다 — `Docs` 레포에서는 템플릿의 `docs/…` 링크가 `Docs/…` 가 된다(GitHub · Linux 는 대소문자를 구분해 소문자 링크가 깨진다).
+**문서 폴더 표기**: 새 레포는 `docs/` 로 만든다. 기존 레포가 `Docs/` 를 쓰면 그대로 둔다 — 플러그인 도구(`/requirement-spec` · `/forge-init` · `worktree_setup.py` · `docs_helpers.py`)는 `docs`·`Docs` 를 같은 폴더로 보고, 이 가이드의 `docs/` 도 둘 다를 뜻한다. 표기를 맞추려고 이름만 바꾸지 않는다 — Windows·macOS 에서 탐색기로 바꾸면 git 은 옛 표기를 계속 쓴다. 링크 · 경로도 실제 표기로 쓴다 — `Docs` 레포에서는 템플릿의 `docs/…` 링크가 `Docs/…` 가 된다(GitHub · Linux 는 대소문자를 구분해 소문자 링크가 깨진다).
 
 **작업 폴더 `.task/`**: Task 와 Task 카탈로그는 레포 루트 `.task/` 에 둔다 — `docs/` 와 같은 레벨이다. 표기는 소문자 `.task` 하나뿐이다. 점으로 시작하지만 **커밋한다** — 이 체계의 다른 점 폴더(`.process/` · `.review/` · `.orchestration/` · `.worktree/`)는 git 에서 제외되는 임시 폴더지만 `.task/` 는 아니다. `/forge-init` 은 Task 가 base 커밋에 있어야 워크트리를 만든다. `.gitignore` 에 `.task` 가 걸리는 레포에서는 `/requirement-spec` 이 Task 를 만들기 전에 멈추고 알린다 — `.gitignore` 를 대신 고치지 않는다.
 
@@ -46,7 +46,7 @@
 | `docs/{App}/INTENT/{App}-INT-{NNN}.md` | `/requirement-spec` 이 인터뷰로 만들고 고친다. 손으로 만들지 않는다 |
 | `docs/{App}/{App}-INT-CATALOG.md` | 생성물 — `docs_helpers.py intent-catalog --write` 가 `INTENT/` 에서 파생한다 |
 | `.task/TSK-{NNN}.md` | `/requirement-spec` 이 Intent 변경에서 파생한다. 손으로 만들지 않는다 |
-| `.task/task-catalog.md` | 생성물 — `docs_helpers.py task-catalog --write` 가 `.task/` 에서 파생한다. requirement-spec · `/forge-init` · forge-scope 가 Task 상태 전이 때 다시 쓴다 |
+| `.task/task-catalog.md` | 생성물 — `docs_helpers.py task-catalog --write` 가 `.task/` 에서 파생한다. requirement-spec · `/forge-init` · `worktree_setup.py finish` 가 Task 상태 전이 때 다시 쓴다 |
 | `docs/.templates/` | 플러그인 쪽 참고 명세다. 대상 레포에 둘 필요 없다. 단 `docs/.templates/App/INTENT/APP-INT-001-TEMPLATE.md` · `docs/.templates/.task/TSK-001-TEMPLATE.md` 를 두면 requirement-spec 이 플러그인 템플릿 대신 그것을 쓴다 (레포별 커스터마이즈) |
 
 <!-- retired-doc-types:begin -->
@@ -99,7 +99,7 @@
 
 **Task 는 새 동작을 만들지 않는다.** Scope 는 Intent 항목의 사본이고 문장이 Intent 와 글자까지 같다. 동작이 바뀌면 Intent 를 먼저 고친다. 바뀐 항목의 예전 문장은 Intent 에 남지 않으므로 Scope 의 `이전` 줄에 남긴다 — 취소할 때 되돌리는 근거도 이 줄이다.
 
-**Task 생애주기**: `draft` → `approved` (requirement-spec 승인) → `in-dev` (`/forge-init`) → `in-review` (forge-scope 마감 — 진행 표시 제거) → `done` (머지 후 사람이 전이). 승인 뒤 어느 단계에서든 작업을 접으면 `dropped` — Task 의 Scope 로 Intent 를 되돌린다. 전이마다 Task 카탈로그를 다시 쓴다.
+**Task 생애주기**: `draft` → `approved` (requirement-spec 승인) → `in-dev` (`/forge-init`) → `in-review` (개발 마감 `worktree_setup.py finish` — 진행 표시 제거) → `done` (머지 후 사람이 전이). 승인 뒤 어느 단계에서든 작업을 접으면 `dropped` — Task 의 Scope 로 Intent 를 되돌린다. 전이마다 Task 카탈로그를 다시 쓴다.
 
 **Task 유형**:
 - `기능개발` — Intent 를 바꾼다. Scope 항목은 신규 · 변경 · 삭제.
@@ -114,7 +114,7 @@
 | 작업 · 배포 동안에만 생기는 상황 (이미 저장된 데이터, 배포 중 요청, 옛 클라이언트와의 공존, App 별 배포 순서) | Task `Risks` (`R-n`). 확인이 필요하면 A 의 근거로 `(R-n)` |
 | 코드 내부의 경계 (널 처리 · 동시성 · 자원 해제) | 문서에 쓰지 않는다 — 개발 세션이 테스트로 다룬다 |
 
-**구현 결정 위치**: 파일 · 인터페이스 · 스키마 · 라이브러리 선택은 Intent · Task 어디에도 쓰지 않는다 — 개발 세션(forge-scope)의 ledger 가 맡는다. 코드 구조 규칙은 ARCHITECTURE · `.rules/` 에 둔다. PRD 는 product 시야라 코드 상세를 쓰지 않는다.
+**구현 결정 위치**: 파일 · 인터페이스 · 스키마 · 라이브러리 선택은 Intent · Task 어디에도 쓰지 않는다 — 개발 세션이 정한다. 코드 구조 규칙은 ARCHITECTURE · `.rules/` 에 둔다. PRD 는 product 시야라 코드 상세를 쓰지 않는다.
 
 **찾는 길**: `/CLAUDE.md` 문서 인덱스 → `.task/task-catalog.md` → 각 Task. 점으로 시작하는 폴더는 일부 검색 도구가 기본으로 건너뛰므로 카탈로그를 입구로 쓴다.
 
@@ -173,7 +173,7 @@
 **기능개발 · 버그수정 · 리팩토링** (한 흐름):
 1. `/requirement-spec` — 인터뷰로 무엇을 바꿀지 정한다. 기능이 바뀌면 대상 Intent 를 먼저 고치고(새 기능이면 Intent 를 만든다) 바뀐 항목에 진행 표시를 붙인다. 바뀐 부분을 Task 로 파생해 `.task/TSK-{NNN}.md` 를 만들고, 검증한 뒤 **Task 와 Intent 변경을 함께 한 번에** 승인한다. 두 카탈로그를 다시 만든다.
 2. `/forge-init .task/TSK-{NNN}.md` — 승인 커밋(Task · 진행 표시가 붙은 Intent · 카탈로그)을 확인하고 워크트리 · 브랜치를 만든 뒤 `in-dev` 로 전이한다.
-3. 워크트리에서 개발 세션을 시작해 `/forge-scope` — 슬라이스마다 RED → GREEN → 리뷰 → 커밋, Acceptance 증거로 마감한다. 마감에서 Task 를 `in-review` 로 바꾸고 워크트리 Intent 의 진행 표시를 지운다(삭제 예정 항목은 줄째 지운다) — 브랜치가 머지되면 코드와 함께 main 에 반영된다.
+3. 워크트리에서 개발 세션을 시작해 개발한다. 마치면 워크트리 안에서 `worktree_setup.py finish` — Task 를 `in-review` 로 바꾸고 워크트리 Intent 의 진행 표시를 지운다(삭제 예정 항목은 줄째 지운다). 브랜치가 머지되면 코드와 함께 main 에 반영된다.
 4. `/branch-review` — 워크트리 브랜치를 리뷰한다.
 5. 머지한 뒤 Task 를 `done` 으로 바꾸고 Task 카탈로그를 다시 만든다. 기능 목록이 바뀌었으면 App PRD §7 (여러 App 이면 솔루션 PRD §8 도), 코드 규칙이 바뀌었으면 ARCHITECTURE · `.rules/` 를 맞춘다. 근거로 Task ID 를 남긴다.
 
@@ -277,9 +277,9 @@ SYSTEM_CODE 후보는 [`/CLAUDE.md` Backend Services Overview](../CLAUDE.md) 표
 | 변경 | 갱신 위치 |
 |---|---|
 | 기능 변경 요청 | `/requirement-spec` 이 Intent 수정 + 진행 표시 + Task 생성 + 두 카탈로그 재생성 (자동) |
-| Task 상태 전이 | Task 카탈로그 재생성 — requirement-spec · `/forge-init` · forge-scope 가 자동 수행. `done` · `dropped` 는 사람이 바꾸고 다시 만든다. 빠뜨리면 `docs_helpers.py check` 가 `TSK_CATALOG stale` 로 잡는다 |
+| Task 상태 전이 | Task 카탈로그 재생성 — requirement-spec · `/forge-init` · `worktree_setup.py finish` 가 자동 수행. `done` · `dropped` 는 사람이 바꾸고 다시 만든다. 빠뜨리면 `docs_helpers.py check` 가 `TSK_CATALOG stale` 로 잡는다 |
 | Intent 변경 (진행 표시 포함) | Intent 카탈로그 재생성. 빠뜨리면 `check` 가 `INT_CATALOG stale` 로 잡는다 |
-| Task 마감 (`in-review`) | 워크트리 Intent 의 진행 표시 제거 · 삭제 예정 항목 삭제 — forge-scope 마감이 수행 |
+| Task 마감 (`in-review`) | 워크트리 Intent 의 진행 표시 제거 · 삭제 예정 항목 삭제 — `worktree_setup.py finish` 가 수행 |
 | Task 취소 (`dropped`) | Task Scope 로 Intent 되돌리기 + 두 카탈로그 재생성 |
 | Task 완료로 기능 목록 변경 | App PRD §7 (+ 여러 App 이면 솔루션 PRD §8) — 근거 Task ID |
 | Task 완료로 cross-cutting 영향 | 위 + 솔루션 PRD §3.1 · 부록 B/D/E (영향 시) |

@@ -100,5 +100,5 @@ def test_readme_lists_the_command():
 
 
 def test_changelog_records_introduction():
-    # 현재 버전 단정은 test_forge_scope_skill.py 가 맡는다. 여기서는 도입 기록만.
+    # 현재 버전 단정은 test_plugin_version.py 가 맡는다. 여기서는 도입 기록만.
     assert "### v3.68.0 — `/session-brief` 신설" in read("README.md")
