@@ -1,5 +1,5 @@
 ---
-description: /forge-init 이 만들어 둔 워크트리 안에서 승인된 Intent 를 개발한다. 오케스트레이터 세션(opus/fable-orchestrator) 전용. 매니페스트(.process/forge/handoff.json)를 입력으로 받아 슬라이스마다 coder RED → GREEN → reviewer → 커밋, A-n 증거로 마감. 워크트리는 만들지 않는다.
+description: /forge-init 이 만들어 둔 워크트리 안에서 승인된 Task 를 개발한다. 오케스트레이터 세션(opus/fable-orchestrator) 전용. 매니페스트(.process/forge/handoff.json)를 입력으로 받아 슬라이스마다 coder RED → GREEN → reviewer → 커밋, A-n 증거와 worktree_setup.py finish(마감 전이)로 마감. 워크트리는 만들지 않는다.
 argument-hint: "[<handoff.json> — 생략 시 .process/forge/handoff.json]"
 ---
 

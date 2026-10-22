@@ -1402,3 +1402,816 @@ class TestDocsFolderCase:
         write_intent(tmp_path, docs_dir="Docs")
         rc = dh.main([*cmd, "--repo", str(tmp_path), "--file", "docs/Demo/INTENT/Demo-INT-001.md"])
         assert rc == 0, capsys.readouterr()
+
+
+# ---------------------------------------------------------------------------
+# Task — .task/TSK-<NNN>.md (check-task · task-catalog · check 의 TSK_CATALOG)
+#
+# Intent 는 기능 문서(상시)이고, Task 는 그 Intent 의 어느 항목을 바꾸는지(Scope 사본)와
+# 완료 조건(Acceptance)을 정하는 작업 계약이다. 바뀌는 Intent 항목에는 진행 표시가 붙는다.
+# ---------------------------------------------------------------------------
+
+
+FEATURE_INTENT_CANONICAL = """# {app}-INT-{nnn} — 업로드
+
+| 항목 | 값 |
+|---|---|
+| 문서 ID | {app}-INT-{nnn} |
+| 기능 ID | F001 |
+| 상태 | active |
+| 작성 | tester · 2026-10-01 |
+| 관련 Intent | none |
+
+## Part 1 — 기능 정의
+
+### Problem
+문제 설명.
+
+### Outcome
+결과 설명.
+
+- Out of scope: 여러 파일 동시 업로드
+
+### Affected
+업로드 기능 영역.
+
+### Constraints
+- C1. 제약 조건
+
+### Decisions
+- D1. 결정 — 근거: 근거 — 기각 대안: 대안
+
+### Open questions
+none
+
+---
+
+## Part 2 — 동작
+
+### Functional requirements
+- FR-1. 업로드는 파일 하나를 받아 저장한다. (D1)
+- FR-2. 업로드 응답에 응답 필드 `retryCount` 로 재시도 횟수를 담는다. (D1) [TSK-001 진행 중]
+- FR-3. 업로드 응답에 처리 시간을 밀리초로 담는다. (D1) [TSK-001 진행 중]
+
+### Edge cases
+- E-1. 같은 파일을 두 번 올리면 한 번만 저장된다. (FR-1) [TSK-001 삭제 예정]
+
+### Error cases
+- X-1. 빈 파일은 상태 코드 `400` 과 오류 코드 `UPLOAD_EMPTY_FILE` 로 거부한다. (FR-1)
+"""
+
+TASK_CANONICAL = """# TSK-{tnn} — 업로드 응답 보강
+
+| 항목 | 값 |
+|---|---|
+| 문서 ID | TSK-{tnn} |
+| 유형 | 기능개발 |
+| 상태 | approved |
+| 대상 Intent | Demo-INT-001 |
+| 작성 | tester · 2026-10-22 |
+| 승인 | tester · 2026-10-22 |
+| 검증 | SKIPPED — 수동 작성 |
+
+## Goal
+- 계기: 재시도가 있었는지 응답에서 알 수 없다.
+- 완료 상태: 응답에서 재시도 횟수와 처리 시간을 본다.
+
+## Scope
+<!-- 형식: `- {변경} · {App}-INT-{NNN} {항목 ID}. {Intent 문장}` -->
+- 신규 · Demo-INT-001 FR-2. 업로드 응답에 응답 필드 `retryCount` 로 재시도 횟수를 담는다. (D1)
+- 변경 · Demo-INT-001 FR-3. 업로드 응답에 처리 시간을 밀리초로 담는다. (D1)
+  - 이전: 업로드 응답에 처리 시간을 초로 담는다. (D1)
+- 삭제 · Demo-INT-001 E-1. 같은 파일을 두 번 올리면 한 번만 저장된다. (FR-1)
+
+- Out of scope: 화면 표시
+
+## Acceptance
+- [ ] A-1. 업로드 응답에 응답 필드 `retryCount` 가 있다. (Demo-INT-001 FR-2)
+- [ ] A-2. 처리 시간이 밀리초로 온다. (Demo-INT-001 FR-3)
+- [ ] A-3. 같은 파일을 두 번 올리면 두 번 저장된다. (Demo-INT-001 E-1, R-1)
+
+## Verification
+- 업로드 자동 테스트로 A-1 ~ A-3 을 확인한다.
+
+## Risks
+- R-1. 이미 저장된 중복 파일은 그대로 남는다 → 배포 안내에 적는다.
+
+## Handoff
+| 항목 | 값 |
+|---|---|
+| repo · app | demo · Demo |
+| base branch | main |
+| 브랜치명 | task/TSK-{tnn} |
+| 손대지 말 영역 | docs/Demo |
+| 완료 보고 방식 | 채팅 요약 |
+"""
+
+TASK_REFACTOR = """# TSK-{tnn} — 업로드 저장 단계 분리
+
+| 항목 | 값 |
+|---|---|
+| 문서 ID | TSK-{tnn} |
+| 유형 | 리팩토링 |
+| 상태 | approved |
+| 대상 Intent | Demo-INT-001 |
+| 작성 | tester · 2026-10-22 |
+| 승인 | tester · 2026-10-22 |
+| 검증 | SKIPPED — 수동 작성 |
+
+## Goal
+- 계기: 저장과 응답 조립이 한 단계에 섞여 있다.
+- 완료 상태: 저장 단계가 분리되고 업로드 동작은 그대로다.
+
+## Scope
+- 보존 · Demo-INT-001 FR-1. 업로드는 파일 하나를 받아 저장한다. (D1)
+
+- Out of scope: 성능 개선
+
+## Acceptance
+- A-1. 업로드는 여전히 파일 하나를 받아 저장한다. (Demo-INT-001 FR-1)
+
+## Verification
+- 기존 업로드 자동 테스트가 그대로 통과한다.
+
+## Risks
+none
+
+## Handoff
+| 항목 | 값 |
+|---|---|
+| repo · app | demo · Demo |
+| base branch | main |
+| 브랜치명 | task/TSK-{tnn} |
+| 손대지 말 영역 | docs/Demo |
+| 완료 보고 방식 | 채팅 요약 |
+"""
+
+
+def write_feature_intent(
+    tmp_path: Path, app: str = "Demo", nnn: str = "001", docs_dir: str = "docs", **overrides: str
+) -> Path:
+    """새 형식(기능 문서) Intent. overrides 는 str.replace 쌍."""
+    return write_intent(tmp_path, app=app, nnn=nnn, template=FEATURE_INTENT_CANONICAL, docs_dir=docs_dir, **overrides)
+
+
+def write_task(tmp_path: Path, name: str = "TSK-001", template: str = TASK_CANONICAL, **overrides: str) -> Path:
+    """.task/<name>.md 를 쓴다. overrides 는 str.replace 쌍 — 없는 문자열을 바꾸려 하면 테스트가 헛돈다."""
+    text = template.replace("{tnn}", name[len("TSK-"):])
+    for old, new in overrides.items():
+        assert old in text, f"override target not found: {old!r}"
+        text = text.replace(old, new)
+    path = tmp_path / ".task" / f"{name}.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+def write_task_pair(tmp_path: Path, task: dict | None = None, intent: dict | None = None) -> Path:
+    """깨끗한 Task(TSK-001) + 대상 Intent(Demo-INT-001) 한 쌍. dict 는 문서별 str.replace 쌍."""
+    intent = intent or {}
+    for old in intent:
+        assert old in FEATURE_INTENT_CANONICAL.replace("{app}", "Demo").replace("{nnn}", "001"), old
+    write_feature_intent(tmp_path, **intent)
+    return write_task(tmp_path, **(task or {}))
+
+
+# 마감(in-review) 뒤 Intent — 이 Task 의 진행 표시가 지워지고 삭제 예정 줄이 빠졌다.
+INTENT_AFTER_FINISH = {
+    " (D1) [TSK-001 진행 중]": " (D1)",
+    "- E-1. 같은 파일을 두 번 올리면 한 번만 저장된다. (FR-1) [TSK-001 삭제 예정]": "none",
+}
+
+
+class TestParseIntentMarker:
+    def test_marker_is_stripped_before_refs(self, tmp_path):
+        doc = dh._parse_intent(write_feature_intent(tmp_path).read_text(encoding="utf-8"))
+        fr2 = doc.items["FR"][1]
+        assert fr2.marker == ("TSK-001", "진행 중")
+        assert fr2.refs == ["D1"]
+        assert fr2.text == "업로드 응답에 응답 필드 `retryCount` 로 재시도 횟수를 담는다."
+        assert fr2.body == "업로드 응답에 응답 필드 `retryCount` 로 재시도 횟수를 담는다. (D1)"
+        assert doc.items["E"][0].marker == ("TSK-001", "삭제 예정")
+        assert doc.items["E"][0].refs == ["FR-1"]
+        assert doc.items["FR"][0].marker is None
+
+    def test_legacy_intent_parse_unchanged(self, tmp_path):
+        doc = dh._parse_intent(write_intent(tmp_path).read_text(encoding="utf-8"))
+        fr = doc.items["FR"][0]
+        assert (fr.text, fr.refs, fr.marker, fr.body) == ("요구 문장", ["D1"], None, "요구 문장 (D1)")
+
+    def test_marker_in_the_middle_is_not_a_marker(self):
+        doc = dh._parse_intent("### Functional requirements\n- FR-1. 문장 [TSK-001 진행 중] (D1)\n")
+        fr = doc.items["FR"][0]
+        assert fr.marker is None
+        assert fr.body == "문장 [TSK-001 진행 중] (D1)"
+
+
+class TestParseTask:
+    def test_canonical_task(self, tmp_path):
+        doc = dh._parse_task(write_task(tmp_path).read_text(encoding="utf-8"))
+        assert doc.meta_order == dh.TASK_META_EXPECTED
+        assert doc.targets == ["Demo-INT-001"]
+        assert [(it.kind, it.key) for it in doc.scope] == [
+            ("신규", "Demo-INT-001 FR-2"),
+            ("변경", "Demo-INT-001 FR-3"),
+            ("삭제", "Demo-INT-001 E-1"),
+        ]
+        assert doc.scope[0].text == "업로드 응답에 응답 필드 `retryCount` 로 재시도 횟수를 담는다. (D1)"
+        assert doc.scope[0].prev is None
+        assert doc.scope[1].prev == "업로드 응답에 처리 시간을 초로 담는다. (D1)"
+        assert doc.scope_bad_lines == []
+        assert doc.out_of_scope == "화면 표시"
+        assert [a.id for a in doc.acceptance] == ["A-1", "A-2", "A-3"]
+        assert doc.acceptance[0].text == "업로드 응답에 응답 필드 `retryCount` 가 있다."
+        assert doc.acceptance[2].refs == ["Demo-INT-001 E-1", "R-1"]
+        assert all(a.checked for a in doc.acceptance)
+        assert [r[0] for r in doc.risks] == ["R-1"]
+        assert doc.handoff_order == dh.INTENT_HANDOFF_EXPECTED
+        assert doc.handoff["브랜치명"] == "task/TSK-001"
+
+    def test_targets_keep_order_and_drop_duplicates(self):
+        doc = dh._parse_task(
+            "| 항목 | 값 |\n|---|---|\n| 대상 Intent | LOADER-INT-003 · VIEWER-INT-001 · LOADER-INT-003 |\n"
+        )
+        assert doc.targets == ["LOADER-INT-003", "VIEWER-INT-001"]
+
+    def test_none_scope_body(self):
+        doc = dh._parse_task("## Scope\n<!-- 주석 -->\nnone\n\n- Out of scope: 없음\n")
+        assert doc.scope == [] and doc.scope_none is True and doc.scope_bad_lines == []
+        assert doc.out_of_scope == "없음"
+
+    def test_intent_path_follows_disk_spelling(self, tmp_path):
+        write_feature_intent(tmp_path, docs_dir="Docs")
+        assert dh._intent_path(tmp_path, "Demo-INT-001") == tmp_path / "Docs" / "Demo" / "INTENT" / "Demo-INT-001.md"
+        assert dh._intent_path(tmp_path, "TSK-001") is None
+
+
+class TestCheckTask:
+    def _run(self, repo: Path, path: Path, extra: list[str] | None = None) -> int:
+        argv = ["check-task", "--repo", str(repo), "--file", path.relative_to(repo).as_posix()]
+        if extra:
+            argv += extra
+        return dh.main(argv)
+
+    def test_valid_task_exit_0(self, tmp_path, capsys):
+        path = write_task_pair(tmp_path)
+        rc = self._run(tmp_path, path)
+        out = capsys.readouterr().out
+        assert rc == 0, out
+        assert "0 WARN, 0 FAIL" in out
+        assert "PASS TSK_APPROVED_GATE" in out
+
+    def test_json_output(self, tmp_path, capsys):
+        path = write_task_pair(tmp_path)
+        rc = self._run(tmp_path, path, extra=["--json"])
+        payload = json.loads(capsys.readouterr().out)
+        assert rc == 0
+        assert payload["summary"]["fail"] == 0
+        for item in payload["results"]:
+            assert set(item) == {"level", "code", "path", "message"}
+            assert item["path"] == ".task/TSK-001.md"
+
+    @pytest.mark.parametrize(
+        ("task", "intent", "code"),
+        [
+            ({"# TSK-001 — 업로드 응답 보강\n": "# TSK-001 — 업로드 응답 보강\n\n> ⚠ **TEMPLATE** — 지운다.\n"}, {},
+             "TSK_TEMPLATE_WARNING"),
+            ({"# TSK-001 — ": "# TSK-001 "}, {}, "TSK_TITLE"),
+            ({"| 문서 ID | TSK-001 |": "| 문서 ID | TSK-002 |"}, {}, "TSK_ID_FILENAME"),
+            ({"| 검증 | SKIPPED — 수동 작성 |\n": ""}, {}, "TSK_META_ROWS"),
+            ({"| 유형 | 기능개발 |": "| 유형 | 기능개발 \\| 버그수정 |"}, {}, "TSK_TYPE_SINGLE"),
+            ({"| 상태 | approved |": "| 상태 | 승인 |"}, {}, "TSK_STATUS"),
+            ({"| 작성 | tester · 2026-10-22 |": "| 작성 | tester 2026-10-22 |"}, {}, "TSK_AUTHOR_FORMAT"),
+            ({"| 승인 | tester · 2026-10-22 |": "| 승인 | 대기 |"}, {}, "TSK_APPROVAL_FORMAT"),
+            ({"| 검증 | SKIPPED — 수동 작성 |": "| 검증 | 통과 |"}, {}, "TSK_GATE_ROW_FORMAT"),
+            ({"| 대상 Intent | Demo-INT-001 |": "| 대상 Intent | Demo-INT-001, Demo-INT-002 |"}, {}, "TSK_TARGETS"),
+            ({"| 대상 Intent | Demo-INT-001 |": "| 대상 Intent | none |"}, {}, "TSK_TARGETS"),
+            ({"## Verification\n": "## 확인\n"}, {}, "TSK_SECTIONS"),
+            ({"- 계기: 재시도가": "- 계기: {계기} 재시도가"}, {}, "TSK_PLACEHOLDER"),
+            ({"| base branch | main |\n": ""}, {}, "TSK_HANDOFF_ROWS"),
+            ({"| 브랜치명 | task/TSK-001 |": "| 브랜치명 | task/TSK-{NNN} |"}, {}, "TSK_BRANCH_PLACEHOLDER"),
+            ({"- Out of scope: 화면 표시": "- 기타 변경\n\n- Out of scope: 화면 표시"}, {}, "TSK_SCOPE_FORMAT"),
+            ({"- 삭제 · Demo-INT-001 E-1.": "- 보존 · Demo-INT-001 E-1."}, {}, "TSK_SCOPE_KIND"),
+            ({"- 신규 · Demo-INT-001 FR-2.": "- 신규 · Demo-INT-002 FR-2."}, {}, "TSK_SCOPE_TARGET"),
+            ({"  - 이전: 업로드 응답에 처리 시간을 초로 담는다. (D1)\n": ""}, {}, "TSK_SCOPE_PREV"),
+            ({"(FR-1)\n\n- Out of scope": "(FR-1)\n  - 이전: 옛 문장\n\n- Out of scope"}, {}, "TSK_SCOPE_PREV"),
+            ({"- 변경 · Demo-INT-001 FR-3.": "- 신규 · Demo-INT-001 FR-2. 업로드 응답에 응답 필드 `retryCount` 로 "
+              "재시도 횟수를 담는다. (D1)\n- 변경 · Demo-INT-001 FR-3."}, {}, "TSK_SCOPE_DUP"),
+            ({"- Out of scope: 화면 표시": "- Out of scope:"}, {}, "TSK_OUT_OF_SCOPE"),
+            ({"- [ ] A-2.": "- [ ] A-1."}, {}, "TSK_ID_ORDER"),
+            ({"- R-1. 이미 저장된 중복 파일은 그대로 남는다 → 배포 안내에 적는다.": "없음"}, {}, "TSK_ID_ORDER"),
+            ({"- [ ] A-2.": "- A-2."}, {}, "TSK_ACCEPTANCE_TYPE"),
+            ({"(Demo-INT-001 FR-3)": "(FR-3)"}, {}, "TSK_REF_FORMAT"),
+            ({"밀리초로 온다. (Demo-INT-001 FR-3)": "밀리초로 온다."}, {}, "TSK_REF_FORMAT"),
+            ({"(Demo-INT-001 E-1, R-1)": "(Demo-INT-001 E-1, R-9)"}, {}, "TSK_REF_DANGLING"),
+            ({"(Demo-INT-001 FR-2)": "(Demo-INT-001 FR-2, Goal)"}, {}, "TSK_REF_DANGLING"),
+            ({"(Demo-INT-001 FR-3)": "(Demo-INT-001 FR-2)"}, {}, "TSK_SCOPE_COVERAGE"),
+            ({"업로드 응답에 응답 필드 `retryCount` 가 있다.": "업로드 응답에 `retryCount` 가 있다."}, {}, "TSK_NAME_KIND"),
+            ({"- 계기: 재시도가": "- 계기: UploadService.Retry() 가 없어 재시도가"}, {}, "TSK_NAME_CALL"),
+            ({"- 계기: 재시도가": "- 계기: UploadController.cs 에서 재시도가"}, {}, "TSK_NAME_FILE"),
+            ({"| 대상 Intent | Demo-INT-001 |": "| 대상 Intent | Demo-INT-001 · Demo-INT-009 |"}, {}, "TSK_INTENT_EXISTS"),
+            ({}, {"처리 시간을 밀리초로 담는다. (D1) [TSK-001": "처리 시간을 마이크로초로 담는다. (D1) [TSK-001"},
+             "TSK_SCOPE_MATCH"),
+            ({}, {"(FR-1) [TSK-001 삭제 예정]": "(FR-1)"}, "TSK_MARKER"),
+            ({}, {"(FR-1) [TSK-001 삭제 예정]": "(FR-1) [TSK-001 진행 중]"}, "TSK_MARKER"),
+            ({}, {"저장한다. (D1)\n": "저장한다. (D1) [TSK-001 진행 중]\n"}, "TSK_MARKER"),
+            ({}, {"### Open questions\nnone": "### Open questions\n- 남은 질문"}, "TSK_APPROVED_GATE"),
+            ({"| 완료 보고 방식 | 채팅 요약 |": "| 완료 보고 방식 | pending |"}, {}, "TSK_APPROVED_GATE"),
+            ({"| 검증 | SKIPPED — 수동 작성 |": "| 검증 | pending |"}, {}, "TSK_APPROVED_GATE"),
+        ],
+    )
+    def test_break_one_fails(self, tmp_path, capsys, task, intent, code):
+        path = write_task_pair(tmp_path, task=task, intent=intent)
+        rc = self._run(tmp_path, path)
+        out = capsys.readouterr().out
+        assert rc == 1
+        assert f"FAIL {code}" in out
+
+    def test_task_outside_task_dir_fails_location(self, tmp_path, capsys):
+        write_task_pair(tmp_path)
+        stray = tmp_path / "docs" / "TSK-001.md"
+        stray.write_text((tmp_path / ".task" / "TSK-001.md").read_text(encoding="utf-8"), encoding="utf-8")
+        rc = self._run(tmp_path, stray)
+        out = capsys.readouterr().out
+        assert rc == 1
+        assert "FAIL TSK_LOCATION" in out
+
+    @pytest.mark.parametrize(
+        ("task", "code"),
+        [
+            ({"- 업로드 자동 테스트로 A-1 ~ A-3 을 확인한다.": "- `dotnet test` 로 A-1 ~ A-3 을 확인한다."},
+             "TSK_VERIFY_COMMAND"),
+            ({"- 계기: 재시도가": "- 계기: retryCount 가 없어 재시도가"}, "TSK_NAME_IDENT"),
+        ],
+    )
+    def test_warn_only(self, tmp_path, capsys, task, code):
+        path = write_task_pair(tmp_path, task=task)
+        rc = self._run(tmp_path, path)
+        out = capsys.readouterr().out
+        assert rc == 0, out
+        assert f"WARN {code}" in out
+        assert "0 FAIL" in out
+
+    @pytest.mark.parametrize(
+        "goal",
+        [
+            "- 계기: 상태 코드 `400` · `503` 이 섞여 온다.",            # 같은 종류를 잇는 목록
+            "- 계기: 상태 코드 `503` 과 오류 코드 `UPLOAD_EMPTY_FILE` 가 온다.",
+            "- 계기: API `POST /uploads` 응답에 재시도 횟수가 없다.",
+            "- 계기: 외부 API(결제) 호출이 느리다.",                      # 전부 대문자 + 한글 괄호는 호출이 아니다
+            "- 계기: 재시도(retry) 정책이 없다.",
+        ],
+    )
+    def test_external_names_with_kind_words_pass(self, tmp_path, capsys, goal):
+        path = write_task_pair(tmp_path, task={"- 계기: 재시도가 있었는지 응답에서 알 수 없다.": goal})
+        rc = self._run(tmp_path, path)
+        out = capsys.readouterr().out
+        assert rc == 0, out
+        assert "0 WARN, 0 FAIL" in out
+
+    def test_handoff_paths_are_not_name_checked(self, tmp_path, capsys):
+        path = write_task_pair(tmp_path, task={"| 손대지 말 영역 | docs/Demo |": "| 손대지 말 영역 | `src/Loader.Billing/` |"})
+        rc = self._run(tmp_path, path)
+        assert rc == 0, capsys.readouterr().out
+
+    def test_in_review_with_markers_left_fails(self, tmp_path, capsys):
+        path = write_task_pair(tmp_path, task={"| 상태 | approved |": "| 상태 | in-review |"})
+        rc = self._run(tmp_path, path)
+        out = capsys.readouterr().out
+        assert rc == 1
+        assert "FAIL TSK_MARKER" in out
+        assert "FAIL TSK_SCOPE_MATCH" in out   # 삭제 항목이 아직 Intent 에 있다
+
+    def test_in_review_after_finish_passes(self, tmp_path, capsys):
+        path = write_task_pair(tmp_path, task={"| 상태 | approved |": "| 상태 | in-review |"}, intent=INTENT_AFTER_FINISH)
+        rc = self._run(tmp_path, path)
+        out = capsys.readouterr().out
+        assert rc == 0, out
+        assert "TSK_APPROVED_GATE" not in out
+
+    def test_done_skips_scope_match_but_not_markers(self, tmp_path, capsys):
+        later = {**INTENT_AFTER_FINISH, "처리 시간을 밀리초로": "처리 시간을 마이크로초로"}   # 뒤의 Task 가 다시 바꿨다
+        path = write_task_pair(tmp_path, task={"| 상태 | approved |": "| 상태 | done |"}, intent=later)
+        rc = self._run(tmp_path, path)
+        out = capsys.readouterr().out
+        assert rc == 0, out
+        assert "PASS TSK_SCOPE_MATCH" in out and "건너뜀" in out
+
+    def test_dropped_with_markers_left_fails(self, tmp_path, capsys):
+        path = write_task_pair(tmp_path, task={"| 상태 | approved |": "| 상태 | dropped |"})
+        rc = self._run(tmp_path, path)
+        out = capsys.readouterr().out
+        assert rc == 1
+        assert "FAIL TSK_MARKER" in out
+
+    def test_conflict_with_other_open_task(self, tmp_path, capsys):
+        path = write_task_pair(tmp_path)
+        write_task(tmp_path, name="TSK-002", **{"| 상태 | approved |": "| 상태 | draft |"})
+        rc = self._run(tmp_path, path)
+        out = capsys.readouterr().out
+        assert rc == 1
+        assert "FAIL TSK_CONFLICT" in out
+        assert "TSK-002" in out
+
+    def test_done_task_does_not_conflict(self, tmp_path, capsys):
+        path = write_task_pair(tmp_path)
+        write_task(tmp_path, name="TSK-002", **{"| 상태 | approved |": "| 상태 | done |"})
+        rc = self._run(tmp_path, path)
+        out = capsys.readouterr().out
+        assert "PASS TSK_CONFLICT" in out
+        assert "FAIL TSK_CONFLICT" not in out
+        # TSK-002 는 이름만 다른 사본이라 다른 규칙도 TSK-001 쪽은 통과한다.
+        assert rc == 0, out
+
+    def test_two_preserve_tasks_do_not_conflict(self, tmp_path, capsys):
+        write_feature_intent(tmp_path)
+        path = write_task(tmp_path, name="TSK-003", template=TASK_REFACTOR)
+        write_task(tmp_path, name="TSK-004", template=TASK_REFACTOR)
+        rc = self._run(tmp_path, path)
+        out = capsys.readouterr().out
+        assert "PASS TSK_CONFLICT" in out
+        assert "PASS TSK_ACCEPTANCE_TYPE" in out   # 리팩토링 A 는 평문 목록
+        assert rc == 0, out
+
+    def test_refactor_without_intent_uses_goal(self, tmp_path, capsys):
+        path = write_task(
+            tmp_path, name="TSK-005", template=TASK_REFACTOR,
+            **{
+                "| 대상 Intent | Demo-INT-001 |": "| 대상 Intent | none |",
+                "- 보존 · Demo-INT-001 FR-1. 업로드는 파일 하나를 받아 저장한다. (D1)": "none",
+                "(Demo-INT-001 FR-1)": "(Goal)",
+            },
+        )
+        rc = self._run(tmp_path, path)
+        out = capsys.readouterr().out
+        assert rc == 0, out
+        assert "TSK_INTENT_EXISTS" not in out
+
+    def test_two_app_example_and_bugfix_pass(self, tmp_path, capsys):
+        """초안 EXAMPLE.md 의 두 App 계약 변경(TSK-012)과 버그수정(TSK-011) — 같은 Intent 의 다른 항목이라 충돌하지 않는다."""
+        for rel, text in EXAMPLE_FILES.items():
+            p = tmp_path / rel
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(text, encoding="utf-8")
+        for name in ("TSK-012", "TSK-011"):
+            rc = self._run(tmp_path, tmp_path / ".task" / f"{name}.md")
+            out = capsys.readouterr().out
+            assert rc == 0, out
+            assert "0 WARN, 0 FAIL" in out, out
+
+
+EXAMPLE_FILES = {
+    "docs/LOADER/INTENT/LOADER-INT-003.md": """# LOADER-INT-003 — 업로드
+
+| 항목 | 값 |
+|---|---|
+| 문서 ID | LOADER-INT-003 |
+| 기능 ID | F003 |
+| 상태 | active |
+| 작성 | 홍길동 · 2026-10-01 |
+| 관련 Intent | VIEWER-INT-001 |
+
+## Part 1 — 기능 정의
+
+### Problem
+사용자가 파일을 올려 보관할 방법이 없다.
+
+### Outcome
+사용자가 파일 하나를 올려 저장하고 결과를 바로 확인한다.
+
+- Out of scope: 여러 파일 동시 업로드
+
+### Affected
+LOADER 업로드 기능 영역.
+
+### Constraints
+- C1. 업로드 응답은 2초 안에 돌아온다.
+
+### Decisions
+- D1. 업로드는 동기 응답으로 저장 결과를 돌려준다 — 근거: 화면이 결과를 바로 보여 준다 — 기각 대안: 비동기 작업 번호
+- D2. 일시 오류는 서버가 다시 시도한다 — 근거: 사용자가 다시 올리는 문의가 반복된다 — 기각 대안: 화면에서 다시 시도
+
+### Open questions
+none
+
+---
+
+## Part 2 — 동작
+
+### Functional requirements
+- FR-1. 업로드는 파일 하나를 받아 저장하고 저장 결과를 응답한다. (D1)
+- FR-2. 업로드 결과 응답에 처리 시간과, 응답 필드 `retryCount` 로 재시도 횟수를 담는다. (D1, D2) [TSK-012 진행 중]
+- FR-4. 업로드가 일시 오류로 실패하면 설정 키 `upload.retry.max` 횟수만큼 다시 시도한다. (D2) [TSK-012 진행 중]
+
+### Edge cases
+- E-4. 재시도 끝에 성공해도 파일은 한 번만 저장된다. (FR-4) [TSK-012 진행 중]
+
+### Error cases
+- X-2. 0바이트 파일은 상태 코드 `400` 과 오류 코드 `UPLOAD_EMPTY_FILE` 로 거부한다. (FR-1)
+- X-3. 재시도가 모두 실패하면 상태 코드 `503` 과 오류 코드 `UPLOAD_RETRY_EXHAUSTED` 를 반환한다. (FR-4) [TSK-012 진행 중]
+""",
+    "docs/VIEWER/INTENT/VIEWER-INT-001.md": """# VIEWER-INT-001 — 업로드 목록
+
+| 항목 | 값 |
+|---|---|
+| 문서 ID | VIEWER-INT-001 |
+| 기능 ID | F001 |
+| 상태 | active |
+| 작성 | 홍길동 · 2026-10-01 |
+| 관련 Intent | LOADER-INT-003 |
+
+## Part 1 — 기능 정의
+
+### Problem
+사용자가 올린 파일의 처리 결과를 한곳에서 볼 수 없다.
+
+### Outcome
+업로드 목록에서 파일마다 처리 결과를 본다.
+
+- Out of scope: 목록 내보내기
+
+### Affected
+VIEWER 업로드 목록 화면.
+
+### Constraints
+none
+
+### Decisions
+- D3. 재시도가 있었는지는 문구로 보여 준다 — 근거: 아이콘은 의미를 따로 배워야 한다 — 기각 대안: 아이콘
+
+### Open questions
+none
+
+---
+
+## Part 2 — 동작
+
+### Functional requirements
+- FR-5. 업로드 목록은 응답 필드 `retryCount` 가 1 이상인 항목에 문구 "재시도 후 완료" 를 표시한다. (D3) [TSK-012 진행 중]
+
+### Edge cases
+none
+
+### Error cases
+none
+""",
+    ".task/TSK-012.md": """# TSK-012 — 업로드 일시 오류 자동 재시도
+
+| 항목 | 값 |
+|---|---|
+| 문서 ID | TSK-012 |
+| 유형 | 기능개발 |
+| 상태 | approved |
+| 대상 Intent | LOADER-INT-003 · VIEWER-INT-001 |
+| 작성 | 홍길동 · 2026-10-22 |
+| 승인 | 홍길동 · 2026-10-22 |
+| 검증 | PASS — code PASS · llm PASS · 1/3 |
+
+## Goal
+- 계기: 네트워크 일시 오류로 업로드가 실패해 사용자가 다시 올리는 문의가 반복된다.
+- 완료 상태: 일시 오류는 사용자가 다시 올리지 않아도 재시도로 복구되고, 업로드 목록에서 재시도가 있었는지 보인다. 끝내 실패하면 원인을 알 수 있는 오류 코드가 돌아온다.
+
+## Scope
+- 변경 · LOADER-INT-003 FR-2. 업로드 결과 응답에 처리 시간과, 응답 필드 `retryCount` 로 재시도 횟수를 담는다. (D1, D2)
+  - 이전: 업로드 결과 응답에 처리 시간을 담는다. (D1)
+- 신규 · LOADER-INT-003 FR-4. 업로드가 일시 오류로 실패하면 설정 키 `upload.retry.max` 횟수만큼 다시 시도한다. (D2)
+- 신규 · LOADER-INT-003 E-4. 재시도 끝에 성공해도 파일은 한 번만 저장된다. (FR-4)
+- 신규 · LOADER-INT-003 X-3. 재시도가 모두 실패하면 상태 코드 `503` 과 오류 코드 `UPLOAD_RETRY_EXHAUSTED` 를 반환한다. (FR-4)
+- 신규 · VIEWER-INT-001 FR-5. 업로드 목록은 응답 필드 `retryCount` 가 1 이상인 항목에 문구 "재시도 후 완료" 를 표시한다. (D3)
+
+- Out of scope: 업로드 화면의 재시도 진행 표시 (후속 Task)
+
+## Acceptance
+- [ ] A-1. 일시 오류가 두 번 난 뒤 성공하는 업로드는 성공 응답을 받고, 응답 필드 `retryCount` 가 2다. (LOADER-INT-003 FR-4, LOADER-INT-003 FR-2)
+- [ ] A-2. 설정 키 `upload.retry.max` 가 1이면 재시도는 한 번만 일어난다. (LOADER-INT-003 FR-4)
+- [ ] A-3. 일시 오류가 계속되면 상태 코드 `503` 과 오류 코드 `UPLOAD_RETRY_EXHAUSTED` 가 돌아온다. (LOADER-INT-003 X-3)
+- [ ] A-4. 권한 없음처럼 일시 오류가 아닌 실패는 다시 시도하지 않는다. (LOADER-INT-003 FR-4)
+- [ ] A-5. 일시 오류 한 번 뒤 성공한 업로드는 파일이 한 번만 저장된다. (LOADER-INT-003 E-4)
+- [ ] A-6. LOADER 가 응답 필드 `retryCount` 2 를 돌려준 업로드는 VIEWER 업로드 목록에 문구 "재시도 후 완료" 로 보인다. (LOADER-INT-003 FR-2, VIEWER-INT-001 FR-5)
+- [ ] A-7. 응답 필드 `retryCount` 가 없는 응답을 받으면 VIEWER 는 문구를 표시하지 않고 목록을 정상으로 보여 준다. (R-2)
+
+## Verification
+- 일시 오류를 흉내 내는 자동 테스트로 A-1 ~ A-5 를 확인한다.
+- 두 App 을 함께 띄운 통합 확인으로 A-6 을, 필드가 빠진 응답을 흉내 내는 테스트로 A-7 을 확인한다.
+
+## Risks
+- R-1. 배포 전에 이미 실패한 업로드는 자동으로 다시 시도되지 않는다 → 배포 안내에 적는다.
+- R-2. VIEWER 가 LOADER 보다 먼저 배포되면 응답 필드 `retryCount` 가 없는 응답을 받는다 → 필드가 없어도 목록이 깨지지 않는지 A-7 로 확인한다.
+
+## Handoff
+| 항목 | 값 |
+|---|---|
+| repo · app | upload-suite · LOADER, VIEWER |
+| base branch | main |
+| 브랜치명 | task/TSK-012 |
+| 손대지 말 영역 | `src/Loader.Billing/` |
+| 완료 보고 방식 | 마감 보고 파일 + 채팅 요약 |
+""",
+    ".task/TSK-011.md": """# TSK-011 — 업로드 0바이트 파일 거부
+
+| 항목 | 값 |
+|---|---|
+| 문서 ID | TSK-011 |
+| 유형 | 버그수정 |
+| 상태 | approved |
+| 대상 Intent | LOADER-INT-003 |
+| 작성 | 홍길동 · 2026-10-20 |
+| 승인 | 홍길동 · 2026-10-20 |
+| 검증 | SKIPPED — 수동 작성 |
+
+## Goal
+- 계기: 크기가 0인 파일로 API `POST /uploads` 를 호출하면 상태 코드 `201` 이 돌아오고 빈 파일이 저장된다.
+- 완료 상태: 0바이트 파일 업로드는 거부되고 아무것도 저장되지 않는다.
+
+## Scope
+- 위반 · LOADER-INT-003 X-2. 0바이트 파일은 상태 코드 `400` 과 오류 코드 `UPLOAD_EMPTY_FILE` 로 거부한다. (FR-1)
+
+- Out of scope: 최대 크기 초과 파일 처리
+
+## Acceptance
+- [ ] A-1. 크기가 0인 파일로 API `POST /uploads` 를 호출하면 상태 코드 `400` 과 오류 코드 `UPLOAD_EMPTY_FILE` 가 돌아오고 아무것도 저장되지 않는다. (LOADER-INT-003 X-2)
+
+## Verification
+- 0바이트 파일을 올리는 자동 테스트로 A-1 을 확인한다.
+
+## Risks
+none
+
+## Handoff
+| 항목 | 값 |
+|---|---|
+| repo · app | upload-suite · LOADER |
+| base branch | main |
+| 브랜치명 | task/TSK-011 |
+| 손대지 말 영역 | `src/Loader.Billing/` |
+| 완료 보고 방식 | 채팅 요약 |
+""",
+}
+
+
+def task_catalog_path(tmp_path: Path) -> Path:
+    return tmp_path / ".task" / "task-catalog.md"
+
+
+def task_catalog_cells(text: str, task_id: str = "TSK-001") -> list[str]:
+    for line in text.split("\n"):
+        if line.startswith(f"| [{task_id}]("):
+            return [c.strip() for c in re.split(r"(?<!\\)\|", line)[1:-1]]
+    raise AssertionError(f"row not found: {task_id}\n{text}")
+
+
+class TestTaskCatalog:
+    def _run(self, repo: Path, extra: list[str] | None = None) -> int:
+        return dh.main(["task-catalog", "--repo", str(repo), *(extra or [])])
+
+    def _write(self, tmp_path: Path, capsys) -> str:
+        rc = self._run(tmp_path, extra=["--write"])
+        capsys.readouterr()
+        assert rc == 0
+        return task_catalog_path(tmp_path).read_text(encoding="utf-8")
+
+    def test_no_task_dir_exit_2(self, tmp_path, capsys):
+        rc = self._run(tmp_path)
+        assert rc == 2
+        assert ".task/" in capsys.readouterr().err
+
+    def test_write_and_check_are_exclusive(self, tmp_path, capsys):
+        write_task_pair(tmp_path)
+        rc = self._run(tmp_path, extra=["--write", "--check"])
+        capsys.readouterr()
+        assert rc == 2
+        assert not task_catalog_path(tmp_path).exists()
+
+    def test_write_then_check_ok(self, tmp_path, capsys):
+        write_task_pair(tmp_path)
+        rc = self._run(tmp_path, extra=["--write"])
+        out = capsys.readouterr().out
+        assert rc == 0
+        assert out.strip() == "WROTE .task/task-catalog.md · tasks: 1"
+        rc = self._run(tmp_path, extra=["--check"])
+        assert rc == 0
+        assert capsys.readouterr().out.splitlines() == ["OK", "tasks: 1"]
+
+    def test_render_matches_draft_template_shape(self, tmp_path, capsys):
+        write_task_pair(tmp_path)
+        text = self._write(tmp_path, capsys)
+        lines = text.split("\n")
+        assert lines[0] == "# TASK-CATALOG — Task Catalog"
+        assert "| 문서 ID | TASK-CATALOG |" in lines
+        assert "| Task | 설명 | 유형 | 상태 | 대상 Intent |" in lines
+        assert task_catalog_cells(text) == [
+            "[TSK-001](TSK-001.md)", "업로드 응답 보강", "기능개발", "approved",
+            "[Demo-INT-001](../docs/Demo/INTENT/Demo-INT-001.md)",
+        ]
+        assert text.strip().splitlines()[-1] == "tasks: 1"
+        assert re.search(r"\d{4}-\d{2}-\d{2}", text) is None, "날짜가 들어가면 stale 비교가 항상 틀어진다"
+
+    def test_check_without_catalog_is_stale(self, tmp_path, capsys):
+        write_task_pair(tmp_path)
+        rc = self._run(tmp_path, extra=["--check"])
+        assert rc == 1
+        assert capsys.readouterr().out.startswith("STALE missing: .task/task-catalog.md")
+
+    def test_check_detects_hand_edited_status_cell(self, tmp_path, capsys):
+        write_task_pair(tmp_path)
+        text = self._write(tmp_path, capsys)
+        task_catalog_path(tmp_path).write_text(text.replace("| approved |", "| in-dev |"), encoding="utf-8")
+        rc = self._run(tmp_path, extra=["--check"])
+        out = capsys.readouterr().out
+        assert rc == 1
+        assert "CHANGED TSK-001" in out and "STALE" in out
+
+    def test_check_detects_missing_row_and_tail(self, tmp_path, capsys):
+        write_task_pair(tmp_path)
+        write_task(tmp_path, name="TSK-002", **{"| 상태 | approved |": "| 상태 | done |"})
+        text = self._write(tmp_path, capsys)
+        kept = "\n".join(line for line in text.split("\n") if not line.startswith("| [TSK-002]("))
+        task_catalog_path(tmp_path).write_text(kept, encoding="utf-8")
+        assert self._run(tmp_path, extra=["--check"]) == 1
+        assert "MISSING TSK-002" in capsys.readouterr().out
+        task_catalog_path(tmp_path).write_text(text.replace("tasks: 2", "tasks: 9"), encoding="utf-8")
+        assert self._run(tmp_path, extra=["--check"]) == 1
+        assert "CHANGED (헤더 또는 tasks 줄)" in capsys.readouterr().out
+
+    def test_json_payload_shape(self, tmp_path, capsys):
+        write_task_pair(tmp_path)
+        (tmp_path / ".task" / "notes.md").write_text("# 메모\n", encoding="utf-8")
+        rc = self._run(tmp_path, extra=["--json"])
+        payload = json.loads(capsys.readouterr().out)
+        assert rc == 0
+        assert set(payload) == {"catalog", "count", "tasks", "skipped"}
+        assert payload["catalog"] == ".task/task-catalog.md"
+        assert payload["skipped"] == ["notes.md"]
+        assert set(payload["tasks"][0]) == {"id", "file", "title", "type", "status", "intents"}
+        assert payload["tasks"][0]["intents"] == [
+            {"id": "Demo-INT-001", "link": "../docs/Demo/INTENT/Demo-INT-001.md"}
+        ]
+        assert not task_catalog_path(tmp_path).exists()
+
+    def test_catalog_file_is_not_a_task(self, tmp_path, capsys):
+        write_task_pair(tmp_path)
+        self._write(tmp_path, capsys)
+        rc = self._run(tmp_path, extra=["--json"])
+        payload = json.loads(capsys.readouterr().out)
+        assert rc == 0
+        assert payload["count"] == 1 and payload["skipped"] == []
+
+    def test_links_follow_docs_spelling_and_flag_missing(self, tmp_path, capsys):
+        write_feature_intent(tmp_path, docs_dir="Docs")
+        write_task(tmp_path, **{"| 대상 Intent | Demo-INT-001 |": "| 대상 Intent | Demo-INT-001 · Demo-INT-009 |"})
+        rc = self._run(tmp_path)
+        out = capsys.readouterr().out
+        assert rc == 0
+        assert task_catalog_cells(out)[4] == "[Demo-INT-001](../Docs/Demo/INTENT/Demo-INT-001.md) · ?Demo-INT-009"
+
+    def test_none_targets_cell(self, tmp_path, capsys):
+        write_task(tmp_path, name="TSK-005", template=TASK_REFACTOR, **{"| 대상 Intent | Demo-INT-001 |": "| 대상 Intent | none |"})
+        rc = self._run(tmp_path)
+        out = capsys.readouterr().out
+        assert rc == 0
+        assert task_catalog_cells(out, "TSK-005")[4] == "none"
+
+
+class TestCheckTaskCatalog:
+    """check 의 TSK_CATALOG — Task 는 레포 단위라 --app 을 줘도 본다. Task 가 없으면 아무 줄도 내지 않는다."""
+
+    def _run(self, tmp_path: Path, capsys) -> tuple[int, str]:
+        rc = dh.main(["check", "--repo", str(tmp_path), "--app", "Demo"])
+        return rc, capsys.readouterr().out
+
+    def _catalogs(self, tmp_path: Path, capsys) -> None:
+        assert dh.main(["intent-catalog", "--repo", str(tmp_path), "--app", "Demo", "--write"]) == 0
+        assert dh.main(["task-catalog", "--repo", str(tmp_path), "--write"]) == 0
+        capsys.readouterr()
+
+    def test_no_task_dir_prints_nothing(self, tmp_path, capsys):
+        write_intent(tmp_path)
+        assert dh.main(["intent-catalog", "--repo", str(tmp_path), "--app", "Demo", "--write"]) == 0
+        capsys.readouterr()
+        rc, out = self._run(tmp_path, capsys)
+        assert rc == 0
+        assert "TSK_" not in out
+        assert out.strip().splitlines()[-1] == "Summary: 2 PASS, 0 WARN, 0 FAIL"
+
+    def test_missing_task_catalog_fails(self, tmp_path, capsys):
+        write_task_pair(tmp_path)
+        assert dh.main(["intent-catalog", "--repo", str(tmp_path), "--app", "Demo", "--write"]) == 0
+        capsys.readouterr()
+        rc, out = self._run(tmp_path, capsys)
+        assert rc == 1
+        assert "FAIL TSK_CATALOG .task/task-catalog.md missing" in out
+
+    def test_fresh_task_catalog_passes(self, tmp_path, capsys):
+        write_task_pair(tmp_path)
+        self._catalogs(tmp_path, capsys)
+        rc, out = self._run(tmp_path, capsys)
+        assert rc == 0, out
+        assert "PASS TSK_CATALOG .task/task-catalog.md 1 tasks 최신" in out
+
+    def test_status_change_without_regeneration_goes_stale(self, tmp_path, capsys):
+        path = write_task_pair(tmp_path)
+        self._catalogs(tmp_path, capsys)
+        path.write_text(path.read_text(encoding="utf-8").replace("| 상태 | approved |", "| 상태 | in-dev |"), encoding="utf-8")
+        rc, out = self._run(tmp_path, capsys)
+        assert rc == 1
+        assert "FAIL TSK_CATALOG .task/task-catalog.md stale" in out

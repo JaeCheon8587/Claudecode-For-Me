@@ -8,10 +8,10 @@ def read(rel: str) -> str:
     return (ROOT / rel).read_text(encoding="utf-8")
 
 
-def test_skill_is_intent_only_orchestrator_procedure():
+def test_skill_is_task_driven_orchestrator_procedure():
     text = read("skills/forge-scope/SKILL.md")
     required = (
-        "승인된 Intent",
+        "승인된 Task",
         ".process/forge/handoff.json",
         "/forge-init",
         "git rev-parse --git-common-dir",
@@ -78,6 +78,20 @@ def test_skill_keeps_guardrails():
     )
     missing = [expected for expected in required if expected not in text]
     assert not missing, f"SKILL.md is missing required strings: {missing}"
+
+
+def test_closing_transition_is_the_finish_script():
+    """마감 전이(진행 표시 정리 · 상태 행 · 카탈로그 · 커밋)는 결정적 스크립트가 한다 —
+    scribe 가 상태 행을 고치고 팀장이 카탈로그를 손으로 다시 만들던 단계는 없다."""
+    text = read("skills/forge-scope/SKILL.md")
+    f5 = text[text.index("## F5 —"):text.index("## 실패 처리")]
+    assert 'worktree_setup.py" finish' in f5
+    assert "scribe** 1회" not in text
+    assert "intent-catalog --repo <worktree>" not in text
+    # 매니페스트는 Task 기준 키를 쓴다.
+    for key in ("task_worktree", "`intents`", "`scope`"):
+        assert key in text, key
+    assert "intent_worktree" not in text
 
 
 def test_skill_drops_inline_and_legacy_text():
