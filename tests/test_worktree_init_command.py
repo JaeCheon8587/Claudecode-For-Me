@@ -85,7 +85,7 @@ def test_does_not_chain_into_another_skill():
 
     # 다음 단계는 개발 프롬프트 · Task 마다 finish · 머지 뒤 /worktree-delete 안내뿐이다.
     assert "/task-split" in text
-    assert '`python "<WT_SETUP 절대경로>" finish TSK-<NNN>`' in text
+    assert '`python "<WT_SETUP 절대경로>" finish tsk-<NNN>`' in text
     assert "/worktree-delete <이름>" in text
 
     # /dispatch-session 도 마찬가지로 예시일 뿐임이 본문에 박혀 있어야 한다.

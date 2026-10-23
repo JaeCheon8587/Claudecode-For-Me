@@ -59,7 +59,7 @@ herdr agent list
 **exit 1** → stderr 를 그대로 전하고 중단한다(브랜치를 특정할 수 없음 · cwd 가 워크트리 안 · git 명령 실패).
 
 ## 동작 / 보고
-- `delete`가 하는 일: 대상 브랜치 확정 → **안전 게이트**(워크트리의 커밋 안 된 변경, 브랜치가 base 에 머지됐는지) → 머지가 확인되면(또는 `--merged`) 매니페스트에 기록된 Task — 그 워크트리에서 `finish` 한 Task — 를 메인 정본에서 `in-review → done` 으로 바꾸고, 대상 Intent 에서 그 Task 의 진행 표시와 `삭제 예정` 항목 줄을 지우고, Task 카탈로그 · INT 카탈로그를 다시 만든다(커밋 없음 — 문서는 커밋하지 않는다) → 워크트리 서브모듈 junction/symlink **링크만 해제**(메인 repo 서브모듈 원본은 100% 보존) → `git worktree remove` → `git branch -D <branch>` → 메인 매니페스트 삭제.
+- `delete`가 하는 일: 대상 브랜치 확정 → **안전 게이트**(워크트리의 커밋 안 된 변경, 브랜치가 base 에 머지됐는지) → 머지가 확인되면(또는 `--merged`) 매니페스트에 기록된 Task — 그 워크트리에서 `finish` 한 Task — 를 메인 정본에서 `in-review → done` 으로 바꾸고, 대상 Intent 에서 그 Task 의 진행 표시와 `삭제 예정` 항목 줄을 지우고, Task 카탈로그 · Intent 카탈로그(App · 상위 `intent/intent-app-catalog.md`)를 다시 만든다(커밋 없음 — 문서는 커밋하지 않는다) → 워크트리 서브모듈 junction/symlink **링크만 해제**(메인 repo 서브모듈 원본은 100% 보존) → `git worktree remove` → `git branch -D <branch>` → 메인 매니페스트 삭제.
 - **머지 확인**: 브랜치 끝 커밋이 base(매니페스트에 기록된 분기 ref)에 들어 있는지 본다. base 가 `origin/<X>` 면 로컬 `<X>` 도 본다(로컬에서 머지하고 아직 푸시하지 않은 경우). 매니페스트를 잃었으면 메인의 현재 브랜치를 base 로 본다. 개발 커밋이 없는 워크트리는 잃을 것이 없어 그대로 통과한다.
 - **브랜치 확정 순서**: ① `.process/worktree/<slug>.json`(worktree-init 이 기록한 사실) → ② `git worktree list` 역인덱싱 → ③ 둘 다 실패하면 "브랜치를 특정할 수 없다"로 **명시 실패**. 브랜치 이름은 `--branch` 로 바뀔 수 있으므로(기본값 `work/<slug>`) slug에서 유도하지 않는다 — 추측하지 않는다.
 - 보고는 출력 줄을 그대로 옮긴다: `merged into` · `task`(done 과 Intent 별 표시 · 삭제 줄 수) · `task skip` · `task 그대로` · 제거된 워크트리 · 브랜치 · 매니페스트.

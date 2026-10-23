@@ -1,4 +1,4 @@
-"""docs_helpers.py ensure-exclude — 설계 문서(문서 폴더 · .task/)는 커밋하지 않는다.
+"""docs_helpers.py ensure-exclude — 설계 문서(문서 폴더 · intent/ · .task/)는 커밋하지 않는다.
 
 공유 .gitignore 대신 이 clone 의 info/exclude 에 올린다. linked worktree 도 같은 파일을 쓴다.
 """
@@ -53,22 +53,25 @@ def test_adds_entries_once(repo: Path, capsys):
     assert lines.count(dh.LOCAL_EXCLUDE_HEADER) == 1
 
 
-def test_hides_docs_and_tasks_but_not_nested_docs(repo: Path):
-    write(repo / "docs" / "Demo" / "INTENT" / "Demo-INT-001.md")
-    write(repo / ".task" / "TSK-001.md")
+def test_hides_docs_intents_and_tasks_but_not_nested_folders(repo: Path):
+    write(repo / "docs" / "LOADER" / "LOADER-PRD.md")
+    write(repo / "intent" / "intent-app-catalog.md")
+    write(repo / "intent" / "loader" / "loader-int-001.md")
+    write(repo / ".task" / "tsk-001.md")
     write(repo / ".process" / "worktree" / "x.json")
-    write(repo / "src" / "docs" / "guide.md")   # 레포 루트의 문서 폴더만 숨긴다
+    write(repo / "src" / "docs" / "guide.md")     # 레포 루트의 문서 폴더만 숨긴다
+    write(repo / "src" / "intent" / "parser.cs")  # 소스 안의 같은 이름 폴더는 숨기지 않는다
 
     dh.ensure_local_exclude(repo)
 
     status = git(repo, "status", "--porcelain", "-uall")
-    assert status.split() == ["??", "src/docs/guide.md"]
+    assert status.split() == ["??", "src/docs/guide.md", "??", "src/intent/parser.cs"]
     git(repo, "add", "-A")
-    assert git(repo, "diff", "--cached", "--name-only").split() == ["src/docs/guide.md"]
+    assert git(repo, "diff", "--cached", "--name-only").split() == ["src/docs/guide.md", "src/intent/parser.cs"]
 
 
 def test_capital_docs_folder_is_hidden_too(repo: Path):
-    write(repo / "Docs" / "Demo" / "INTENT" / "Demo-INT-001.md")
+    write(repo / "Docs" / "LOADER" / "LOADER-PRD.md")
 
     dh.ensure_local_exclude(repo)
 
@@ -93,8 +96,16 @@ def test_linked_worktree_shares_main_exclude(repo: Path, tmp_path: Path):
     result = dh.ensure_local_exclude(wt)
 
     assert Path(result["exclude"]).resolve() == (repo / ".git" / "info" / "exclude").resolve()
-    write(wt / ".task" / "TSK-001.md")
+    write(wt / ".task" / "tsk-001.md")
+    write(wt / "intent" / "loader" / "loader-int-001.md")
     assert git(wt, "status", "--porcelain", "-uall") == ""
+
+
+def test_reports_tracked_intents(repo: Path):
+    write(repo / "intent" / "loader" / "loader-int-001.md")
+    git(repo, "add", "intent")
+    git(repo, "commit", "-q", "-m", "committed intent")
+    assert dh.ensure_local_exclude(repo)["tracked"] == ["intent/loader/loader-int-001.md"]
 
 
 def test_reports_tracked_docs(repo: Path, capsys):

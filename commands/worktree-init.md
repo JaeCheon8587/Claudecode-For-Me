@@ -17,9 +17,9 @@ WT_SETUP="${CLAUDE_PLUGIN_ROOT}/scripts/worktree_setup.py"
 
 `$ARGUMENTS` 첫 인자 = 워크트리 이름 — `.worktree/<이름>` 에 만들고 브랜치는 `work/<이름>` 이다. 영문 · 숫자 · `. _ -` 로 쓴다(예: `login-api`). `--base <ref>` · `--branch <branch>` · `--force` 는 그대로 넘긴다. 이름이 없으면 한 줄로 묻는다 — 임의로 짓지 않는다.
 
-**Task 를 읽지 않는다.** 어떤 Task 를 개발할지는 개발 세션에 넣는 프롬프트가 정한다(`/task-split` 이 만들어 준다). 워크트리 하나에서 Task 여러 개를 개발할 수 있다. Task 경로(`.task/TSK-<NNN>.md`)를 인자로 받았으면 쓰지 않고, 이름을 다시 받는다.
+**Task 를 읽지 않는다.** 어떤 Task 를 개발할지는 개발 세션에 넣는 프롬프트가 정한다(`/task-split` 이 만들어 준다). 워크트리 하나에서 Task 여러 개를 개발할 수 있다. Task 경로(`.task/tsk-<NNN>.md`)를 인자로 받았으면 쓰지 않고, 이름을 다시 받는다.
 
-> **문서는 커밋하지 않는다.** 문서 폴더(`docs` · `Docs`)와 `.task/` 는 팀 밖으로 나가지 않는 설계 문서다(팀 정책). `init` 이 이 clone 의 `.git/info/exclude` 에 올려 `git add -A` 에도 잡히지 않게 하고, 메인 작업트리의 정본을 워크트리에 **복사**한다. 승인 커밋을 만들거나 문서를 `git add` 하지 않는다. 문서 폴더 표기(`docs` · `Docs`)는 `init` 이 디스크 표기로 맞춘다 — 이 차이로 멈추거나 폴더 이름을 바꾸지 않는다.
+> **문서는 커밋하지 않는다.** 문서 폴더(`docs` · `Docs`)와 `intent/` · `.task/` 는 팀 밖으로 나가지 않는 설계 문서다(팀 정책). `init` 이 이 clone 의 `.git/info/exclude` 에 올려 `git add -A` 에도 잡히지 않게 하고, 메인 작업트리의 정본을 워크트리에 **복사**한다. 승인 커밋을 만들거나 문서를 `git add` 하지 않는다. 문서 폴더 표기(`docs` · `Docs`)는 `init` 이 디스크 표기로 맞춘다 — 이 차이로 멈추거나 폴더 이름을 바꾸지 않는다.
 
 Python 3.10+ 확인: `python --version`(없으면 `py -3 --version`). 없으면 중단하고 설치를 안내한다.
 
@@ -50,13 +50,13 @@ python "$WT_SETUP" init <이름> --quiet --base <선택한 ref> [--branch <branc
 ```
 
 - **exit 1** → 작업 공간 상태 문제. stderr 를 그대로 사용자에게 전하고 **중단**, 사용자 결정을 받는다:
-  - `메인 repo 작업트리가 dirty` → 워크트리에는 커밋된 코드만 들어간다. 커밋 · stash 할지, 이 작업과 무관한 변경이라 `--force` 로 갈지 사용자가 정한다. **임의로 `--force` 를 붙이지 않는다.** 문서 폴더 · `.task/` 의 변경은 dirty 로 치지 않는다.
+  - `메인 repo 작업트리가 dirty` → 워크트리에는 커밋된 코드만 들어간다. 커밋 · stash 할지, 이 작업과 무관한 변경이라 `--force` 로 갈지 사용자가 정한다. **임의로 `--force` 를 붙이지 않는다.** 문서 폴더 · `intent/` · `.task/` 의 변경은 dirty 로 치지 않는다.
   - 브랜치가 다른 워크트리에 붙어 있음 → 다른 이름이나 `--branch` 로 새 브랜치를 쓰거나, 그 워크트리를 `/worktree-delete <그 slug>` 로 정리한다.
   - `base '<ref>' 를 찾을 수 없다` → **1 로 돌아가 재선택.**
   - `폴더 이름을 만들 수 없다` · `브랜치 이름 … 를 쓸 수 없다` → 이름(또는 `--branch`)을 다시 받는다.
   - stale 워크트리 → `git worktree prune` 후 재실행.
   - 등록 안 된 `.worktree/<이름>` 디렉터리 → 사용자가 확인 후 수동 삭제하거나 `git worktree prune` 후 재실행.
-- **exit 2** → `커밋이 하나도 없다` — 프로젝트 골격(소스 · 테스트 · 솔루션)을 먼저 커밋하게 안내하고 **중단**한다. 문서 폴더 · `.task/` 는 커밋하지 않는다. `--force` 로 우회되지 않는다.
+- **exit 2** → `커밋이 하나도 없다` — 프로젝트 골격(소스 · 테스트 · 솔루션)을 먼저 커밋하게 안내하고 **중단**한다. 문서 폴더 · `intent/` · `.task/` 는 커밋하지 않는다. `--force` 로 우회되지 않는다.
 
 ## 3 — 보고하고 끝낸다
 
@@ -77,8 +77,8 @@ python "$WT_SETUP" init <이름> --quiet --base <선택한 ref> [--branch <branc
 - `tracked_docs` 가 비어 있지 않으면 **경고** — 이미 커밋된 문서라 exclude 로 숨지 않고, 워크트리에는 커밋된 사본이 들어간다. 추적을 끊을지(`git rm --cached`) 사용자가 정한다. **대신 하지 않는다.**
 - `submodule_log` 가 비어 있지 않으면 그대로 전달한다(메인 repo 에 populate 안 된 서브모듈은 링크되지 않고 로그만 남는다)
 - **다음 단계 안내 3줄**:
-  - 개발: "이 워크트리에서 개발 세션을 시작해 `/task-split` 이 준 개발 프롬프트를 넣는다 — 세션은 워크트리의 `.task/TSK-<NNN>.md` 사본을 읽는다"
-  - 마감: "Task 하나의 개발 커밋을 마칠 때마다 워크트리 안에서 `python "<WT_SETUP 절대경로>" finish TSK-<NNN>` — 메인 정본 Task `approved → in-review` · Task 카탈로그 재생성. 커밋은 만들지 않는다". `<WT_SETUP 절대경로>` 는 위 helper 경로를 펼친 값으로 쓴다 — 개발 세션이 그대로 붙여 실행할 수 있게.
+  - 개발: "이 워크트리에서 개발 세션을 시작해 `/task-split` 이 준 개발 프롬프트를 넣는다 — 세션은 워크트리의 `.task/tsk-<NNN>.md` 사본을 읽는다"
+  - 마감: "Task 하나의 개발 커밋을 마칠 때마다 워크트리 안에서 `python "<WT_SETUP 절대경로>" finish tsk-<NNN>` — 메인 정본 Task `approved → in-review` · Task 카탈로그 재생성. 커밋은 만들지 않는다". `<WT_SETUP 절대경로>` 는 위 helper 경로를 펼친 값으로 쓴다 — 개발 세션이 그대로 붙여 실행할 수 있게.
   - 정리: "브랜치를 머지한 뒤 메인 repo 에서 `/worktree-delete <이름>` — 머지를 확인하고, 마감한 Task 를 `done` 으로 바꾸고 진행 표시를 지운 뒤 워크트리를 지운다"
   - 세션을 띄우는 것도 커맨드로 할 수 있다 — 예: `/dispatch-session <워크트리 절대경로> --agent opus-orchestrator --prompt "<개발 프롬프트>"`. **예시 문장일 뿐 여기서 실행하지 않는다.** 어디에 띄울지는 그 커맨드가 사용자에게 묻는다.
 
@@ -91,5 +91,5 @@ python "$WT_SETUP" init <이름> --quiet --base <선택한 ref> [--branch <branc
 - 브랜치는 `work/<이름>` 이고 `--branch` 로 바꿀 수 있다. **분기점(base)과 브랜치 이름은 별개다** — base 는 1 에서 고른 ref 이고, 고르지 않았으면 그때의 현재 브랜치다. `/worktree-delete` 가 이 base 에 머지됐는지 본다.
 - 문서 사본은 **스냅샷**이다. 워크트리를 만든 뒤 정본을 고쳐도 따라가지 않는다. 새로 만든 Task 파일은 같은 이름으로 다시 실행하면 복사된다(있는 파일은 덮지 않는다).
 - 개발 세션은 문서(Task · Intent)를 고치지 않는다 — 사본이라 고쳐도 정본에 반영되지 않는다. 기능이 바뀌어야 하면 메인에서 `requirement-spec` 으로 Intent 를 고치고 `/task-split` 으로 Task 를 다시 만든다. Task 상태는 `finish` 가, 진행 표시는 `/worktree-delete` 가 메인 정본에서 바꾼다.
-- 가드레일 복사(`CLAUDE.md`·`.claude/settings.json`·`.claude/rules`)와 문서 사본은 base 와 무관하게 **메인 repo 작업트리**에서 온다. 문서 폴더는 `docs`·`Docs` 중 디스크에 있는 표기 하나로 복사하고 `copied`/`skipped` 에도 그 표기로 1번만 보고한다. 문서 폴더 · `.task/` 는 링크하지 않는다 — 링크가 남은 채 워크트리를 강제로 지우면 정본까지 지워진다.
+- 가드레일 복사(`CLAUDE.md`·`.claude/settings.json`·`.claude/rules`)와 문서 사본은 base 와 무관하게 **메인 repo 작업트리**에서 온다. 문서 폴더는 `docs`·`Docs` 중 디스크에 있는 표기 하나로 복사하고 `copied`/`skipped` 에도 그 표기로 1번만 보고한다. 문서 폴더 · `intent/` · `.task/` 는 링크하지 않는다 — 링크가 남은 채 워크트리를 강제로 지우면 정본까지 지워진다.
 - 정리는 `/worktree-delete <이름>` — 메인 repo 에서 실행한다.

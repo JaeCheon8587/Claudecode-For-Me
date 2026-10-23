@@ -149,7 +149,7 @@ App 코드 후보는 [`/CLAUDE.md` Backend Services Overview](../CLAUDE.md) 표�
 | Presentation | **금지** | **허용** | **허용** | **허용** | **허용** |
 | Shared/Cross-Cutting | **금지** | **금지** | **금지** | **금지** | **허용** |
 
-> 도메인이 특정 Cross-Cutting 모듈(예: UI 추상화·통신 추상화)에 의존하지 않아야 한다면 본 절에 예외와 근거를 명시한다. 그 예외를 낳은 작업이 있으면 **반드시** 해당 Intent 의 결정(`docs/{App}/INTENT/{App}-INT-{NNN}.md` 의 `D{n}`)을 인용하고, 작업 없이 정한 예외면 변경 이력에 근거를 남긴다.
+> 도메인이 특정 Cross-Cutting 모듈(예: UI 추상화·통신 추상화)에 의존하지 않아야 한다면 본 절에 예외와 근거를 명시한다. 그 예외를 낳은 작업이 있으면 **반드시** 해당 Intent 의 결정(`intent/{app}/{app}-int-{NNN}.md` 의 `D{n}`)을 인용하고, 작업 없이 정한 예외면 변경 이력에 근거를 남긴다.
 
 ## 7. 프로젝트 매핑 규칙
 

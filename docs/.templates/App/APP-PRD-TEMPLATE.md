@@ -1,7 +1,7 @@
 # {App}-PRD — {App명}
 
 > ⚠ **TEMPLATE** — 모든 `{...}` placeholder를 실제 값으로 채우거나 해당 줄을 삭제한다.
-> **본 App 의 product 요구사항** (시점 = 솔루션 내 단일 App 포커스). 솔루션 전체 시야 = [`../PRD.md`](../PRD.md) (있을 시) 또는 [`/CLAUDE.md`](../../CLAUDE.md). 기술 시야 (호스트/런타임/진입점) = [`{App}-ARCHITECTURE.md`]({App}-ARCHITECTURE.md). **기능 목록 SSOT = 본 문서 §7**. 작업 단위의 요구·결정 = [`INTENT/`](INTENT/) (목록은 생성물 [`{App}-INT-CATALOG`]({App}-INT-CATALOG.md)).
+> **본 App 의 product 요구사항** (시점 = 솔루션 내 단일 App 포커스). 솔루션 전체 시야 = [`../PRD.md`](../PRD.md) (있을 시) 또는 [`/CLAUDE.md`](../../CLAUDE.md). 기술 시야 (호스트/런타임/진입점) = [`{App}-ARCHITECTURE.md`]({App}-ARCHITECTURE.md). **기능 목록 SSOT = 본 문서 §7**. 기능의 동작·결정 = [`intent/{app}/`](../../intent/{app}/) (목록은 생성물 [`{app}-intent-catalog`](../../intent/{app}/intent-catalog.md)).
 > **Single-S/W 솔루션 시** 본 App PRD 가 솔루션 PRD 역할 겸유 가능. 그 경우 § 부록 B/C/D/E 는 솔루션 PRD 템플릿(`.templates/PRD-TEMPLATE.md`)의 부록 양식을 참고해 본 App 한정으로 작성.
 
 | 항목 | 값 |
@@ -9,7 +9,7 @@
 | 문서 ID | {App}-PRD |
 | 버전 | {예: 0.1 (Draft)} |
 | 작성 가정 | {본 App 의 솔루션 내 도입 사유 / 본 문서 작성 시 깔린 가정} |
-| 관련 문서 | [솔루션 PRD](../PRD.md) (있을 시) · [{App}-ARCHITECTURE]({App}-ARCHITECTURE.md) · [{App}-INT-CATALOG]({App}-INT-CATALOG.md) · [/CLAUDE.md](../../CLAUDE.md) |
+| 관련 문서 | [솔루션 PRD](../PRD.md) (있을 시) · [{App}-ARCHITECTURE]({App}-ARCHITECTURE.md) · [{app}-intent-catalog](../../intent/{app}/intent-catalog.md) · [/CLAUDE.md](../../CLAUDE.md) |
 
 ## 변경 이력
 | 버전 | 일자 | 변경 요약 | 작성자 |
@@ -62,11 +62,11 @@
 > 기능별 동작·결정은 §7 `Intent` 열의 Intent(기능 문서) 참조.
 
 ## 7. 기능 목록 (본 App SSOT)
-> **본 App 기능 목록 SSOT** — 지금 존재하거나 계획된 기능을 행으로 둔다. 기능 1개 = Intent 1개 — 새 기능의 Intent 를 만들면 행을 더하고 `Intent` 에 ID 를 남긴다(Intent 메타 `기능 ID` 가 이 행이다). 기능을 바꾼 Task 가 끝나면(`done`) 한 줄 설명 · 릴리즈 범위를 맞춘다. 진행 중 Task 는 생성물 [`{App}-INT-CATALOG`]({App}-INT-CATALOG.md), 작업 이력 · 상태는 `.task/task-catalog.md` 가 보유 — 본 표에 복제하지 않는다. 솔루션 전체 roll-up = [`../PRD.md` §8](../PRD.md#8-주요-기능-요약-솔루션-전체-roll-up) (있을 시).
+> **본 App 기능 목록 SSOT** — 지금 존재하거나 계획된 기능을 행으로 둔다. 기능 1개 = Intent 1개 — 새 기능의 Intent 를 만들면 행을 더하고 `Intent` 에 ID 를 남긴다(Intent 메타 `기능 ID` 가 이 행이다). 기능을 바꾼 Task 가 끝나면(`done`) 한 줄 설명 · 릴리즈 범위를 맞춘다. 진행 중 Task 는 생성물 [`{app}-intent-catalog`](../../intent/{app}/intent-catalog.md), 작업 이력 · 상태는 `.task/task-catalog.md` 가 보유 — 본 표에 복제하지 않는다. 솔루션 전체 roll-up = [`../PRD.md` §8](../PRD.md#8-주요-기능-요약-솔루션-전체-roll-up) (있을 시).
 
 | 기능 ID | 기능명 | 한 줄 설명 | 릴리즈 범위 | Intent |
 |---|---|---|---|---|
-| F001 | {기능명} | {한 줄 설명} | MVP / 이번 릴리즈 / Backlog | [`{App}-INT-{NNN}`](INTENT/{App}-INT-{NNN}.md) 또는 없음 |
+| F001 | {기능명} | {한 줄 설명} | MVP / 이번 릴리즈 / Backlog | [`{app}-int-{NNN}`](../../intent/{app}/{app}-int-{NNN}.md) 또는 없음 |
 
 ## 8. 비기능 요구사항 (App 특화)
 > 솔루션 공통 비기능은 [`../PRD.md` §9](../PRD.md#9-비기능-요구사항-솔루션-공통) 인용 (있을 시). 본 절은 본 App 특화 비기능만 (예: UI 반응시간·App 내부 동시성 가정).
@@ -79,14 +79,14 @@
 > 솔루션 공통 제약은 [`../PRD.md` §10](../PRD.md#10-제약사항-솔루션-공통) 인용 (있을 시). 본 절은 본 App 특화 제약만. 되돌리기 어려운 결정은 그 결정이 속한 기능 Intent 의 `Decisions` 를 인용.
 
 - {본 App 한정 도메인 제약}
-- {결정 인용 — [`{App}-INT-{NNN}` D{n}](INTENT/{App}-INT-{NNN}.md#decisions)}
+- {결정 인용 — [`{app}-int-{NNN}` D{n}](../../intent/{app}/{app}-int-{NNN}.md#decisions)}
 
 ## 10. Intent 진입점
-> 본 App 의 기능 문서(동작·결정) 진입점. 목록은 생성물 [`{App}-INT-CATALOG`]({App}-INT-CATALOG.md) 가 SSOT — 본 절에 Intent 목록을 복제하지 않는다. 작업(Task)은 레포 루트 `.task/task-catalog.md` 에 있다.
+> 본 App 의 기능 문서(동작·결정) 진입점. 목록은 생성물 [`{app}-intent-catalog`](../../intent/{app}/intent-catalog.md) 가 SSOT — 본 절에 Intent 목록을 복제하지 않는다. 작업(Task)은 레포 루트 `.task/task-catalog.md` 에 있다.
 
 | Intent 카탈로그 | Intent 폴더 |
 |---|---|
-| [`{App}-INT-CATALOG`]({App}-INT-CATALOG.md) | [`INTENT/`](INTENT/) |
+| [`{app}-intent-catalog`](../../intent/{app}/intent-catalog.md) | [`intent/{app}/`](../../intent/{app}/) |
 
 ---
 

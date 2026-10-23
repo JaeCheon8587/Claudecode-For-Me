@@ -1,6 +1,6 @@
 # Claudecode-For-Me
 
-> **Claude Code Plugin** · v3.75.0 · 커스텀 스킬 7종 + 슬래시 커맨드 17종 + 에이전트 9종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
+> **Claude Code Plugin** · v3.76.0 · 커스텀 스킬 7종 + 슬래시 커맨드 17종 + 에이전트 9종 (외부 도구 `codenavigator` 연동, pre-commit hook 포함)
 
 `/plugin marketplace add` 한 번으로 모든 프로젝트에서 동일한 워크플로(요구사항 정제 → 문서 하네스 → 구현 자동화 → 브랜치 리뷰 → 커밋 → C# 시맨틱 검색)를 슬래시 커맨드로 호출할 수 있게 묶은 Claude Code 플러그인이다.
 
@@ -11,7 +11,7 @@
 | 항목 | 값 |
 |---|---|
 | 이름 | `claudecode-for-me` |
-| 버전 | `3.75.0` |
+| 버전 | `3.76.0` |
 | 매니페스트 | `.claude-plugin/plugin.json` |
 | 마켓플레이스 | `.claude-plugin/marketplace.json` |
 | 설치 위치 | `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` (글로벌) |
@@ -66,6 +66,34 @@ pip install -U codenavigator
 - `plugin.json` / `marketplace.json`의 `version`이 올라가야 클라이언트가 변경을 인식한다.
 - **세션 재시작 필수**. 기존 세션은 구버전 매니페스트를 그대로 보유.
 - 캐시: `~/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/` — 구·신버전 공존 가능, 활성은 최신 1개.
+
+### v3.76.0 — Intent 를 루트 `intent/` 로 · 폴더 · 파일명 · 문서 ID 전부 소문자 · 2단 카탈로그 · BREAKING
+
+문서는 `.git/info/exclude` 에 올라 있어 ripgrep 기반 검색(Grep · Glob)이 건너뛴다 — 세션은 링크를 따라 Intent 를 찾아야 한다.
+진입점을 하나로 만든다: `CLAUDE.md` → `intent/intent-app-catalog.md` → `intent/<app>/intent-catalog.md` → `intent/<app>/<app>-int-<NNN>.md`.
+
+- **새 위치 · 이름** — Intent `docs/<App>/INTENT/<App>-INT-<NNN>.md` → `intent/<app>/<app>-int-<NNN>.md`(`<app>` = SYSTEM_CODE 의 소문자),
+  App 카탈로그 `docs/<App>/<App>-INT-CATALOG.md` → `intent/<app>/intent-catalog.md`(문서 ID `<app>-intent-catalog`), Task `.task/TSK-<NNN>.md` →
+  `.task/tsk-<NNN>.md`, Task 카탈로그 문서 ID `task-catalog`, 진행 표시 `[tsk-<NNN> 진행 중|삭제 예정]`, 근거 `loader-int-003 FR-2`.
+  항목 ID(`FR-1` · `A-1` …)와 검사 코드(`TSK_CONFLICT` · `INT_CATALOG` …)는 대문자 그대로다. `docs/` 에는 PRD · ARCHITECTURE · 코드 룰이 남는다.
+- **상위 카탈로그 신설** — `intent/intent-app-catalog.md`(App · 카탈로그 링크 · Intents · active · retired, `apps: N`). 새 서브커맨드는 없다 —
+  `intent-catalog --app <app> --write` 가 App 카탈로그와 함께 다시 쓰고, `--check` · `--json` 도 둘 다 본다. `check` 에 `INT_APP_CATALOG`
+  (Intent 가 하나도 없으면 줄을 내지 않는다). 기존 재생성 지점(requirement-spec · `/task-split` · `worktree_setup.py` 의 done 처리)이 그대로 함께 갱신한다.
+- **옛 표기는 읽지 않는다** — 호환 · 이전 도구는 없다. 대소문자를 무시하는 Windows · macOS 에서도 `Loader-INT-003.md` · `TSK-001.md` 를
+  새 이름의 파일로 보지 않는다(디렉터리 목록으로 정확히 맞춘다). CLI 입력(`--app` · `--intent` · `finish` 의 Task ID)은 대문자로 줘도 소문자로 받는다.
+- **로컬 전용 · 워크트리** — `ensure-exclude` 가 `/intent/` 를 더해 `.worktree/ .process/ /docs/ /Docs/ /intent/ /.task/` 를 올린다.
+  `/worktree-init` 은 `intent/` 도 복사하고, 메인의 `intent/` 변경을 dirty 로 치지 않는다.
+- **템플릿** — `docs/.templates/intent/`(`intent-app-catalog-template.md` 신설 · `app/app-int-001-template.md` · `app/intent-catalog-template.md`),
+  `docs/.templates/.task/`(`tsk-001-template.md` · `task-catalog-template.md`). **DOCUMENT_GUIDE 2.1** — §0 폴더 트리 · 소문자 규칙,
+  §5 식별자, §7.3 Intent 폴더 기준 상대 링크 신설. CLAUDE · README · PRD · APP-PRD · ARCHITECTURE 템플릿, requirement-spec · task-split ·
+  branch-review 스킬(spec glob `intent/**/*.md` · `.task/tsk-*.md`), worktree-init · worktree-delete 커맨드를 같은 표기로 맞췄다.
+- **재유입 가드** `tests/test_intent_layout.py` — 스킬 · 커맨드 · 에이전트 · 스크립트 · 템플릿 · README 현행 절에 옛 표기가 다시 들어오면 실패.
+
+**이전 방법**: 기존 레포의 Intent · Task 는 이 버전의 도구가 찾지 못한다 — 옮기기는 이 플러그인 밖에서 한다
+(`docs/<App>/INTENT/<App>-INT-<NNN>.md` → `intent/<app>/<app>-int-<NNN>.md`, 문서 ID · 진행 표시 · Task 근거 · `.task/TSK-*.md` 를 소문자로,
+그 뒤 `intent-catalog --app <app> --write` · `task-catalog --write`). `CLAUDE.md` 문서 인덱스에 `intent/intent-app-catalog.md` 행을 둔다.
+
+**검증**: `python -m pytest tests/ -q` → **651 passed, 2 skipped** (637 → 651 — 상위 카탈로그 · 소문자 경로 · 옛 표기 거부 · 재유입 가드).
 
 ### v3.75.0 — 문서는 로컬에만 · Task 는 /task-split 이 자른다 · Intent v2.0(기능 문서) · BREAKING
 
@@ -2109,7 +2137,7 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `meta-prompter` | `/claudecode-for-me:meta-prompter [요청]` | 거친 요청 → 구조화된 메타 프롬프트 |
 | `requirement-spec` | `/claudecode-for-me:requirement-spec [<Intent ID 또는 경로> ...] [--app <App> ...] [--no-gate]` | grill-me 인터뷰로 Intent(기능 문서)를 새로 쓰거나 고친다 — App 마다 1개, 계약이 바뀌면 호출 App · 제공 App 함께. Part 1 → Part 2(FR · E · X) 파생 → 코드 체크리스트 + opus critic 검증 루프(Intent 마다 ≤3회) → 품질 지표 → 확정 1회. 고칠 때는 기준선(`.process/intent-base/`)을 남겨 `/task-split` 이 바뀐 항목을 자르게 한다 |
 | `safe-pull` | `/claudecode-for-me:safe-pull [원격/브랜치]` | git pull 전 fetch(비파괴)로 변경·충돌·사이드이펙트 브리핑 후 AskUserQuestion 컨펌 게이트 |
-| `task-split` | `/claudecode-for-me:task-split [<Intent ID 또는 경로> ...] [--type 기능개발\|버그수정\|리팩토링]` | 쓰거나 고친 Intent 의 바뀐 항목(신규 · 변경 · 삭제)을 애자일 자르기 기준(세로 조각 · 패턴 8종 · App 을 넘는 계약 변경)으로 Task n 개로 자른다 — 변경 목록(`intent-diff`) → 자르기 제안 → Task 작성 · 진행 표시(`mark-intent`) · 검사(`check-task` · `split-check`) → 일괄 승인 1회 → 개발 프롬프트. 산출물은 `.task/TSK-<NNN>.md` n 개(커밋하지 않는다) |
+| `task-split` | `/claudecode-for-me:task-split [<Intent ID 또는 경로> ...] [--type 기능개발\|버그수정\|리팩토링]` | 쓰거나 고친 Intent 의 바뀐 항목(신규 · 변경 · 삭제)을 애자일 자르기 기준(세로 조각 · 패턴 8종 · App 을 넘는 계약 변경)으로 Task n 개로 자른다 — 변경 목록(`intent-diff`) → 자르기 제안 → Task 작성 · 진행 표시(`mark-intent`) · 검사(`check-task` · `split-check`) → 일괄 승인 1회 → 개발 프롬프트. 산출물은 `.task/tsk-<NNN>.md` n 개(커밋하지 않는다) |
 
 ### Command 17종
 
@@ -2123,12 +2151,12 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 | `commit-analysis` | 배포 여부 확인 후 `[ADD]`/`[MOD]`/`[FIX]` 자동 판단 한글 커밋 생성 (배포 시 본문에 `[Deploy]`) |
 | `grill-me` | grill-me skill 진입 |
 | `meta-prompter` | meta-prompter skill 진입 |
-| `requirement-spec` | requirement-spec skill 진입. 대상 Intent 를 새로 쓰거나 고친다(산출물 `docs/<App>/INTENT/<App>-INT-<NNN>.md` · 기준선 · INT 카탈로그, 임시 파일은 `.process/intent-check/<실행>/`). Task · 코드 · 커밋을 만들지 않고 `/task-split` 을 안내만 한다. `--no-gate` 로 루프 생략 |
+| `requirement-spec` | requirement-spec skill 진입. 대상 Intent 를 새로 쓰거나 고친다(산출물 `intent/<app>/<app>-int-<NNN>.md` · 기준선 · Intent 카탈로그, 임시 파일은 `.process/intent-check/<실행>/`). Task · 코드 · 커밋을 만들지 않고 `/task-split` 을 안내만 한다. `--no-gate` 로 루프 생략 |
 | `safe-pull` | safe-pull skill 진입. fetch 후 브리핑 → 컨펌 게이트 → pull |
 | `session-brief` | **세션 브리핑** — 이 세션의 현재 주제(마지막 대화 기준)를 기능 · 맥락 · 마지막 수행 내용 · 남은 일(결정 대기 · 미완료 · 작업 상태 · 이전 주제 미결) 드릴다운으로 한 화면 보고. 작업 상태는 호출 시점 git 실행 결과. 보고만 하고 파일을 고치지 않는다. 스킬 없이 커맨드 단독 |
 | `task-split` | task-split skill 진입. Intent 의 바뀐 항목 → Task n 개(자르기 제안 → 작성 · 진행 표시 · 검사 → 일괄 승인 1회 → 개발 프롬프트). 워크트리 · 코드 · 커밋을 만들지 않고 후속 커맨드를 실행하지 않는다 |
 | `worktree-delete` | `/worktree-init` 이 만든 워크트리 정리 — 안전 게이트(커밋 안 된 변경 · 머지 여부) → 머지됐으면 그 워크트리에서 마감한 Task `in-review → done` · 진행 표시 정리(메인 정본, 커밋 없음) → 워크트리 · 브랜치 · 매니페스트 제거 (서브모듈 메인 원본 보존). 멈추면 `--merged`(squash · rebase 머지) / `--force`(버림)를 사용자가 고른다. `<slug>` 지정 또는 생략 시 목록에서 선택. 스킬 없이 커맨드 단독 |
-| `worktree-init` | **개발 환경 구성** — `<이름>` 하나로 base 브랜치 선택 → `.git/info/exclude` 등록 → 워크트리 `.worktree/<이름>` · 브랜치 `work/<이름>` → 가드레일 · 문서 사본(문서 폴더 · `.task/`) 복사 → 매니페스트 기록. **Task 를 읽지 않는다**(한 워크트리에서 Task 여러 개). **보고하고 끝낸다**(개발 세션을 띄우지 않는다). 메인 repo 에서 실행. 스킬 없이 커맨드 단독 |
+| `worktree-init` | **개발 환경 구성** — `<이름>` 하나로 base 브랜치 선택 → `.git/info/exclude` 등록 → 워크트리 `.worktree/<이름>` · 브랜치 `work/<이름>` → 가드레일 · 문서 사본(문서 폴더 · `intent/` · `.task/`) 복사 → 매니페스트 기록. **Task 를 읽지 않는다**(한 워크트리에서 Task 여러 개). **보고하고 끝낸다**(개발 세션을 띄우지 않는다). 메인 repo 에서 실행. 스킬 없이 커맨드 단독 |
 
 ### Agent 9종
 
@@ -2174,7 +2202,7 @@ backward-compatible — 신규 플래그는 전부 옵트인이고 기본 동작
 ```
 /claudecode-for-me:branch-review main
 /claudecode-for-me:branch-review v1.4.0
-/claudecode-for-me:branch-review main --spec docs/Feature/INTENT/Feature-INT-001.md
+/claudecode-for-me:branch-review main --spec intent/feature/feature-int-001.md
 /claudecode-for-me:branch-review          # ref 생략 시 merge-base 자동
 /claudecode-for-me:branch-review --resume # 중단된 리뷰(청크 모드) 재개
 ```
@@ -2249,19 +2277,19 @@ codenav --root <repo> ui --port 9876
 
 개발 환경 구성은 **개발 세션보다 앞에 온다**(v3.64). 세션의 cwd 는 프로세스 시작 시점에 고정되므로, 워크트리 안에서 개발 세션을 시작하려면 **그 전에 워크트리가 존재해야** 한다. v3.75 부터 워크트리는 **이름 하나로** 만든다 — Task 를 읽지 않고, 한 워크트리에서 Task 여러 개를 개발한다. 어떤 Task 를 개발할지는 `/task-split` 이 만든 개발 프롬프트가 정한다.
 
-> **문서는 커밋하지 않는다.** 문서 폴더(`docs`·`Docs`)와 `.task/` 는 설계 문서라 커밋 · 푸시하지 않는다(팀 정책). `.git/info/exclude` 에 올리고(공유 `.gitignore` 는 고치지 않는다), 정본은 메인 작업트리에 두고, 워크트리에는 사본을 복사한다. Task 상태 전이는 메인 정본에 쓴다(커밋 없음).
+> **문서는 커밋하지 않는다.** 문서 폴더(`docs`·`Docs`)와 `intent/` · `.task/` 는 설계 문서라 커밋 · 푸시하지 않는다(팀 정책). `.git/info/exclude` 에 올리고(공유 `.gitignore` 는 고치지 않는다), 정본은 메인 작업트리에 두고, 워크트리에는 사본을 복사한다. Task 상태 전이는 메인 정본에 쓴다(커밋 없음).
 
 | | 어디서 | 무엇을 |
 |---|---|---|
 | `/worktree-init <이름>` | **메인 repo** | base 선택 → exclude 등록 → 워크트리 `.worktree/<이름>` · 브랜치 `work/<이름>` → 가드레일 · 문서 사본 복사 → 매니페스트. **보고하고 끝낸다** |
 | *(개발 세션)* | 사용자 | 그 워크트리를 cwd 로 하는 세션을 띄워 `/task-split` 의 개발 프롬프트를 넣는다. 손으로 해도 되고 `/dispatch-session <워크트리> --agent opus-orchestrator --prompt "<개발 프롬프트>"` 로 해도 된다(herdr 안에서만) |
-| `worktree_setup.py finish TSK-<NNN> …` | 개발 세션 · **워크트리** | Task 하나의 개발 커밋을 마칠 때마다 — 메인 정본 Task `approved → in-review` · Task 카탈로그 재생성 · 메인 매니페스트에 Task ID 기록. 커밋 없음. 스크립트 절대경로는 `/worktree-init` 보고에 나온다 |
+| `worktree_setup.py finish tsk-<NNN> …` | 개발 세션 · **워크트리** | Task 하나의 개발 커밋을 마칠 때마다 — 메인 정본 Task `approved → in-review` · Task 카탈로그 재생성 · 메인 매니페스트에 Task ID 기록. 커밋 없음. 스크립트 절대경로는 `/worktree-init` 보고에 나온다 |
 | *(머지)* | 사용자 | 워크트리 브랜치를 base 에 머지한다 |
 | `/worktree-delete [slug]` | **메인 repo** | 안전 게이트(커밋 안 된 변경 · 머지 여부) → 머지됐으면 마감한 Task `in-review → done` · 진행 표시와 `삭제 예정` 줄 정리 · 카탈로그 재생성 → 워크트리 · 브랜치 · 매니페스트 정리. 제거 전 그 워크트리에 살아있는 세션이 있는지 확인한다(v3.66) |
 
 `/worktree-init` 은 후속 단계를 실행하지 않는다 — 어디서 어떤 에이전트로 개발을 시작할지는 사용자가 정한다. `/dispatch-session` 은 그 **사용자 행위를 대신 타이핑해 주는 별도 커맨드**이지 `/worktree-init` 이 자동으로 부르는 다음 칸이 아니다.
 
-Task 상태는 `draft → approved → in-review → done`(언제든 `dropped`)이다. `approved` 는 `/task-split` 의 일괄 승인, `in-review` 는 `finish`, `done` 은 머지를 확인한 `/worktree-delete` 가 만든다. 진행 표시(`[TSK-<NNN> 진행 중]` · `[TSK-<NNN> 삭제 예정]`)는 `done` 까지 Intent 에 남는다 — 리뷰에서 돌려보내도 Intent 가 맞다.
+Task 상태는 `draft → approved → in-review → done`(언제든 `dropped`)이다. `approved` 는 `/task-split` 의 일괄 승인, `in-review` 는 `finish`, `done` 은 머지를 확인한 `/worktree-delete` 가 만든다. 진행 표시(`[tsk-<NNN> 진행 중]` · `[tsk-<NNN> 삭제 예정]`)는 `done` 까지 Intent 에 남는다 — 리뷰에서 돌려보내도 Intent 가 맞다.
 
 #### 전제 조건
 
@@ -2269,7 +2297,7 @@ Task 상태는 `draft → approved → in-review → done`(언제든 `dropped`)�
 |---|---|---|
 | Python 3.10+ (`python` 또는 `py -3`) | **필수** | 미설치 시 가이드 출력 후 중단 |
 | git repository + 커밋 1개 이상 | **필수** | 워크트리는 **분기점(base) 커밋**의 사본 — 커밋 안 된 소스·테스트는 따라오지 않는다. 문서는 커밋하지 않고 복사한다 |
-| 메인 작업트리에 커밋 안 된 코드 변경 없음 | **필수**(`--force` 로 우회) | 문서 폴더 · `.task/` 의 변경은 dirty 로 치지 않는다 |
+| 메인 작업트리에 커밋 안 된 코드 변경 없음 | **필수**(`--force` 로 우회) | 문서 폴더 · `intent/` · `.task/` 의 변경은 dirty 로 치지 않는다 |
 
 #### 사용 예시
 
@@ -2279,7 +2307,7 @@ Task 상태는 `draft → approved → in-review → done`(언제든 `dropped`)�
 
 # ② 그 워크트리에서 개발 세션을 시작해 /task-split 의 개발 프롬프트를 넣는다.
 #    Task 하나의 개발 커밋을 마칠 때마다 워크트리 안에서 — 스크립트 절대경로는 ① 의 보고에도 나온다
-python "$HOME/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/scripts/worktree_setup.py" finish TSK-012
+python "$HOME/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version>/scripts/worktree_setup.py" finish tsk-012
 
 # ③ 브랜치를 머지한 뒤 메인 repo 에서 — 머지 확인 → Task done · 진행 표시 정리 → 정리. slug 생략 시 목록에서 선택
 /claudecode-for-me:worktree-delete upload-retry
@@ -2302,21 +2330,21 @@ python "$HOME/.claude/plugins/cache/claudecode-for-me/claudecode-for-me/<version
 
 1. **이름** — `<name>` → slug(`.worktree/<slug>`), 브랜치 = `--branch` 또는 `work/<slug>`(ref 이름으로 쓸 수 있는지 검사).
 2. **분기점** — `--base <ref>`, 미지정 시 현재 HEAD(매니페스트 `base` 에는 그때의 현재 브랜치). 커밋이 없으면 exit 2.
-3. **exclude** — `docs_helpers.py ensure-exclude` 와 같은 함수로 `$GIT_COMMON_DIR/info/exclude` 에 `.worktree/ .process/ /docs/ /Docs/ /.task/` 를 올린다. 이미 커밋된 문서는 숨지 않으므로 `tracked_docs` 로 알린다.
+3. **exclude** — `docs_helpers.py ensure-exclude` 와 같은 함수로 `$GIT_COMMON_DIR/info/exclude` 에 `.worktree/ .process/ /docs/ /Docs/ /intent/ /.task/` 를 올린다. 이미 커밋된 문서는 숨지 않으므로 `tracked_docs` 로 알린다.
 4. **워크트리** — 메인에 커밋 안 된 코드 변경이 있으면 exit 1. 브랜치가 이미 있으면 resume(분기점 미적용).
 5. **서브모듈 링크** — 아래 "워크트리 서브모듈".
-6. **복사** — 메인의 `CLAUDE.md`·`.claude/settings.json`·`.claude/rules`·문서 폴더(`docs`·`Docs` 중 디스크에 있는 표기 하나)·`.task/` 중 워크트리에 **없는 파일만** 복사(덮어쓰지 않음). 문서는 링크하지 않는다 — 실측에서 junction 이 남은 채 `git worktree remove --force` 를 하면 정본 내용까지 지워졌다.
+6. **복사** — 메인의 `CLAUDE.md`·`.claude/settings.json`·`.claude/rules`·문서 폴더(`docs`·`Docs` 중 디스크에 있는 표기 하나)·`intent/`·`.task/` 중 워크트리에 **없는 파일만** 복사(덮어쓰지 않음). 문서는 링크하지 않는다 — 실측에서 junction 이 남은 채 `git worktree remove --force` 를 하면 정본 내용까지 지워졌다.
 7. **매니페스트** — stdout 마지막 줄 JSON: `root`·`worktree`·`branch`·`base`·`base_commit`·`base_applied`·`slug`·`created`·`tasks`(finish 가 채운다 — resume 에서도 유지)·`copied`·`skipped`·`submodule_log`·`exclude`·`exclude_added`·`tracked_docs`·`manifests`.
 
 #### finish 가 하는 일 (워크트리 안에서, Task 마감)
 
-`python worktree_setup.py finish TSK-<NNN> [TSK-<NNN> …] [--quiet]` — 메인 정본 `.task/TSK-<NNN>.md` 를 `approved → in-review` 로 바꾸고(줄바꿈 보존) Task 카탈로그를 다시 만들고, 메인 매니페스트 `tasks` 에 Task ID 를 남긴다. 진행 표시는 그대로 둔다. 여러 Task 를 한 번에 주면 전부 바꿀 수 있을 때만 바꾼다(하나라도 상태 행을 못 바꾸면 아무것도 쓰지 않는다). 메인 repo 에서 실행 · 매니페스트 없음 · Task 가 `approved` 아님 · 커밋 안 된 변경 · base 이후 개발 커밋 0개 → exit 2. 이미 `in-review` 인 Task 는 **이 워크트리 매니페스트에 있을 때만** `already: true` 로 exit 0 — 없으면 다른 워크트리가 마감한 Task 라 exit 2(이 워크트리의 머지로 done 이 되지 않게).
+`python worktree_setup.py finish tsk-<NNN> [tsk-<NNN> …] [--quiet]` — 메인 정본 `.task/tsk-<NNN>.md` 를 `approved → in-review` 로 바꾸고(줄바꿈 보존) Task 카탈로그를 다시 만들고, 메인 매니페스트 `tasks` 에 Task ID 를 남긴다. 진행 표시는 그대로 둔다. 여러 Task 를 한 번에 주면 전부 바꿀 수 있을 때만 바꾼다(하나라도 상태 행을 못 바꾸면 아무것도 쓰지 않는다). 메인 repo 에서 실행 · 매니페스트 없음 · Task 가 `approved` 아님 · 커밋 안 된 변경 · base 이후 개발 커밋 0개 → exit 2. 이미 `in-review` 인 Task 는 **이 워크트리 매니페스트에 있을 때만** `already: true` 로 exit 0 — 없으면 다른 워크트리가 마감한 Task 라 exit 2(이 워크트리의 머지로 done 이 되지 않게).
 
 #### delete 가 하는 일 (메인 repo 에서)
 
 1. **브랜치 확정** — 매니페스트 → `git worktree list` 역인덱싱 → 명시 실패. 워크트리 · 브랜치를 손으로 지워 매니페스트만 남았으면 매니페스트를 지운다 — 마감한 Task 가 기록돼 있으면 머지를 확인할 수 없어 exit 2 로 묻는다(`--merged` = done 전이 후 삭제, `--force` = 매니페스트만 삭제).
 2. **안전 게이트** — 워크트리의 커밋 안 된 변경, 브랜치 끝 커밋이 base 에 들어 있는지(`merge-base --is-ancestor`. base 가 `origin/<X>` 면 로컬 `<X>` 도 본다. 매니페스트가 없으면 메인의 현재 브랜치). 걸리면 exit 2 — 머지했으면 `--merged`, 버리려면 `--force`.
-3. **done 전이** — 머지가 확인되면 매니페스트 `tasks` 의 Task 를 `in-review → done`, 대상 Intent 에서 그 Task 의 진행 표시와 `삭제 예정` 항목 줄을 지우고(섹션이 비면 `none`, 다른 Task 의 표시는 그대로) Task · INT 카탈로그를 다시 만든다. 메인 정본에 쓰고 커밋하지 않는다. 이미 `done` 이면 표시 정리만 다시 한다(중간에 멈춘 delete 의 재실행). 상태 행을 하나라도 못 바꾸면 **아무것도 쓰지 않고 지우지도 않은 채** exit 2 — 워크트리 · 매니페스트를 먼저 지우면 Task ID 기록이 사라져 다시 할 수 없다.
+3. **done 전이** — 머지가 확인되면 매니페스트 `tasks` 의 Task 를 `in-review → done`, 대상 Intent 에서 그 Task 의 진행 표시와 `삭제 예정` 항목 줄을 지우고(섹션이 비면 `none`, 다른 Task 의 표시는 그대로) Task 카탈로그 · Intent 카탈로그(App · 상위)를 다시 만든다. 메인 정본에 쓰고 커밋하지 않는다. 이미 `done` 이면 표시 정리만 다시 한다(중간에 멈춘 delete 의 재실행). 상태 행을 하나라도 못 바꾸면 **아무것도 쓰지 않고 지우지도 않은 채** exit 2 — 워크트리 · 매니페스트를 먼저 지우면 Task ID 기록이 사라져 다시 할 수 없다.
 4. **정리** — 서브모듈 링크 해제 → `git worktree remove` → `git branch -D` → 메인 매니페스트 삭제.
 
 #### 워크트리 서브모듈
@@ -2332,6 +2360,7 @@ init(그리고 `requirement-spec` · `/task-split`)이 `.git/info/exclude` 에 �
 .process/
 /docs/
 /Docs/
+/intent/
 /.task/
 ```
 
@@ -2370,11 +2399,11 @@ init(그리고 `requirement-spec` · `/task-split`)이 `.git/info/exclude` 에 �
 ```
 
 Intent(기능 문서 — 기능 하나의 왜 · 무엇 · 결정과 테스트할 수 있는 동작)를 새로 쓰거나 고친다. 흐름: **`requirement-spec`** →
-`/task-split`(6.10) → `/worktree-init <이름>` → 개발 세션 → `finish TSK-<NNN>` → 머지 → `/worktree-delete`. 완료 조건 · 확인 방법 ·
+`/task-split`(6.10) → `/worktree-init <이름>` → 개발 세션 → `finish tsk-<NNN>` → 머지 → `/worktree-delete`. 완료 조건 · 확인 방법 ·
 위험 · 착수 정보는 쓰지 않는다 — Task 몫이다.
 
-- **대상** — 인자의 Intent ID · 경로는 **고치기**, `--app <App>`(여러 번)은 그 App 의 **새로 쓰기**. 둘 다 없으면 있는 Intent 목록을 보여 주고 한 번 묻는다. 계약(API · 필드 · 오류 코드)이 바뀌면 호출하는 App · 제공하는 App 의 Intent 를 한 실행에서 함께 쓴다 — 인터뷰는 한 번이고, 인터뷰 중 드러난 App 은 대상에 더한다. 산출물은 대상 Intent(`docs/<App>/INTENT/<App>-INT-<NNN>.md`) · 기준선 · 생성물 INT 카탈로그다. Task · 진행 표시는 만들지 않는다(`/task-split` 몫)
-- **Phase 0 Orient** — Python 3.10+ 확인 → `ensure-exclude`(문서 폴더 · `.process/` 를 `.git/info/exclude` 에) → 템플릿 경로(repo → `${CLAUDE_PLUGIN_ROOT}`) → 작업 폴더 `.process/intent-check/<첫 대상 ID>-<YYYYMMDD-HHMM>/`(실행마다 새로). 고치기 대상은:
+- **대상** — 인자의 Intent ID · 경로는 **고치기**, `--app <app>`(여러 번)은 그 App 의 **새로 쓰기**. 둘 다 없으면 있는 Intent 목록을 보여 주고 한 번 묻는다. 계약(API · 필드 · 오류 코드)이 바뀌면 호출하는 App · 제공하는 App 의 Intent 를 한 실행에서 함께 쓴다 — 인터뷰는 한 번이고, 인터뷰 중 드러난 App 은 대상에 더한다. 산출물은 대상 Intent(`intent/<app>/<app>-int-<NNN>.md`) · 기준선 · 생성물 Intent 카탈로그(App · 상위)다. Task · 진행 표시는 만들지 않는다(`/task-split` 몫)
+- **Phase 0 Orient** — Python 3.10+ 확인 → `ensure-exclude`(문서 폴더 · `intent/` · `.process/` 를 `.git/info/exclude` 에) → 템플릿 경로(repo → `${CLAUDE_PLUGIN_ROOT}`) → 작업 폴더 `.process/intent-check/<첫 대상 ID>-<YYYYMMDD-HHMM>/`(실행마다 새로). 고치기 대상은:
   - v1(3.74 이하) 문서면 옮길지 묻는다 — 메타 5행으로, Part 2 의 `Acceptance` · `Verification` · `Risks` · `Handoff` 삭제. 동작은 바꾸지 않는다
   - 고치기 전 사본을 작업 폴더에 남기고(중단 때 되돌리는 원본) **기준선** `intent-base --save` — `SAVED`(이번에 남김) · `KEPT`(앞선 고침이 아직 안 잘림 — 함께 잘린다) · `NEW`(한 번도 안 자른 Intent — 기준선이 필요 없다). 옛 방식으로 이미 개발한 v1 은 `--implemented`
   - `intent-diff --json` 의 `next_ids` 로 새 항목 번호를 받는다(지운 번호까지 센다). 진행 표시가 붙은 항목은 그 Task 가 끝나기 전에 고치지 않는다
@@ -2401,8 +2430,8 @@ Intent(기능 문서 — 기능 하나의 왜 · 무엇 · 결정과 테스트�
   - 중단하면 남길지 되돌릴지 묻는다 — 되돌리면 고치기 전 사본으로 복원하고 이번에 남긴(`SAVED`) 기준선을 지운다. 새로 쓴 Intent 는 지운다
   - Part 1 만 고쳐 자를 변경이 없으면 `SAVED` 기준선을 지운다 — `--implemented` 기준선은 남긴다(Task 가 가리키기 전까지 "이미 구현됨" 의 유일한 기록). 끝에 대상 App 마다 `intent-catalog --write` 1회, 다음 단계 안내는 `/task-split <Intent ID> …` 한 줄
 - **`--no-gate`** — 오라클 · Phase 3 을 건너뛰고 최소 `quality.json`(검증 `SKIPPED — --no-gate`)만 쓴 뒤 Phase 5 를 수행한다
-- **Intent 템플릿**: `docs/.templates/App/INTENT/APP-INT-001-TEMPLATE.md` — v2.0. 메타 5행(`문서 ID · 기능 ID · 상태(active|retired) · 작성 · 관련 Intent`) + Part 1 6섹션(Problem / Outcome / Affected / Constraints / Decisions / Open questions) + Part 2 3섹션(Functional requirements / Edge cases / Error cases). 진행 표시 `[TSK-<NNN> 진행 중|삭제 예정]` 은 `/task-split` 이 붙이고 Task 가 끝나면(`done`) 지운다
-- **Intent 카탈로그**: `docs/<App>/<App>-INT-CATALOG.md` — `intent-catalog --repo . --app <App> --write` 가 만드는 생성물. 행은 `Intent · 제목 · 기능 ID · 상태 · 진행 중 Task · 요약 · 규모(FR · E · X)` 이고 `진행 중 Task` 는 진행 표시에서 뽑아 Task 문서로 잇는다. 재생성 지점은 requirement-spec Phase 5 · `/task-split` 승인 · 중단 · `/worktree-delete` 의 done · Task `dropped`(Intent 를 되돌린 뒤 손으로) — 빠뜨리면 `check --app <App>` 이 `INT_CATALOG stale` 로 잡는다. 참고 양식은 `docs/.templates/App/APP-INT-CATALOG-TEMPLATE.md`
+- **Intent 템플릿**: `docs/.templates/intent/app/app-int-001-template.md` — v2.0. 메타 5행(`문서 ID · 기능 ID · 상태(active|retired) · 작성 · 관련 Intent`) + Part 1 6섹션(Problem / Outcome / Affected / Constraints / Decisions / Open questions) + Part 2 3섹션(Functional requirements / Edge cases / Error cases). 진행 표시 `[tsk-<NNN> 진행 중|삭제 예정]` 은 `/task-split` 이 붙이고 Task 가 끝나면(`done`) 지운다
+- **Intent 카탈로그**: `intent/<app>/intent-catalog.md` — `intent-catalog --repo . --app <app> --write` 가 만드는 생성물. 같은 명령이 상위 카탈로그 `intent/intent-app-catalog.md`(App 마다 카탈로그 링크 · Intent 수 — `CLAUDE.md` 가 링크하는 진입점)도 함께 다시 쓴다. 행은 `Intent · 제목 · 기능 ID · 상태 · 진행 중 Task · 요약 · 규모(FR · E · X)` 이고 `진행 중 Task` 는 진행 표시에서 뽑아 Task 문서로 잇는다. 재생성 지점은 requirement-spec Phase 5 · `/task-split` 승인 · 중단 · `/worktree-delete` 의 done · Task `dropped`(Intent 를 되돌린 뒤 손으로) — 빠뜨리면 `check --app <app>` 이 `INT_CATALOG stale` · `INT_APP_CATALOG stale` 로 잡는다. 참고 양식은 `docs/.templates/intent/app/intent-catalog-template.md` · `docs/.templates/intent/intent-app-catalog-template.md`
 - **경계**: 내부 코드 이름은 어느 Part 에도 쓰지 않는다(DOCUMENT_GUIDE §1.4). 문서는 커밋하지 않는다. 후속 스킬 자동 호출 없음, `ExitPlanMode` 미호출
 
 ### 6.7 commit-analysis
@@ -2468,15 +2497,15 @@ Intent(기능 문서 — 기능 하나의 왜 · 무엇 · 결정과 테스트�
 /claudecode-for-me:task-split [<Intent ID 또는 경로> ...] [--type 기능개발|버그수정|리팩토링]
 ```
 
-`requirement-spec` 으로 쓰거나 고친 Intent 의 **바뀐 항목**을 개발 단위 Task(`.task/TSK-<NNN>.md`) n 개로 자른다. 흐름: `requirement-spec` → **`/task-split`** → `/worktree-init <이름>` → 개발 세션(개발 프롬프트) → `finish TSK-<NNN>` → 머지 → `/worktree-delete`. Intent : Task 는 1:1 · 1:N · N:N 모두 된다 — App 사이 계약이 바뀌면 제공 App 과 호출 App 의 Intent 가 함께 바뀌고, Task 는 둘에 걸치거나 둘로 나뉜다.
+`requirement-spec` 으로 쓰거나 고친 Intent 의 **바뀐 항목**을 개발 단위 Task(`.task/tsk-<NNN>.md`) n 개로 자른다. 흐름: `requirement-spec` → **`/task-split`** → `/worktree-init <이름>` → 개발 세션(개발 프롬프트) → `finish tsk-<NNN>` → 머지 → `/worktree-delete`. Intent : Task 는 1:1 · 1:N · N:N 모두 된다 — App 사이 계약이 바뀌면 제공 App 과 호출 App 의 Intent 가 함께 바뀌고, Task 는 둘에 걸치거나 둘로 나뉜다.
 
 - **변경 목록은 스크립트가 뽑는다** — 문서는 커밋하지 않아 git 이력이 "고치기 전" 을 모른다. requirement-spec 수정 모드가 고치기 전 Intent 를 `.process/intent-base/<ID>.md` 에 남기고(`intent-base --save` — 이미 있으면 더 오래된 쪽을 지키고(`KEPT`), 한 번도 자르지 않은 Intent 면 남기지 않는다(`NEW`)), `intent-diff` 가 FR · E · X 를 항목 ID 로 맞대어 신규 · 변경(이전 문장) · 삭제와 Task Scope 에 그대로 옮길 줄을 낸다. 기준선이 없고 초안(`draft`)이 아닌 Task 가 가리킨 적 없는 Intent 는 새로 쓴 것이라 전부 신규다 — 옛 방식으로 이미 개발한 Intent 면 전부 신규로 자르지 않고 `intent-base --save --implemented` 로 지금 모습을 기준선으로 남긴다. 다른 Task 의 진행 표시가 붙은 항목(`locked_by`)이 있으면 중단한다
 - **자르기 기준** — Task 하나 = 밖에서 관찰할 수 있는 동작 한 조각(세로 조각). 혼자 머지해도 깨지지 않고, Acceptance 로 확인되고, 기본 상한은 Scope 7 · FR 3(넘으면 `split-check` 의 `SPLIT_SIZE` WARN). 패턴 8종(뼈대 먼저 · 흐름 단계 · 경로 · 규칙 변형 · 데이터 변형 · 연산 · 인터페이스(App) · 비기능 미루기)과 안티패턴(계층 자르기 · 준비 전용 Task · 너무 잘게 · 같은 항목을 두 Task 에 · E · X 를 그 FR 보다 앞 Task 에 · 대체를 둘로 가름). 계약 변경은 하위 호환이면 제공 App Task 를 먼저 · 호출 App Task 는 그것을 선행으로, 아니면 한 Task 로 묶거나 추가 → 전환 → 삭제 3단계로 나눈다
-- **Task 작성 · 진행 표시 · 검사** — 합의한 행마다 Task(`상태` = `draft`, `선행 Task`)를 쓰고 `mark-intent` 가 대상 Intent 의 이 Task 표시를 Scope 와 같게 맞춘다 — 신규 · 변경에 `[TSK-<NNN> 진행 중]`, 삭제에 `[TSK-<NNN> 삭제 예정]`, Scope 에서 빠진 항목의 표시는 걷어 낸다(고칠 때 지운 삭제 항목은 기준선 문장으로 제자리에 다시 넣는다 — 코드에는 아직 그 동작이 있다. 하나라도 막히면 아무 Intent 도 고치지 않는다). `check-task` 가 Task 하나를, `split-check` 가 묶음 전체를 본다 — 바뀐 항목이 정확히 한 Task 에(`SPLIT_UNASSIGNED` · `SPLIT_DUP`), Scope 가 변경 목록과 같게(`SPLIT_EXTRA` · `SPLIT_KIND` · `SPLIT_TEXT` · `SPLIT_PREV`), 다른 Task 가 바꾸는 항목이 없게(`SPLIT_LOCKED`). `선행 Task` 는 `TSK_DEPENDS`(형식 · 자기 자신 · 없는 Task · 순환, 취소된 선행은 WARN)와 `TSK_DEPENDS_ORDER`(E · X 가 기대는 FR 을 바꾸는 끝나지 않은 Task 가 선행에 있다)로 검사한다
+- **Task 작성 · 진행 표시 · 검사** — 합의한 행마다 Task(`상태` = `draft`, `선행 Task`)를 쓰고 `mark-intent` 가 대상 Intent 의 이 Task 표시를 Scope 와 같게 맞춘다 — 신규 · 변경에 `[tsk-<NNN> 진행 중]`, 삭제에 `[tsk-<NNN> 삭제 예정]`, Scope 에서 빠진 항목의 표시는 걷어 낸다(고칠 때 지운 삭제 항목은 기준선 문장으로 제자리에 다시 넣는다 — 코드에는 아직 그 동작이 있다. 하나라도 막히면 아무 Intent 도 고치지 않는다). `check-task` 가 Task 하나를, `split-check` 가 묶음 전체를 본다 — 바뀐 항목이 정확히 한 Task 에(`SPLIT_UNASSIGNED` · `SPLIT_DUP`), Scope 가 변경 목록과 같게(`SPLIT_EXTRA` · `SPLIT_KIND` · `SPLIT_TEXT` · `SPLIT_PREV`), 다른 Task 가 바꾸는 항목이 없게(`SPLIT_LOCKED`). `선행 Task` 는 `TSK_DEPENDS`(형식 · 자기 자신 · 없는 Task · 순환, 취소된 선행은 WARN)와 `TSK_DEPENDS_ORDER`(E · X 가 기대는 FR 을 바꾸는 끝나지 않은 Task 가 선행에 있다)로 검사한다
 - **일괄 승인 1회** — 승인하면 Task 마다 `approved` · 카탈로그 재생성 · 기준선 소비(`intent-base --drop`). 중단하면 초안을 남기거나, `mark-intent --remove` 로 표시를 걷고(다시 넣은 삭제 항목 줄도 빠진다) Task 를 지운다 — 기준선은 남아 다음 실행이 같은 변경 목록을 본다. 중단해도 두 카탈로그를 다시 쓴다
-- **개발 프롬프트** — 개발 세션에 그대로 넣을 프롬프트(Task 순서 · 선행 · `finish TSK-<NNN>`)를 내고 끝낸다. 워크트리 · 코드 · 커밋을 만들지 않고 후속 커맨드를 실행하지 않는다
+- **개발 프롬프트** — 개발 세션에 그대로 넣을 프롬프트(Task 순서 · 선행 · `finish tsk-<NNN>`)를 내고 끝낸다. 워크트리 · 코드 · 커밋을 만들지 않고 후속 커맨드를 실행하지 않는다
 - **Task 상태**: `draft`(자르는 중) → `approved`(일괄 승인) → `in-review`(`finish`) → `done`(`/worktree-delete` 가 머지를 확인한 뒤 — 진행 표시 · `삭제 예정` 줄 정리) · 취소는 `dropped`
-- **Task 템플릿**: `docs/.templates/.task/TSK-001-TEMPLATE.md`(메타 8행 · Goal · Scope · Acceptance · Verification · Risks · Handoff 3행). 카탈로그 `.task/task-catalog.md` 는 `task-catalog --write` 가 만드는 생성물이다(`선행` 열 포함)
+- **Task 템플릿**: `docs/.templates/.task/tsk-001-template.md`(메타 8행 · Goal · Scope · Acceptance · Verification · Risks · Handoff 3행). 카탈로그 `.task/task-catalog.md` 는 `task-catalog --write` 가 만드는 생성물이다(`선행` 열 포함)
 
 ---
 
@@ -2618,8 +2647,8 @@ Claudecode-For-Me/
 │   ├── task-split.md
 │   ├── worktree-delete.md
 │   └── worktree-init.md
-├── docs/                       # 문서 체계 참고 명세 (Intent 기능 문서 · Task 작업 문서 — DOCUMENT_GUIDE v2.0)
-│   └── .templates/             # DOCUMENT_GUIDE + CLAUDE/README/PRD/ARCHITECTURE 양식 + App/ (PRD·ARCHITECTURE·INT-CATALOG·INTENT) + .rules/ (코드 룰 5종) + .task/ (Task · Task 카탈로그 양식)
+├── docs/                       # 문서 체계 참고 명세 (Intent 기능 문서 · Task 작업 문서 — DOCUMENT_GUIDE v2.1)
+│   └── .templates/             # DOCUMENT_GUIDE + CLAUDE/README/PRD/ARCHITECTURE 양식 + App/ (PRD·ARCHITECTURE) + intent/ (Intent · App 카탈로그 · 상위 카탈로그 양식) + .rules/ (코드 룰 5종) + .task/ (Task · Task 카탈로그 양식)
 ├── scripts/                     # Python deterministic helper
 │   ├── branch_review_chunk_plan.py  # branch-review diff 크기측정·모드판정·청크분할·patch 생성
 │   ├── docs_helpers.py          # Intent · Task 검사와 생성물 — check · check-intent · intent-checklist · intent-catalog · check-task · task-catalog · ensure-exclude · intent-base · intent-diff · mark-intent · split-check
@@ -2642,7 +2671,7 @@ Claudecode-For-Me/
 |---|---|---|
 | install 직후 슬래시 자동완성에 안 보임 | 매니페스트는 세션 시작 시 1회 로드 | 세션 종료 → 재시작 |
 | update 후 신규 스킬 호출 불가 | 동일 — 캐시는 갱신됐으나 세션은 구버전 보유 | 세션 재시작 |
-| `worktree-init` 이 워크트리 안 만들고 종료(exit 2) | 커밋이 하나도 없다 | 프로젝트 골격(소스 · 테스트 · 솔루션)을 먼저 커밋한다. 문서 폴더 · `.task/` 는 커밋하지 않는다 |
+| `worktree-init` 이 워크트리 안 만들고 종료(exit 2) | 커밋이 하나도 없다 | 프로젝트 골격(소스 · 테스트 · 솔루션)을 먼저 커밋한다. 문서 폴더 · `intent/` · `.task/` 는 커밋하지 않는다 |
 | `worktree_setup.py finish` 가 exit 2 | 메인 repo 에서 실행, 커밋 안 된 변경, base 이후 개발 커밋 없음, Task 가 `approved` 아님, 다른 워크트리가 마감한 Task | 워크트리 안에서, 개발 커밋을 먼저 끝낸 뒤 다시 실행. 상태 · 진행 표시를 손으로 고치지 않는다 |
 | `check-intent` 가 `v1(3.74 이하) 형식이다` 로 FAIL | v3.74 이하 Intent(메타 `유형 · 승인 · 검증`, Part 2 `Acceptance` 등) | 그 Intent 를 `requirement-spec <Intent ID>` 로 고치면 v2 로 옮긴다(동작은 그대로). 이미 개발한 기능이면 기준선이 `--implemented` 로 남는다 |
 | `worktree-delete` 가 exit 2 (`§F 삭제를 멈춘다`) | 브랜치가 base 에 머지되지 않음, 워크트리에 커밋 안 된 변경, 손으로 지워 머지를 확인할 수 없음 | 머지했으면(squash · rebase 포함) `--merged`, 버리려면 `--force`. 커맨드가 길을 묻는다 — 플래그를 임의로 붙이지 않는다 |

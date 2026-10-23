@@ -88,7 +88,7 @@ herdr pane layout --pane "$HERDR_PANE_ID"
 herdr agent start <name> --kind <kind> --pane <pane-id> -- --agent <agent-name>
 ```
 
-- `<name>` 은 herdr 에이전트 이름이다. 규칙이 `^[a-z][a-z0-9_-]{0,31}$` 이고 살아 있는 에이전트 중 유일해야 하는데, 워크트리 slug 는 대문자와 점을 보존한다(`MyApp-INT-007`). **직접 손으로 만들지 말고 스크립트를 쓴다**:
+- `<name>` 은 herdr 에이전트 이름이다. 규칙이 `^[a-z][a-z0-9_-]{0,31}$` 이고 살아 있는 에이전트 중 유일해야 하는데, 워크트리 slug 는 대문자와 점을 보존한다(`Login.Api-V2`). **직접 손으로 만들지 말고 스크립트를 쓴다**:
   ```bash
   python "$NAMER" "<slug 또는 디렉터리명>" --taken "<herdr agent list 의 이름들, 쉼표 구분>"
   ```

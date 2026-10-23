@@ -1,13 +1,13 @@
-"""docs_helpers — per-App Intent 문서 · 레포 Task 문서 검사 helper.
+"""docs_helpers — Intent 문서(intent/<app>/) · 레포 Task 문서(.task/) 검사 helper.
 
 Subcommands:
-    check       docs/<App>/ 무결성 검사 — App 폴더 존재 + INT-CATALOG 최신 여부 (+ .task/ 가 있으면 task-catalog 최신 여부)
-    check-intent  Intent 문서(<App>-INT-<NNN>.md) 구조 검증 — rule set A·B
+    check       intent/<app>/ 무결성 검사 — App 폴더 존재 + App 카탈로그 · 상위 카탈로그 최신 여부 (+ .task/ 가 있으면 task-catalog 최신 여부)
+    check-intent  Intent 문서(<app>-int-<NNN>.md) 구조 검증 — rule set A·B
     intent-checklist  Intent 문서 검증 기준표(행·코드 facts·인용 표본) 생성 · critic 반환 검사
-    intent-catalog  docs/<App>/<App>-INT-CATALOG.md 생성·검사 (INTENT/ 에서 파생)
-    check-task  Task 문서(.task/TSK-<NNN>.md) 검증 — 형식 · 항목 · 대상 Intent 대조
+    intent-catalog  intent/<app>/intent-catalog.md 와 상위 카탈로그 intent/intent-app-catalog.md 생성·검사
+    check-task  Task 문서(.task/tsk-<NNN>.md) 검증 — 형식 · 항목 · 대상 Intent 대조
     task-catalog  .task/task-catalog.md 생성·검사 (.task/ 에서 파생)
-    ensure-exclude  문서 폴더 · .task/ · 작업 폴더를 이 clone 의 .git/info/exclude 에 올린다 (커밋하지 않는 설계 문서)
+    ensure-exclude  문서 폴더 · intent/ · .task/ · 작업 폴더를 이 clone 의 .git/info/exclude 에 올린다 (커밋하지 않는 설계 문서)
     intent-base  Intent 를 고치기 전 기준선 사본 .process/intent-base/<ID>.md 저장 · 소비 (requirement-spec · task-split)
     intent-diff  기준선과 지금 Intent 를 비교해 바뀐 항목(신규 · 변경 · 삭제)과 Task Scope 줄을 낸다
     mark-intent  Task Scope 대로 대상 Intent 에 진행 표시를 붙인다 (--remove 면 걷어 낸다)
@@ -15,8 +15,8 @@ Subcommands:
 
 파일을 쓰는 것은 `intent-catalog --write` · `task-catalog --write` · `ensure-exclude` · `intent-base` · `mark-intent` 뿐이고,
 나머지 서브커맨드는 read-only 다.
-문서 폴더는 docs·Docs 를 같은 폴더로 본다 (_docs_root) — 이 문서의 docs/ 는 둘 다를 뜻한다.
-Task 폴더는 레포 루트의 `.task/` 하나뿐이다 (소문자).
+Intent 폴더는 레포 루트 `intent/`, Task 폴더는 `.task/` 다 — 폴더 · 파일명 · 문서 ID 모두 소문자다
+(항목 번호 FR-1 · A-1 등만 대문자). 옛 표기(docs/<App>/INTENT/, TSK-001.md)는 읽지 않는다.
 
 Standard library only. Windows PowerShell 호환.
 """
@@ -40,9 +40,18 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 
 
-APP_CODE_PATTERN = re.compile(r"^[A-Z][A-Z0-9]*$")
+# App 이름 · Intent ID 의 App 부분 — 소문자 하나로 정한다. Intent 관련 패턴은 모두 이것에서 만든다.
+APP_RE = r"[a-z][a-z0-9]*"
+APP_CODE_PATTERN = re.compile(rf"^{APP_RE}$")
 
-INTENT_FILENAME_PATTERN = lambda app: re.compile(rf"^{re.escape(app)}-INT-(\d{{3}})\.md$")
+INTENT_FILENAME_PATTERN = lambda app: re.compile(rf"^{re.escape(app)}-int-(\d{{3}})\.md$")
+
+# 루트 Intent 폴더 · 카탈로그 이름. App 카탈로그는 intent/<app>/ 안, 상위 카탈로그는 intent/ 바로 아래.
+INTENT_DIR = "intent"
+INTENT_CATALOG_NAME = "intent-catalog.md"
+INTENT_APP_CATALOG_NAME = "intent-app-catalog.md"
+# Intent · 카탈로그 폴더에 둔 템플릿 사본은 문서가 아니다.
+TEMPLATE_SUFFIX = "-template.md"
 
 # ---------------------------------------------------------------------------
 # IO helpers
@@ -90,9 +99,17 @@ def _match_case(base: Path, rel: str | Path) -> Path:
     return cur
 
 
-def _docs_root(repo: Path) -> Path:
-    """repo 의 문서 폴더 — docs·Docs 어느 표기든 같은 폴더로 본다. 없으면 repo/docs."""
-    return _match_case(repo, "docs")
+def _exact_file(path: Path) -> bool:
+    """대소문자까지 같은 이름의 파일이 있는가 — 대소문자 무시 FS(Windows · macOS)의 is_file() 은
+    `Loader-INT-003.md` 가 있으면 `loader-int-003.md` 도 있다고 답한다. 옛 표기 파일을 없는 것으로 본다."""
+    try:
+        return path.is_file() and path.name in os.listdir(path.parent)
+    except OSError:
+        return False
+
+
+def _intent_root(repo: Path) -> Path:
+    return repo / INTENT_DIR
 
 
 # ---------------------------------------------------------------------------
@@ -118,12 +135,12 @@ def _format(r: CheckResult, repo: Path) -> str:
     return f"{r.level} {r.code} {r.message}"
 
 
-def _scan_docs_folders(repo: Path) -> list[str]:
-    docs = _docs_root(repo)
-    if not docs.is_dir():
+def _scan_intent_apps(repo: Path) -> list[str]:
+    root = _intent_root(repo)
+    if not root.is_dir():
         return []
     out: list[str] = []
-    for p in sorted(docs.iterdir()):
+    for p in sorted(root.iterdir()):
         if not p.is_dir():
             continue
         if p.name.startswith("_") or p.name.startswith("."):
@@ -136,16 +153,16 @@ def _scan_docs_folders(repo: Path) -> list[str]:
 
 def _check_app(repo: Path, app: str) -> list[CheckResult]:
     results: list[CheckResult] = []
-    docs_dir = _docs_root(repo) / app
-    if not docs_dir.is_dir():
-        results.append(CheckResult("FAIL", "APP_DIR", "missing", docs_dir))
+    app_dir = _intent_root(repo) / app
+    if not app_dir.is_dir():
+        results.append(CheckResult("FAIL", "APP_DIR", "missing", app_dir))
         return results
-    results.append(CheckResult("PASS", "APP_DIR", "exists", docs_dir))
+    results.append(CheckResult("PASS", "APP_DIR", "exists", app_dir))
 
-    # INTENT 를 실제로 쓰는 repo 에서만 검사한다 — INTENT/ 가 비어 있으면 카탈로그를 요구하지 않는다.
+    # Intent 를 실제로 쓰는 App 에서만 검사한다 — 폴더가 비어 있으면 카탈로그를 요구하지 않는다.
     intent_rows, _ = _collect_intent_rows(repo, app)
     if intent_rows:
-        int_catalog_path = docs_dir / f"{app}-INT-CATALOG.md"
+        int_catalog_path = app_dir / INTENT_CATALOG_NAME
         expected_catalog = _render_intent_catalog(app, intent_rows)
         actual_catalog = _read_text(int_catalog_path)
         if actual_catalog is None:
@@ -167,16 +184,18 @@ def _check_app(repo: Path, app: str) -> list[CheckResult]:
 def cmd_check(repo: Path, app: str | None) -> int:
     apps: list[str]
     if app:
-        apps = [app]
+        apps = [app.lower()]
     else:
-        apps = _scan_docs_folders(repo)
+        apps = _scan_intent_apps(repo)
         if not apps:
-            print("FAIL APPS no app found via docs/<App>/ scan")
+            print("FAIL APPS no app found via intent/<app>/ scan")
             return 2
 
     results: list[CheckResult] = []
     for a in apps:
         results.extend(_check_app(repo, a))
+    # 상위 카탈로그는 레포 단위다 — --app 을 줘도 검사한다 (Intent 가 없으면 결과가 없다).
+    results.extend(_check_app_catalog(repo))
     # Task 는 App 이 아니라 레포 단위다 — --app 을 줘도 검사한다 (Task 가 없으면 결과가 없다).
     results.extend(_check_tasks(repo))
 
@@ -245,7 +264,7 @@ class IntentItem:
     refs: list[str]           # e.g. ["D1", "C2"], ["FR-3", "OS"]; 없으면 []
     line: int                 # 파일 내 1-based 줄번호
     body: str = ""            # id 접두 뒤 문장 전체(refs 그룹 포함, 진행 표시 제외) — Task Scope 사본과 대조
-    marker: tuple[str, str] | None = None   # 줄 끝 진행 표시 ("TSK-012", "진행 중"|"삭제 예정"); 없으면 None
+    marker: tuple[str, str] | None = None   # 줄 끝 진행 표시 ("tsk-012", "진행 중"|"삭제 예정"); 없으면 None
 
 
 @dataclass
@@ -282,7 +301,7 @@ INTENT_SECTION_FOR_KIND = {
 
 INTENT_OUT_OF_SCOPE_PATTERN = re.compile(r"^- Out of scope:\s*(.*)$", re.MULTILINE)
 # Task 가 바꾸는 항목의 줄 끝(refs 그룹 뒤)에 붙는 진행 표시 — refs 를 떼기 전에 먼저 뗀다.
-PROGRESS_MARKER_PATTERN = re.compile(r"\s*\[(TSK-\d{3}) (진행 중|삭제 예정)\]\s*$")
+PROGRESS_MARKER_PATTERN = re.compile(r"\s*\[(tsk-\d{3}) (진행 중|삭제 예정)\]\s*$")
 INTENT_REF_GROUP_PATTERN = re.compile(r"^(.*)\(([^()]*)\)\s*$")
 INTENT_REFS_INNER_PATTERN = re.compile(
     r"^(?:D\d+|C\d+|FR-\d+|OS)(?:,\s*(?:D\d+|C\d+|FR-\d+|OS))*$"
@@ -466,8 +485,8 @@ INTENT_STATUSES = ("active", "retired")
 INTENT_PART1_SECTIONS = ("Problem", "Outcome", "Affected", "Constraints", "Decisions", "Open questions")
 INTENT_PART2_SECTIONS = ("Functional requirements", "Edge cases", "Error cases")
 
-INTENT_TITLE_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9]*-INT-\d{3} — .+$")
-INTENT_TITLE_PREFIX_PATTERN = re.compile(r"^([A-Za-z][A-Za-z0-9]*-INT-\d{3})(?:\s|$)")
+INTENT_TITLE_PATTERN = re.compile(rf"^{APP_RE}-int-\d{{3}} — .+$")
+INTENT_TITLE_PREFIX_PATTERN = re.compile(rf"^({APP_RE}-int-\d{{3}})(?:\s|$)")
 INTENT_AUTHOR_DATE_PATTERN = re.compile(r"^.+ · \d{4}-\d{2}-\d{2}$")
 INTENT_GATE_ROW_PATTERN = re.compile(r"^(PASS|FAIL|OVERRIDE|SKIPPED) — .+$")   # Task `검증` 행
 INTENT_FEATURE_ID_PATTERN = re.compile(r"^F\d{3}$")
@@ -495,7 +514,7 @@ def _intent_rule_template_warning(doc: IntentDoc, ctx: _IntentCtx) -> list[Check
 def _intent_rule_title(doc: IntentDoc, ctx: _IntentCtx) -> list[CheckResult]:
     if INTENT_TITLE_PATTERN.match(doc.title):
         return [CheckResult("PASS", "INT_TITLE", f"제목 형식 일치: {doc.title}", ctx.path)]
-    return [CheckResult("FAIL", "INT_TITLE", f"제목이 '<App>-INT-<NNN> — <기능 이름>' 형식이 아님: {doc.title!r}", ctx.path)]
+    return [CheckResult("FAIL", "INT_TITLE", f"제목이 '<app>-int-<NNN> — <기능 이름>' 형식이 아님: {doc.title!r}", ctx.path)]
 
 
 def _intent_rule_id_filename(doc: IntentDoc, ctx: _IntentCtx) -> list[CheckResult]:
@@ -569,12 +588,12 @@ def _intent_rule_related(doc: IntentDoc, ctx: _IntentCtx) -> list[CheckResult]:
     problems: list[str] = []
     bad = [t for t in tokens if not INTENT_ID_PATTERN.match(t)]
     if bad:
-        problems.append(f"'<App>-INT-<NNN>' 을 ' · ' 로 나열한 형식이 아님: {bad}")
+        problems.append(f"'<app>-int-<NNN>' 을 ' · ' 로 나열한 형식이 아님: {bad}")
     if me in tokens:
         problems.append("자기 자신을 넣음")
     if problems:
         return [CheckResult("FAIL", "INT_RELATED", ", ".join(problems), ctx.path)]
-    missing = [t for t in tokens if (p := _intent_path(ctx.repo, t)) is None or not p.is_file()]
+    missing = [t for t in tokens if (p := _intent_path(ctx.repo, t)) is None or not _exact_file(p)]
     if missing:
         return [CheckResult("WARN", "INT_RELATED", f"관련 Intent 파일이 없다: {missing}", ctx.path)]
     return [CheckResult("PASS", "INT_RELATED", f"관련 Intent: {value}", ctx.path)]
@@ -840,7 +859,7 @@ INTENT_RULES = (
 
 def _check_intent_file(repo: Path, path: Path) -> list[CheckResult]:
     if not path.is_absolute():
-        path = _match_case(repo, path)   # docs·Docs 표기 무관
+        path = repo / path
     path = path.resolve()
 
     results: list[CheckResult] = []
@@ -927,7 +946,7 @@ EXPECTED_KINDS: tuple[str, ...] = ("요구", "완료조건", "결정", "제약",
 # 대상 — 한 인터뷰가 Intent 여러 개(계약을 주고받는 App 마다)를 쓸 때 그 항목이 담길 Intent. 없으면 모든 Intent.
 EXPECTED_LINE_PATTERN = re.compile(
     r"^- (EXP-\d+)\. (.+) — 출처: (Q\d+/A\d+) — 종류: (요구|완료조건|결정|제약|제외|프로세스|배경)"
-    r"(?: — 대상: ([A-Za-z][A-Za-z0-9]*-INT-\d{3}(?: · [A-Za-z][A-Za-z0-9]*-INT-\d{3})*))?$"
+    rf"(?: — 대상: ({APP_RE}-int-\d{{3}}(?: · {APP_RE}-int-\d{{3}})*))?$"
 )
 
 
@@ -1271,7 +1290,7 @@ def cmd_intent_checklist(args: argparse.Namespace) -> int:
     repo = _resolve_repo(args.repo)
     path = Path(args.file)
     if not path.is_absolute():
-        path = _match_case(repo, path)   # docs·Docs 표기 무관
+        path = repo / path
     path = path.resolve()
     text = _read_text(path)
     if text is None:
@@ -1356,7 +1375,7 @@ def cmd_intent_checklist(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
-# intent-catalog (docs/<App>/<App>-INT-CATALOG.md 생성 · 검사)
+# intent-catalog (intent/<app>/intent-catalog.md · intent/intent-app-catalog.md 생성 · 검사)
 # ---------------------------------------------------------------------------
 
 
@@ -1381,7 +1400,7 @@ class CatalogRow:
     def to_dict(self) -> dict:
         return {
             "id": self.intent_id,
-            "file": f"INTENT/{self.stem}.md",
+            "file": f"{self.stem}.md",
             "title": self.title,
             "feature": self.feature,
             "status": self.status,
@@ -1421,14 +1440,16 @@ def _intent_marker_tasks(doc: IntentDoc) -> list[str]:
 
 
 def _collect_intent_rows(repo: Path, app: str) -> tuple[list[CatalogRow], list[str]]:
-    """docs/<App>/INTENT/<App>-INT-<NNN>.md 를 파싱해 카탈로그 행으로 만든다."""
-    intent_dir = _docs_root(repo) / app / "INTENT"
+    """intent/<app>/<app>-int-<NNN>.md 를 파싱해 카탈로그 행으로 만든다. 카탈로그 자신과 템플릿 사본은 건너뛴다."""
+    intent_dir = _intent_root(repo) / app
     rows: list[CatalogRow] = []
     skipped: list[str] = []
     if not intent_dir.is_dir():
         return rows, skipped
     pat = INTENT_FILENAME_PATTERN(app)
     for f in sorted(intent_dir.glob("*.md")):
+        if f.name == INTENT_CATALOG_NAME or f.name.endswith(TEMPLATE_SUFFIX):
+            continue
         if not pat.match(f.name):
             skipped.append(f.name)
             continue
@@ -1456,20 +1477,20 @@ def _collect_intent_rows(repo: Path, app: str) -> tuple[list[CatalogRow], list[s
 def _render_intent_catalog(app: str, rows: list[CatalogRow]) -> str:
     """카탈로그 마크다운 전문. 타임스탬프를 넣지 않는다 — stale 비교가 항상 불일치가 되기 때문.
 
-    `진행 중 Task` 는 Task 문서로 잇는다 — 카탈로그(docs/<App>/)에서 레포 루트의 .task/ 까지 두 단계 위다.
+    `진행 중 Task` 는 Task 문서로 잇는다 — 카탈로그(intent/<app>/)에서 레포 루트의 .task/ 까지 두 단계 위다.
     """
     out = [
-        f"# {app}-INT-CATALOG — {app} Intent Catalog",
+        f"# {app}-intent-catalog — {app} Intent Catalog",
         "",
         f"> **생성물** — `docs_helpers.py intent-catalog --repo . --app {app} --write` 가 "
-        "`INTENT/` 를 훑어 다시 쓴다. **직접 고치지 않는다** — 값을 바꾸려면 해당 Intent 문서를 "
+        f"`intent/{app}/` 를 훑어 다시 쓴다. **직접 고치지 않는다** — 값을 바꾸려면 해당 Intent 문서를 "
         f"고치고 재생성한다. `check --app {app}` 이 불일치를 FAIL 로 잡는다.",
         "",
         "| 항목 | 값 |",
         "|---|---|",
-        f"| 문서 ID | {app}-INT-CATALOG |",
+        f"| 문서 ID | {app}-intent-catalog |",
         "| 생성 | docs_helpers.py intent-catalog |",
-        "| 대상 | [INTENT 폴더](INTENT/) |",
+        f"| 대상 | [{app} 폴더](./) |",
         "",
         "| Intent | 제목 | 기능 ID | 상태 | 진행 중 Task | 요약 | 규모 |",
         "|---|---|---|---|---|---|---|",
@@ -1477,7 +1498,7 @@ def _render_intent_catalog(app: str, rows: list[CatalogRow]) -> str:
     for r in rows:
         tasks = " · ".join(f"[{t}](../../{TASK_DIR}/{t}.md)" for t in r.tasks) or "none"
         out.append(
-            f"| [{_md_cell(r.intent_id)}](INTENT/{r.stem}.md) | {_md_cell(r.title)} | "
+            f"| [{_md_cell(r.intent_id)}]({r.stem}.md) | {_md_cell(r.title)} | "
             f"{_md_cell(r.feature)} | {_md_cell(r.status)} | {tasks} | "
             f"{_md_cell(r.summary)} | FR {r.fr} · E {r.e} · X {r.x} |"
         )
@@ -1488,10 +1509,108 @@ def _render_intent_catalog(app: str, rows: list[CatalogRow]) -> str:
 def _catalog_row_index(text: str) -> dict[str, str]:
     idx: dict[str, str] = {}
     for line in text.split("\n"):
-        m = re.match(r"^\|\s*\[([^\]]+)\]\(INTENT/", line)
+        m = re.match(rf"^\|\s*\[([^\]]+)\]\({APP_RE}-int-\d{{3}}\.md\)", line)
         if m is not None:
             idx[m.group(1)] = line.strip()
     return idx
+
+
+@dataclass
+class AppCatalogRow:
+    """상위 카탈로그 한 행 — App 하나. App 카탈로그와 같은 Intent 행에서 센다."""
+
+    app: str
+    count: int
+    active: int
+    retired: int
+
+    def to_dict(self) -> dict:
+        return {
+            "app": self.app,
+            "catalog": f"{self.app}/{INTENT_CATALOG_NAME}",
+            "count": self.count,
+            "active": self.active,
+            "retired": self.retired,
+        }
+
+
+def _collect_app_rows(repo: Path) -> list[AppCatalogRow]:
+    """intent/ 아래 App 마다 Intent 수를 센다. Intent 가 하나도 없는 App 폴더는 넣지 않는다."""
+    out: list[AppCatalogRow] = []
+    for app in _scan_intent_apps(repo):
+        rows, _ = _collect_intent_rows(repo, app)
+        if not rows:
+            continue
+        out.append(AppCatalogRow(
+            app=app,
+            count=len(rows),
+            active=sum(1 for r in rows if r.status == "active"),
+            retired=sum(1 for r in rows if r.status == "retired"),
+        ))
+    return out
+
+
+def _render_app_catalog(rows: list[AppCatalogRow]) -> str:
+    """상위 카탈로그 전문 — CLAUDE.md 가 링크하는 Intent 진입점. 타임스탬프를 넣지 않는다."""
+    out = [
+        "# intent-app-catalog — Intent App Catalog",
+        "",
+        "> **생성물** — `docs_helpers.py intent-catalog --repo . --app <app> --write` 가 App 카탈로그와 함께 "
+        "`intent/` 를 훑어 다시 쓴다. **직접 고치지 않는다** — Intent 문서를 고치고 재생성한다. "
+        "`check` 가 불일치를 FAIL 로 잡는다.",
+        "",
+        "| 항목 | 값 |",
+        "|---|---|",
+        "| 문서 ID | intent-app-catalog |",
+        "| 생성 | docs_helpers.py intent-catalog |",
+        f"| 대상 | [{INTENT_DIR} 폴더](./) |",
+        "",
+        "| App | 카탈로그 | Intents | active | retired |",
+        "|---|---|---|---|---|",
+    ]
+    for r in rows:
+        out.append(
+            f"| {r.app} | [{r.app}-intent-catalog]({r.app}/{INTENT_CATALOG_NAME}) | "
+            f"{r.count} | {r.active} | {r.retired} |"
+        )
+    out += ["", f"apps: {len(rows)}", ""]
+    return "\n".join(out)
+
+
+def _app_catalog_row_index(text: str) -> dict[str, str]:
+    idx: dict[str, str] = {}
+    for line in text.split("\n"):
+        m = re.match(rf"^\|\s*({APP_RE})\s*\|\s*\[", line)
+        if m is not None:
+            idx[m.group(1)] = line.strip()
+    return idx
+
+
+def _app_catalog_path(repo: Path) -> Path:
+    return _intent_root(repo) / INTENT_APP_CATALOG_NAME
+
+
+def _check_app_catalog(repo: Path) -> list[CheckResult]:
+    """check 의 INT_APP_CATALOG — Intent 가 하나도 없으면 아무 줄도 내지 않는다."""
+    rows = _collect_app_rows(repo)
+    if not rows:
+        return []
+    path = _app_catalog_path(repo)
+    actual = _read_text(path)
+    if actual is None:
+        return [CheckResult("FAIL", "INT_APP_CATALOG", "missing — intent-catalog --write 로 생성", path)]
+    if actual != _render_app_catalog(rows):
+        return [CheckResult("FAIL", "INT_APP_CATALOG", "stale — intent-catalog --write 로 재생성", path)]
+    return [CheckResult("PASS", "INT_APP_CATALOG", f"{len(rows)} apps 최신", path)]
+
+
+def _write_app_catalog(repo: Path) -> tuple[str, int]:
+    """상위 카탈로그를 다시 쓴다 — (레포 상대 경로, App 수). Intent 가 없으면 파일을 지우지는 않고 빈 표를 쓴다."""
+    rows = _collect_app_rows(repo)
+    path = _app_catalog_path(repo)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(_render_app_catalog(rows), encoding="utf-8", newline="\n")
+    return _relpath_for(path, repo), len(rows)
 
 
 def _catalog_diff(actual: str, expected: str, index=_catalog_row_index, tail: str = "intents") -> list[str]:
@@ -1511,17 +1630,23 @@ def cmd_intent_catalog(repo: Path, args: argparse.Namespace) -> int:
     `--json` 은 사람이 읽는 출력 대신 같은 결과를 JSON 으로 낼 뿐이다.
     (cmd_intent_checklist 가 `--check-return` 을 `--json` 보다 먼저 처리하고, cmd_check_intent 가
     `--json` 출력에서도 실패 exit code 를 유지하는 것과 같은 관례.)"""
-    app = args.app
+    app = args.app.lower()   # App 이름은 소문자다 — `--app LOADER` 도 받아 준다
     if args.write and args.check:
         print("FAIL ARGS --write 와 --check 는 함께 쓸 수 없다", file=sys.stderr)
         return 2
-    docs_dir = _docs_root(repo) / app
-    if not docs_dir.is_dir():
-        print(f"FAIL ARGS --app not a directory: {docs_dir}", file=sys.stderr)
+    if not APP_CODE_PATTERN.match(app):
+        print(f"FAIL ARGS --app 은 소문자 App 이름이다 ({APP_RE}): {args.app!r}", file=sys.stderr)
+        return 2
+    app_dir = _intent_root(repo) / app
+    if not app_dir.is_dir():
+        print(f"FAIL ARGS --app not a directory: {app_dir}", file=sys.stderr)
         return 2
     rows, skipped = _collect_intent_rows(repo, app)
-    catalog_path = docs_dir / f"{app}-INT-CATALOG.md"
+    catalog_path = app_dir / INTENT_CATALOG_NAME
     rel = _relpath_for(catalog_path, repo)
+    app_rows = _collect_app_rows(repo)
+    app_path = _app_catalog_path(repo)
+    app_rel = _relpath_for(app_path, repo)
     # 모든 모드가 공유하는 파생 내용. 마크다운 전문은 실제로 필요한 분기에서만 렌더한다.
     payload = {
         "app": app,
@@ -1529,40 +1654,54 @@ def cmd_intent_catalog(repo: Path, args: argparse.Namespace) -> int:
         "count": len(rows),
         "intents": [r.to_dict() for r in rows],
         "skipped": skipped,
+        "app_catalog": {"catalog": app_rel, "count": len(app_rows), "apps": [r.to_dict() for r in app_rows]},
     }
 
     if args.check:
-        text = _render_intent_catalog(app, rows)
-        actual = _read_text(catalog_path)
-        exists = actual is not None
-        if not exists:
-            stale, diff = True, []
-        elif actual != text:
-            stale, diff = True, _catalog_diff(actual, text)
-        else:
-            stale, diff = False, []
+        # App 카탈로그와 상위 카탈로그를 같이 본다 — 둘 중 하나라도 낡았으면 exit 1.
+        checks = []
+        for path, label, text, index, tail in (
+            (catalog_path, rel, _render_intent_catalog(app, rows), _catalog_row_index, "intents"),
+            (app_path, app_rel, _render_app_catalog(app_rows), _app_catalog_row_index, "apps"),
+        ):
+            actual = _read_text(path)
+            exists = actual is not None
+            if not exists:
+                stale, diff = True, []
+            elif actual != text:
+                stale, diff = True, _catalog_diff(actual, text, index=index, tail=tail)
+            else:
+                stale, diff = False, []
+            checks.append((label, exists, stale, diff))
+        stale_any = any(c[2] for c in checks)
         if args.json:
-            payload["check"] = {"exists": exists, "stale": stale, "diff": diff}
+            (_, exists, stale, diff), (_, a_exists, a_stale, a_diff) = checks
+            payload["check"] = {"exists": exists, "stale": stale, "diff": diff,
+                                "app_catalog": {"exists": a_exists, "stale": a_stale, "diff": a_diff}}
             print(json.dumps(payload, ensure_ascii=False, indent=2))
-        elif not exists:
-            print(f"STALE missing: {rel}")
-        elif stale:
-            for line in diff:
-                print(line)
-            print(f"STALE {rel}")
-        else:
+        elif not stale_any:
             print("OK")
             print(f"intents: {len(rows)}")
-        return 1 if stale else 0
+            print(f"apps: {len(app_rows)}")
+        else:
+            for label, exists, stale, diff in checks:
+                if not exists:
+                    print(f"STALE missing: {label}")
+                elif stale:
+                    for line in diff:
+                        print(line)
+                    print(f"STALE {label}")
+        return 1 if stale_any else 0
 
     if args.write:
-        text = _render_intent_catalog(app, rows)
-        catalog_path.write_text(text, encoding="utf-8", newline="\n")
+        catalog_path.write_text(_render_intent_catalog(app, rows), encoding="utf-8", newline="\n")
+        app_rel, n_apps = _write_app_catalog(repo)
         if args.json:
-            payload["write"] = {"written": True, "path": rel}
+            payload["write"] = {"written": True, "path": rel, "app_catalog": app_rel}
             print(json.dumps(payload, ensure_ascii=False, indent=2))
         else:
             print(f"WROTE {rel} · intents: {len(rows)}")
+            print(f"WROTE {app_rel} · apps: {n_apps}")
         return 0
 
     if args.json:
@@ -1574,7 +1713,7 @@ def cmd_intent_catalog(repo: Path, args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
-# Task — 레포 루트 .task/TSK-<NNN>.md (파싱 · check-task · task-catalog)
+# Task — 레포 루트 .task/tsk-<NNN>.md (파싱 · check-task · task-catalog)
 #
 # Task 는 작업 계약서다. Intent(기능 문서)의 어느 항목을 어떻게 바꾸는지(Scope 사본),
 # 무엇이 되면 완료인지(Acceptance)를 정한다. App 하나에 묶이지 않는다.
@@ -1583,10 +1722,10 @@ def cmd_intent_catalog(repo: Path, args: argparse.Namespace) -> int:
 
 TASK_DIR = ".task"
 TASK_CATALOG_NAME = "task-catalog.md"
-TASK_FILENAME_PATTERN = re.compile(r"^TSK-(\d{3})\.md$")
-TASK_ID_PATTERN = re.compile(r"^TSK-\d{3}$")
-TASK_TITLE_PATTERN = re.compile(r"^TSK-\d{3} — .+$")
-TASK_TITLE_PREFIX_PATTERN = re.compile(r"^(TSK-\d{3})(?:\s|$)")
+TASK_FILENAME_PATTERN = re.compile(r"^tsk-(\d{3})\.md$")
+TASK_ID_PATTERN = re.compile(r"^tsk-\d{3}$")
+TASK_TITLE_PATTERN = re.compile(r"^tsk-\d{3} — .+$")
+TASK_TITLE_PREFIX_PATTERN = re.compile(r"^(tsk-\d{3})(?:\s|$)")
 TASK_META_EXPECTED = ["문서 ID", "유형", "상태", "대상 Intent", "선행 Task", "작성", "승인", "검증"]
 # 브랜치 · 분기점은 Task 가 아니라 워크트리(/worktree-init <이름>)가 정한다 — 한 워크트리에서 Task 여러 개를 개발한다.
 TASK_HANDOFF_EXPECTED = ["repo · app", "손대지 말 영역", "완료 보고 방식"]
@@ -1610,13 +1749,13 @@ TASK_ACCEPTANCE_PATTERN = re.compile(r"^- (?:\[([ xX])\]\s*)?(A)-(\d+)\.\s*(.*)$
 SPLIT_MAX_SCOPE = 7
 SPLIT_MAX_FR = 3
 
-INTENT_ID_PATTERN = re.compile(r"^([A-Za-z][A-Za-z0-9]*)-INT-\d{3}$")
+INTENT_ID_PATTERN = re.compile(rf"^({APP_RE})-int-\d{{3}}$")
 TASK_SCOPE_LINE_PATTERN = re.compile(
-    r"^- (신규|변경|삭제|위반|보존) · ([A-Za-z][A-Za-z0-9]*-INT-\d{3}) ((?:FR|E|X)-\d+)\. (.+)$"
+    rf"^- (신규|변경|삭제|위반|보존) · ({APP_RE}-int-\d{{3}}) ((?:FR|E|X)-\d+)\. (.+)$"
 )
 TASK_SCOPE_PREV_PATTERN = re.compile(r"^\s+- 이전: (.+)$")
 TASK_RISK_PATTERN = re.compile(r"^- R-(\d+)\.\s*(.*)$")
-TASK_REF_ITEM_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9]*-INT-\d{3} (?:FR|E|X)-\d+$")
+TASK_REF_ITEM_PATTERN = re.compile(rf"^{APP_RE}-int-\d{{3}} (?:FR|E|X)-\d+$")
 TASK_REF_RISK_PATTERN = re.compile(r"^R-\d+$")
 
 # 이름 규칙 — 내부 코드 이름은 쓰지 않고, 밖에서 보이는 이름만 바로 앞에 종류를 붙여 백틱으로 쓴다.
@@ -1645,7 +1784,7 @@ TASK_NAME_IDENT_PATTERN = re.compile(
 @dataclass
 class TaskScopeItem:
     kind: str            # 신규 | 변경 | 삭제 | 위반 | 보존
-    intent_id: str       # "LOADER-INT-003"
+    intent_id: str       # "loader-int-003"
     item_id: str         # "FR-2"
     text: str            # Intent 문장 사본 (refs 그룹 포함, 진행 표시 제외)
     prev: str | None     # 변경 항목의 `이전` 문장
@@ -1849,11 +1988,11 @@ def _parse_task(text: str) -> TaskDoc:
 
 
 def _intent_path(repo: Path, intent_id: str) -> Path | None:
-    """Intent ID → docs/<App>/INTENT/<ID>.md 의 디스크 표기 경로 (docs·Docs 무관). ID 형식이 아니면 None."""
+    """Intent ID → intent/<app>/<ID>.md. ID 형식이 아니면 None. 존재 판정은 _exact_file 로 한다."""
     m = INTENT_ID_PATTERN.match(intent_id)
     if m is None:
         return None
-    return _match_case(repo, Path("docs") / m.group(1) / "INTENT" / f"{intent_id}.md")
+    return repo / INTENT_DIR / m.group(1) / f"{intent_id}.md"
 
 
 def _intent_item_by_id(doc: IntentDoc, item_id: str) -> IntentItem | None:
@@ -1879,7 +2018,7 @@ class _TaskCtx:
 
 
 def _load_tasks(repo: Path) -> dict[str, TaskDoc]:
-    """.task/TSK-<NNN>.md 전부를 파싱한다 (stem -> TaskDoc). 읽지 못한 파일은 건너뛴다."""
+    """.task/tsk-<NNN>.md 전부를 파싱한다 (stem -> TaskDoc). 읽지 못한 파일은 건너뛴다."""
     out: dict[str, TaskDoc] = {}
     task_dir = repo / TASK_DIR
     if not task_dir.is_dir():
@@ -1921,7 +2060,7 @@ def _task_rule_template_warning(doc: TaskDoc, ctx: _TaskCtx) -> list[CheckResult
 def _task_rule_title(doc: TaskDoc, ctx: _TaskCtx) -> list[CheckResult]:
     if TASK_TITLE_PATTERN.match(doc.title):
         return [CheckResult("PASS", "TSK_TITLE", f"제목 형식 일치: {doc.title}", ctx.path)]
-    return [CheckResult("FAIL", "TSK_TITLE", f"제목이 'TSK-<NNN> — <제목>' 형식이 아님: {doc.title!r}", ctx.path)]
+    return [CheckResult("FAIL", "TSK_TITLE", f"제목이 'tsk-<NNN> — <제목>' 형식이 아님: {doc.title!r}", ctx.path)]
 
 
 def _task_rule_id_filename(doc: TaskDoc, ctx: _TaskCtx) -> list[CheckResult]:
@@ -1944,7 +2083,7 @@ def _task_rule_location(doc: TaskDoc, ctx: _TaskCtx) -> list[CheckResult]:
         return [CheckResult("PASS", "TSK_LOCATION", f"위치 일치: {TASK_DIR}/", ctx.path)]
     return [CheckResult(
         "FAIL", "TSK_LOCATION",
-        f"Task 는 레포 루트 {TASK_DIR}/TSK-<NNN>.md 에 둔다: {_relpath_for(ctx.path, ctx.repo)}",
+        f"Task 는 레포 루트 {TASK_DIR}/tsk-<NNN>.md 에 둔다: {_relpath_for(ctx.path, ctx.repo)}",
         ctx.path,
     )]
 
@@ -2009,7 +2148,7 @@ def _task_rule_gate_row(doc: TaskDoc, ctx: _TaskCtx) -> list[CheckResult]:
 
 
 def _task_rule_targets(doc: TaskDoc, ctx: _TaskCtx) -> list[CheckResult]:
-    """대상 Intent 는 `<App>-INT-<NNN>` 을 ` · ` 로 나열한다 — App 이 달라도 된다. none 은 Intent 가 없는 영역의 리팩토링만."""
+    """대상 Intent 는 `<app>-int-<NNN>` 을 ` · ` 로 나열한다 — App 이 달라도 된다. none 은 Intent 가 없는 영역의 리팩토링만."""
     value = (doc.meta.get("대상 Intent") or "").strip()
     problems: list[str] = []
     if not value:
@@ -2021,7 +2160,7 @@ def _task_rule_targets(doc: TaskDoc, ctx: _TaskCtx) -> list[CheckResult]:
         tokens = [t.strip() for t in value.split("·")]
         bad = [t for t in tokens if not INTENT_ID_PATTERN.match(t)]
         if bad:
-            problems.append(f"'<App>-INT-<NNN>' 를 ' · ' 로 나열한 형식이 아님: {bad}")
+            problems.append(f"'<app>-int-<NNN>' 를 ' · ' 로 나열한 형식이 아님: {bad}")
         dup = sorted({t for t in tokens if tokens.count(t) > 1})
         if dup:
             problems.append(f"중복: {dup}")
@@ -2072,7 +2211,7 @@ def _task_rule_depends(doc: TaskDoc, ctx: _TaskCtx) -> list[CheckResult]:
         problems.append("값이 비어 있음 — 없으면 none")
     bad = [t for t in tokens if not TASK_ID_PATTERN.match(t)]
     if bad:
-        problems.append(f"'TSK-<NNN>' 을 ' · ' 로 나열한 형식이 아님: {bad}")
+        problems.append(f"'tsk-<NNN>' 을 ' · ' 로 나열한 형식이 아님: {bad}")
     if me in tokens:
         problems.append("자기 자신을 선행으로 둠")
     dup = sorted({t for t in tokens if tokens.count(t) > 1})
@@ -2155,11 +2294,11 @@ def _task_rule_depends_order(doc: TaskDoc, ctx: _TaskCtx) -> list[CheckResult]:
 
 
 def _task_rule_scope_format(doc: TaskDoc, ctx: _TaskCtx) -> list[CheckResult]:
-    """Scope 는 `- <변경> · <App>-INT-<NNN> <항목 ID>. <Intent 문장>` 줄과 `이전` · `Out of scope` 줄로만 이뤄진다."""
+    """Scope 는 `- <변경> · <app>-int-<NNN> <항목 ID>. <Intent 문장>` 줄과 `이전` · `Out of scope` 줄로만 이뤄진다."""
     problems: list[str] = []
     if doc.scope_bad_lines:
         problems.append(
-            f"형식 밖 줄 {doc.scope_bad_lines} — '- <변경> · <App>-INT-<NNN> <항목 ID>. <Intent 문장>'"
+            f"형식 밖 줄 {doc.scope_bad_lines} — '- <변경> · <app>-int-<NNN> <항목 ID>. <Intent 문장>'"
         )
     if doc.targets and not doc.scope:
         problems.append("대상 Intent 가 있는데 Scope 항목이 없음")
@@ -2258,7 +2397,7 @@ def _task_rule_acceptance_type(doc: TaskDoc, ctx: _TaskCtx) -> list[CheckResult]
 
 
 def _task_rule_ref_format(doc: TaskDoc, ctx: _TaskCtx) -> list[CheckResult]:
-    """A 끝 괄호의 근거는 `<App>-INT-<NNN> <항목 ID>` · `R-n` · `OS` · `Goal` 뿐이다 — App 접두 없는 `FR-4` 는 여러 App 에 걸친 Task 에서 모호하다."""
+    """A 끝 괄호의 근거는 `<app>-int-<NNN> <항목 ID>` · `R-n` · `OS` · `Goal` 뿐이다 — App 접두 없는 `FR-4` 는 여러 App 에 걸친 Task 에서 모호하다."""
     bad: list[str] = []
     for it in doc.acceptance:
         if not it.has_refs:
@@ -2270,7 +2409,7 @@ def _task_rule_ref_format(doc: TaskDoc, ctx: _TaskCtx) -> list[CheckResult]:
     if bad:
         return [CheckResult(
             "FAIL", "TSK_REF_FORMAT",
-            f"근거 형식 밖: {bad} — '<App>-INT-<NNN> <항목 ID>' · 'R-n' · 'OS' · 'Goal'",
+            f"근거 형식 밖: {bad} — '<app>-int-<NNN> <항목 ID>' · 'R-n' · 'OS' · 'Goal'",
             ctx.path,
         )]
     return [CheckResult("PASS", "TSK_REF_FORMAT", "A 근거 형식 일치", ctx.path)]
@@ -2584,7 +2723,7 @@ TASK_RULES = (
 
 def _check_task_file(repo: Path, path: Path) -> list[CheckResult]:
     if not path.is_absolute():
-        path = _match_case(repo, path)
+        path = repo / path
     path = path.resolve()
 
     results: list[CheckResult] = []
@@ -2601,7 +2740,7 @@ def _check_task_file(repo: Path, path: Path) -> list[CheckResult]:
     for intent_id in doc.targets:
         p = _intent_path(repo, intent_id)
         intent_paths[intent_id] = p
-        intent_text = _read_text(p) if p is not None else None
+        intent_text = _read_text(p) if p is not None and _exact_file(p) else None
         intents[intent_id] = _parse_intent(intent_text) if intent_text is not None else None
     ctx = _TaskCtx(repo=repo.resolve(), path=path, stem=path.stem, intents=intents, intent_paths=intent_paths)
     for rule in TASK_RULES:
@@ -2656,7 +2795,7 @@ def _task_short_title(doc: TaskDoc, task_id: str) -> str:
 
 
 def _collect_task_rows(repo: Path) -> tuple[list[TaskCatalogRow], list[str]]:
-    """.task/TSK-<NNN>.md 를 파싱해 카탈로그 행으로 만든다. 카탈로그 자신은 건너뛴다."""
+    """.task/tsk-<NNN>.md 를 파싱해 카탈로그 행으로 만든다. 카탈로그 자신은 건너뛴다."""
     task_dir = repo / TASK_DIR
     rows: list[TaskCatalogRow] = []
     skipped: list[str] = []
@@ -2681,15 +2820,14 @@ def _collect_task_rows(repo: Path) -> tuple[list[TaskCatalogRow], list[str]]:
                 if not token:
                     continue
                 p = _intent_path(repo, token)
-                # 실제 디스크 표기(docs·Docs)로 링크한다 — GitHub · Linux 는 대소문자를 구분한다.
-                link = "../" + p.relative_to(repo).as_posix() if p is not None and p.is_file() else None
+                link = f"../{INTENT_DIR}/{p.parent.name}/{p.name}" if p is not None and _exact_file(p) else None
                 links.append((token, link))
         depends = (doc.meta.get("선행 Task") or "").strip()
         depend_links: list[tuple[str, str | None]] = []
         if depends and depends != "none":
             for token in (t.strip() for t in depends.split("·")):
                 if token:
-                    exists = TASK_ID_PATTERN.match(token) and (task_dir / f"{token}.md").is_file()
+                    exists = TASK_ID_PATTERN.match(token) and _exact_file(task_dir / f"{token}.md")
                     depend_links.append((token, f"{token}.md" if exists else None))
         rows.append(TaskCatalogRow(
             task_id=task_id,
@@ -2718,7 +2856,7 @@ def _task_links_cell(raw: str, links: list[tuple[str, str | None]]) -> str:
 def _render_task_catalog(rows: list[TaskCatalogRow]) -> str:
     """카탈로그 마크다운 전문. 타임스탬프를 넣지 않는다 — stale 비교가 항상 불일치가 되기 때문."""
     out = [
-        "# TASK-CATALOG — Task Catalog",
+        "# task-catalog — Task Catalog",
         "",
         "> **생성물** — `docs_helpers.py task-catalog --repo . --write` 가 `.task/` 를 훑어 다시 쓴다. "
         "**직접 고치지 않는다** — 값을 바꾸려면 해당 Task 문서를 고치고 재생성한다. "
@@ -2726,7 +2864,7 @@ def _render_task_catalog(rows: list[TaskCatalogRow]) -> str:
         "",
         "| 항목 | 값 |",
         "|---|---|",
-        "| 문서 ID | TASK-CATALOG |",
+        "| 문서 ID | task-catalog |",
         "| 생성 | docs_helpers.py task-catalog |",
         "| 대상 | [.task 폴더](./) |",
         "",
@@ -2746,7 +2884,7 @@ def _render_task_catalog(rows: list[TaskCatalogRow]) -> str:
 def _task_catalog_row_index(text: str) -> dict[str, str]:
     idx: dict[str, str] = {}
     for line in text.split("\n"):
-        m = re.match(r"^\|\s*\[([^\]]+)\]\(TSK-\d{3}\.md\)", line)
+        m = re.match(r"^\|\s*\[([^\]]+)\]\(tsk-\d{3}\.md\)", line)
         if m is not None:
             idx[m.group(1)] = line.strip()
     return idx
@@ -2941,7 +3079,7 @@ def intent_changes(repo: Path, intent_id: str) -> dict:
     - next_ids: 새 항목에 쓸 번호(D · C · FR · E · X).
     """
     path = _intent_path(repo, intent_id)
-    text = _read_text(path) if path is not None else None
+    text = _read_text(path) if path is not None and _exact_file(path) else None
     if text is None:
         return {"intent": intent_id, "path": None, "error": "Intent 파일이 없다"}
     cur = _parse_intent(text)
@@ -3012,7 +3150,7 @@ def _bad_intent_arg(intent_id: str, code: str) -> bool:
     """--intent 는 Intent ID 만 받는다 — 경로 조각이 섞이면 기준선 경로가 .process/intent-base/ 밖을 가리킨다."""
     if INTENT_ID_PATTERN.match(intent_id):
         return False
-    print(f"FAIL {code} Intent ID 가 '<App>-INT-<NNN>' 이 아니다: {intent_id!r}", file=sys.stderr)
+    print(f"FAIL {code} Intent ID 가 '<app>-int-<NNN>' 이 아니다: {intent_id!r}", file=sys.stderr)
     return True
 
 
@@ -3029,7 +3167,7 @@ def cmd_intent_base(repo: Path, args: argparse.Namespace) -> int:
             print(f"NONE {rel}")
         return 0
     path = _intent_path(repo, args.intent)
-    if path is None or not path.is_file():
+    if path is None or not _exact_file(path):
         print(f"FAIL INTENT_BASE Intent 파일이 없다: {args.intent}", file=sys.stderr)
         return 2
     if base.is_file():
@@ -3244,33 +3382,27 @@ def cmd_mark_intent(repo: Path, args: argparse.Namespace) -> int:
     """
     task_path = Path(args.task)
     if not task_path.is_absolute():
-        task_path = _match_case(repo, task_path)
-    text = _read_text(task_path)
+        task_path = repo / task_path
+    text = _read_text(task_path) if _exact_file(task_path) else None
     if text is None:
         print(f"FAIL MARK Task 를 읽지 못했다: {args.task}", file=sys.stderr)
         return 2
     doc = _parse_task(text)
     task_id = (doc.meta.get("문서 ID") or "").strip() or task_path.stem
     if not TASK_ID_PATTERN.match(task_id):
-        print(f"FAIL MARK 문서 ID 가 'TSK-<NNN>' 이 아니다: {task_id!r}", file=sys.stderr)
+        print(f"FAIL MARK 문서 ID 가 'tsk-<NNN>' 이 아니다: {task_id!r}", file=sys.stderr)
         return 2
     plans: list[tuple[str, Path, str, str, list[str], list[str], list[str]]] = []
     problems: list[str] = []
     missing: list[str] = []
-    seen: dict[str, str] = {}
     for intent_id in doc.targets:
         path = _intent_path(repo, intent_id)
-        if path is None or not path.is_file():
+        if path is None or not _exact_file(path):
             if args.remove:
                 missing.append(intent_id)   # 걷어 낼 표시가 없다 — 취소 정리를 막지 않는다
             else:
                 problems.append(f"{intent_id}: Intent 파일이 없다")
             continue
-        key = str(path.resolve()).casefold()
-        if key in seen:
-            problems.append(f"{intent_id}: {seen[key]} 와 같은 파일이다 — 대상 Intent 표기를 하나로 맞춘다")
-            continue
-        seen[key] = intent_id
         try:
             raw = _read_raw(path)
         except UnicodeDecodeError:
@@ -3392,22 +3524,22 @@ def _split_check(repo: Path, task_paths: list[Path]) -> list[CheckResult]:
 
 
 def cmd_split_check(repo: Path, args: argparse.Namespace) -> int:
-    paths = [Path(p) if Path(p).is_absolute() else _match_case(repo, p) for p in args.task]
+    paths = [Path(p) if Path(p).is_absolute() else repo / p for p in args.task]
     return _report_results(repo, _split_check(repo, paths), args.json)
 
 
 # ---------------------------------------------------------------------------
 # ensure-exclude — 설계 문서는 커밋하지 않는다
 #
-# 문서 폴더(docs·Docs)와 .task/ 는 팀 밖으로 나가지 않는 설계 문서다 — 커밋 · 푸시하지 않는다.
+# 문서 폴더(docs·Docs) · intent/ · .task/ 는 팀 밖으로 나가지 않는 설계 문서다 — 커밋 · 푸시하지 않는다.
 # 공유 .gitignore 를 고치면 그 고침이 커밋 대상이 되므로 이 clone 에만 있는 info/exclude 에 올린다.
 # info/exclude 는 공통 git 디렉터리에 있어 linked worktree(.worktree/<이름>)도 같은 규칙을 쓴다.
-# 문서 폴더는 레포 루트로 고정한다(/docs/) — 하위 폴더의 docs/ 까지 숨기지 않는다. Linux 는
-# 대소문자를 구분하므로 두 표기를 다 적는다.
+# 레포 루트로 고정한다(/docs/ · /intent/) — 하위 폴더의 같은 이름까지 숨기지 않는다. 문서 폴더는
+# Linux 가 대소문자를 구분하므로 두 표기를 다 적는다(intent/ · .task/ 는 소문자 하나).
 # ---------------------------------------------------------------------------
 
 
-LOCAL_EXCLUDE_ENTRIES = (".worktree/", ".process/", "/docs/", "/Docs/", f"/{TASK_DIR}/")
+LOCAL_EXCLUDE_ENTRIES = (".worktree/", ".process/", "/docs/", "/Docs/", f"/{INTENT_DIR}/", f"/{TASK_DIR}/")
 LOCAL_EXCLUDE_HEADER = "# claudecode-for-me: local-only design docs and work dirs (never committed)"
 
 
@@ -3434,8 +3566,8 @@ def _git_common_dir(repo: Path) -> Path | None:
 
 
 def _tracked_docs(repo: Path) -> list[str]:
-    """문서 폴더 · .task/ 아래 이미 커밋된 파일 — exclude 는 tracked 파일을 숨기지 못한다."""
-    r = _git(repo, "ls-files", "-z", "--", ":(top,icase)docs", f":(top,icase){TASK_DIR}")
+    """문서 폴더 · intent/ · .task/ 아래 이미 커밋된 파일 — exclude 는 tracked 파일을 숨기지 못한다."""
+    r = _git(repo, "ls-files", "-z", "--", ":(top,icase)docs", f":(top){INTENT_DIR}", f":(top){TASK_DIR}")
     if r is None or r.returncode != 0:
         return []
     return [n for n in r.stdout.split("\0") if n]
@@ -3517,13 +3649,13 @@ def main(argv: list[str] | None = None) -> int:
     sp_catalog = sub.add_parser("intent-catalog")
     sp_catalog.add_argument("--repo", required=True)
     sp_catalog.add_argument("--app", required=True)
-    sp_catalog.add_argument("--write", action="store_true", help="docs/<App>/<App>-INT-CATALOG.md 에 기록한다. 없으면 stdout 으로만 낸다.")
+    sp_catalog.add_argument("--write", action="store_true", help="intent/<app>/intent-catalog.md 와 intent/intent-app-catalog.md 에 기록한다. 없으면 stdout 으로만 낸다(App 카탈로그).")
     sp_catalog.add_argument("--check", action="store_true", help="기존 카탈로그가 재생성 결과와 같은지 검사한다. 다르면 exit 1 + 차이 줄.")
     sp_catalog.add_argument("--json", action="store_true", help="출력 포맷만 JSON 으로 바꾼다. --check/--write 의 동작과 exit code 는 그대로다.")
 
     sp_check_task = sub.add_parser("check-task")
     sp_check_task.add_argument("--repo", required=True)
-    sp_check_task.add_argument("--file", required=True, help="Task 문서 경로 (.task/TSK-<NNN>.md, --repo 기준 상대경로 가능)")
+    sp_check_task.add_argument("--file", required=True, help="Task 문서 경로 (.task/tsk-<NNN>.md, --repo 기준 상대경로 가능)")
     sp_check_task.add_argument("--json", action="store_true")
 
     sp_task_catalog = sub.add_parser("task-catalog")
@@ -3538,7 +3670,7 @@ def main(argv: list[str] | None = None) -> int:
 
     sp_base = sub.add_parser("intent-base")
     sp_base.add_argument("--repo", required=True)
-    sp_base.add_argument("--intent", required=True, help="Intent ID (<App>-INT-<NNN>)")
+    sp_base.add_argument("--intent", required=True, help="Intent ID (<app>-int-<NNN>)")
     mode = sp_base.add_mutually_exclusive_group(required=True)
     mode.add_argument("--save", action="store_true",
                       help="고치기 전 사본을 남긴다(SAVED) — 이미 있으면 더 오래된 쪽을 지키고(KEPT), "
@@ -3549,12 +3681,12 @@ def main(argv: list[str] | None = None) -> int:
 
     sp_diff = sub.add_parser("intent-diff")
     sp_diff.add_argument("--repo", required=True)
-    sp_diff.add_argument("--intent", required=True, help="Intent ID (<App>-INT-<NNN>)")
+    sp_diff.add_argument("--intent", required=True, help="Intent ID (<app>-int-<NNN>)")
     sp_diff.add_argument("--json", action="store_true")
 
     sp_mark = sub.add_parser("mark-intent")
     sp_mark.add_argument("--repo", required=True)
-    sp_mark.add_argument("--task", required=True, help="Task 문서 경로 (.task/TSK-<NNN>.md)")
+    sp_mark.add_argument("--task", required=True, help="Task 문서 경로 (.task/tsk-<NNN>.md)")
     sp_mark.add_argument("--remove", action="store_true", help="이 Task 의 진행 표시를 걷어 낸다 (삭제 예정 줄은 지운다)")
     sp_mark.add_argument("--json", action="store_true")
 
@@ -3569,6 +3701,10 @@ def main(argv: list[str] | None = None) -> int:
         return 2 if e.code not in (0, None) else (e.code or 0)
 
     repo = _resolve_repo(args.repo)
+    # 문서 ID · App 이름은 소문자다 — 사람이 대문자로 줘도 받아 준다(문서 안 표기는 검사가 엄격히 본다).
+    for name in ("app", "intent"):
+        if isinstance(getattr(args, name, None), str):
+            setattr(args, name, getattr(args, name).lower())
 
     if args.cmd == "check":
         return cmd_check(repo, args.app)

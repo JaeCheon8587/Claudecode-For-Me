@@ -96,17 +96,17 @@
 
 ## 10. 제약사항 (솔루션 공통)
 > 코드/레이어 제약은 [`DDD_ARCHITECTURE_RULES.md`](.rules/DDD_ARCHITECTURE_RULES.md) / [`OBJECT_ORIENTED_DESIGN_RULES.md`](.rules/OBJECT_ORIENTED_DESIGN_RULES.md) SSOT 인용. 본 절은 product/도메인 제약 + 룰 파일 인용만.
-> 솔루션 level 결정은 그 결정이 속한 기능의 Intent `Decisions` 가 SSOT — cross-app 영향 결정은 영향 App 중 하나의 Intent 를 인용 (`[{App}-INT-{NNN} D{n}]({App}/INTENT/{App}-INT-{NNN}.md#decisions)`).
+> 솔루션 level 결정은 그 결정이 속한 기능의 Intent `Decisions` 가 SSOT — cross-app 영향 결정은 영향 App 중 하나의 Intent 를 인용 (`[{app}-int-{NNN} D{n}](../intent/{app}/{app}-int-{NNN}.md#decisions)`).
 
 - {도메인 제약 1 — cross-app 적용}
 - {기술 제약 — DDD/레이어 룰 인용}
 
 ## 11. App 별 문서 진입점
-> per-App 진입점. 기능 목록은 각 App PRD §7, 작업 단위 문서 목록은 각 App 의 생성물 INT-CATALOG.
+> per-App 진입점. 기능 목록은 각 App PRD §7, 기능 문서(Intent) 목록은 생성물 [`intent-app-catalog`](../intent/intent-app-catalog.md) → 각 App 카탈로그.
 
 | App | App PRD | App ARCHITECTURE | Intent 카탈로그 |
 |---|---|---|---|
-| {App} | [`{App}-PRD`]({App}/{App}-PRD.md) | [`{App}-ARCHITECTURE`]({App}/{App}-ARCHITECTURE.md) | [`{App}-INT-CATALOG`]({App}/{App}-INT-CATALOG.md) |
+| {App} | [`{App}-PRD`]({App}/{App}-PRD.md) | [`{App}-ARCHITECTURE`]({App}/{App}-ARCHITECTURE.md) | [`{app}-intent-catalog`](../intent/{app}/intent-catalog.md) |
 
 ---
 
@@ -147,7 +147,7 @@ stateDiagram-v2
 ### {Entity1} 엔티티
 | 속성 | 타입 | 제약 | 출처 |
 |---|---|---|---|
-| `{prop}` | {type} | {제약} | {요구사항 §X 또는 [{App}-INT-{NNN} D{n}]({App}/INTENT/{App}-INT-{NNN}.md#decisions)} |
+| `{prop}` | {type} | {제약} | {요구사항 §X 또는 [{app}-int-{NNN} D{n}](../intent/{app}/{app}-int-{NNN}.md#decisions)} |
 
 > **불변식**: {도메인 규칙 한 줄씩}
 

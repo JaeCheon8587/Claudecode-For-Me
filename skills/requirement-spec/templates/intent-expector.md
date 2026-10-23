@@ -52,8 +52,8 @@ Intent 가 둘 이상일 때:
 
 ```
 # Expected — {{INTENT_ID}}
-- EXP-1. <…> — 출처: Q2/A2 — 종류: 요구 — 대상: LOADER-INT-003
-- EXP-2. <…> — 출처: Q4/A4 — 종류: 결정 — 대상: LOADER-INT-003 · VIEWER-INT-001
+- EXP-1. <…> — 출처: Q2/A2 — 종류: 요구 — 대상: loader-int-003
+- EXP-2. <…> — 출처: Q4/A4 — 종류: 결정 — 대상: loader-int-003 · viewer-int-001
 ```
 
 - 첫 줄(`# Expected — …`)의 Intent ID 는 대상 Intent 목록의 첫 줄이다.

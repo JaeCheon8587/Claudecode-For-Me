@@ -41,7 +41,7 @@ def test_command_and_skill_share_frontmatter():
     assert skill["name"] == "requirement-spec"
     assert skill["description"] == command["description"]
     assert skill["argument-hint"] == command["argument-hint"]
-    for token in ("<Intent ID 또는 경로>", "--app <App>", "--no-gate"):
+    for token in ("<Intent ID 또는 경로>", "--app <app>", "--no-gate"):
         assert token in skill["argument-hint"]
     assert "--type" not in skill["argument-hint"], "유형은 Task 몫이다 — Intent 에는 유형이 없다"
 
@@ -116,7 +116,7 @@ def test_flow_order():
     text = text[text.index("## Phase 0"):]
     steps = ["ensure-exclude --repo .", "intent-base --repo . --intent <Intent ID> --save",
              "intent-diff --repo . --intent <Intent ID> --json", "check-intent --repo . --file",
-             "intent-checklist --repo . --file", "intent-catalog --repo . --app <App> --write", "`/task-split <Intent ID> …`"]
+             "intent-checklist --repo . --file", "intent-catalog --repo . --app <app> --write", "`/task-split <Intent ID> …`"]
     # check-intent 는 v1 옮기기(기준선 앞)에도 나온다 — 앞 단계 뒤에서 처음 나오는 자리로 순서를 본다.
     pos = 0
     for step in steps:

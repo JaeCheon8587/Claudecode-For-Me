@@ -6,16 +6,16 @@ argument-hint: "[<Intent ID 또는 경로> ...] [--type 기능개발|버그수�
 
 # Task Split
 
-고친 Intent(기능 문서)의 바뀐 항목을 **개발 단위 Task**(작업 계약서, `.task/TSK-<NNN>.md`) 여러 개로 자르는 스킬이다. 무엇이 바뀌었는지는 스크립트가 뽑고, 어떻게 자를지는 아래 **자르기 기준**으로 세션이 제안하고 사용자가 정한다. Task 를 쓰고 진행 표시를 붙이고 검사를 통과시킨 뒤 **한 번에 승인**받고, 개발 세션에 넣을 **개발 프롬프트**를 내고 멈춘다.
+고친 Intent(기능 문서)의 바뀐 항목을 **개발 단위 Task**(작업 계약서, `.task/tsk-<NNN>.md`) 여러 개로 자르는 스킬이다. 무엇이 바뀌었는지는 스크립트가 뽑고, 어떻게 자를지는 아래 **자르기 기준**으로 세션이 제안하고 사용자가 정한다. Task 를 쓰고 진행 표시를 붙이고 검사를 통과시킨 뒤 **한 번에 승인**받고, 개발 세션에 넣을 **개발 프롬프트**를 내고 멈춘다.
 
-흐름에서의 자리: `requirement-spec`(Intent 작성 · 수정) → **`/task-split`** → `/worktree-init <이름>`(워크트리) → 개발 세션(개발 프롬프트) → `finish TSK-<NNN>` → 머지 → `/worktree-delete`.
+흐름에서의 자리: `requirement-spec`(Intent 작성 · 수정) → **`/task-split`** → `/worktree-init <이름>`(워크트리) → 개발 세션(개발 프롬프트) → `finish tsk-<NNN>` → 머지 → `/worktree-delete`.
 
 ## 핵심 원칙
 
 - **Task 는 새 동작을 만들지 않는다** — Scope 는 Intent 에서 바뀐 항목의 사본이다. 동작이 더 바뀌어야 하면 `requirement-spec` 으로 Intent 를 먼저 고친다.
 - **바뀐 항목은 정확히 한 Task 에** 들어간다 — 빠뜨리지도, 두 Task 에 넣지도 않는다. 한 번 실행에 바뀐 항목을 전부 나눈다.
 - **결정적인 일은 스크립트가 한다** — 변경 목록 · Scope 문장 · 진행 표시 · 검사 · 카탈로그. 세션은 자르기 제안과 Goal · Acceptance · Verification · Risks 문장을 쓴다. 자르기와 승인은 사용자가 정한다.
-- **문서는 커밋하지 않는다** — 문서 폴더(`docs` · `Docs`)와 `.task/` 는 설계 문서다(팀 정책). `.git/info/exclude` 에 올리고 `git add` 하지 않는다.
+- **문서는 커밋하지 않는다** — 문서 폴더(`docs` · `Docs`)와 `intent/` · `.task/` 는 설계 문서다(팀 정책). `.git/info/exclude` 에 올리고 `git add` 하지 않는다.
 - **내부 코드 이름은 쓰지 않는다** — 밖에서 보이는 이름만 `종류어 + 백틱`(응답 필드 `retryCount`). 상세는 Task 템플릿 작성 규칙 1~3.
 - **후속 단계(워크트리 · 개발)는 실행하지 않는다** — 개발 프롬프트를 내고 끝낸다.
 - 모든 대화 · 산출물은 **한국어**로 쓴다(섹션 헤딩은 템플릿의 영어 표기 유지).
@@ -91,9 +91,9 @@ API · 필드 · 오류 코드처럼 App 사이의 계약이 바뀌면 **제공�
 ## Phase 0 — Orient
 
 1. Python 3.10+ 확인: `python --version`(없으면 `py -3 --version`). 없으면 중단하고 설치를 안내한다.
-2. **exclude 보장**: `python "$DH" ensure-exclude --repo .` — `ADDED` 면 한 줄 고지("`.git/info/exclude` 에 문서 폴더 · `.task/` 를 올렸다 — 커밋되지 않는다"). `WARN TRACKED` 가 있으면 그대로 전한다 — 이미 커밋된 문서는 숨지 않는다. 추적을 끊을지(`git rm --cached`)는 사용자가 정한다. **대신 하지 않는다.**
-3. **템플릿 경로** — 순서대로: repo 의 `docs/.templates/.task/TSK-001-TEMPLATE.md` → `${CLAUDE_PLUGIN_ROOT}/docs/.templates/.task/TSK-001-TEMPLATE.md`. 둘 다 없으면 **중단**한다.
-4. **대상 Intent** — `$ARGUMENTS` 의 Intent ID(`LOADER-INT-003`) 또는 경로를 쓴다. 없으면 후보를 보여 주고 고르게 한다 — `.process/intent-base/` 에 기준선이 있는 Intent(고쳤는데 아직 자르지 않음)와, 초안(`draft`)이 아닌 Task 의 `대상 Intent` 에 없는 Intent(새로 써서 아직 자르지 않음 — 초안만 가리키면 앞서 중단하고 남긴 자르기다). 후보가 없고 유형이 `기능개발` 이면 "자를 변경이 없다" 를 보고하고 끝낸다.
+2. **exclude 보장**: `python "$DH" ensure-exclude --repo .` — `ADDED` 면 한 줄 고지("`.git/info/exclude` 에 문서 폴더 · `intent/` · `.task/` 를 올렸다 — 커밋되지 않는다"). `WARN TRACKED` 가 있으면 그대로 전한다 — 이미 커밋된 문서는 숨지 않는다. 추적을 끊을지(`git rm --cached`)는 사용자가 정한다. **대신 하지 않는다.**
+3. **템플릿 경로** — 순서대로: repo 의 `docs/.templates/.task/tsk-001-template.md` → `${CLAUDE_PLUGIN_ROOT}/docs/.templates/.task/tsk-001-template.md`. 둘 다 없으면 **중단**한다.
+4. **대상 Intent** — `$ARGUMENTS` 의 Intent ID(`loader-int-003`) 또는 경로를 쓴다. 없으면 후보를 보여 주고 고르게 한다 — `.process/intent-base/` 에 기준선이 있는 Intent(고쳤는데 아직 자르지 않음)와, 초안(`draft`)이 아닌 Task 의 `대상 Intent` 에 없는 Intent(새로 써서 아직 자르지 않음 — 초안만 가리키면 앞서 중단하고 남긴 자르기다). 후보가 없고 유형이 `기능개발` 이면 "자를 변경이 없다" 를 보고하고 끝낸다.
 5. **유형** — `--type` 이 있으면 그 값. 없으면 변경 목록이 있으면 `기능개발`, 없으면 `버그수정` · `리팩토링` 중 무엇인지 한 번 묻는다.
 
 ## Phase 1 — 변경 목록 (스크립트)
@@ -119,16 +119,16 @@ python "$DH" intent-diff --repo . --intent <Intent ID> --json
 
 | Task | 제목 | 유형 | Scope 항목 | 선행 | 자른 이유(패턴) |
 |---|---|---|---|---|---|
-| TSK-012 | 업로드 재시도 뼈대 | 기능개발 | LOADER-INT-003 FR-4, FR-5, X-3 | none | 1. 뼈대 먼저 |
-| TSK-013 | 재시도 횟수 응답 | 기능개발 | LOADER-INT-003 FR-6, E-2 · VIEWER-INT-001 FR-2 | TSK-012 | 7. 인터페이스 |
+| tsk-012 | 업로드 재시도 뼈대 | 기능개발 | loader-int-003 FR-4, FR-5, X-3 | none | 1. 뼈대 먼저 |
+| tsk-013 | 재시도 횟수 응답 | 기능개발 | loader-int-003 FR-6, E-2 · viewer-int-001 FR-2 | tsk-012 | 7. 인터페이스 |
 
-- 번호는 `.task/` 의 최대 번호 + 1 부터 차례로 매긴다(`TSK-<NNN>`, 3자리, 레포 전체 번호열).
+- 번호는 `.task/` 의 최대 번호 + 1 부터 차례로 매긴다(`tsk-<NNN>`, 3자리, 레포 전체 번호열).
 - 모든 변경 항목이 정확히 한 행에 들어갔는지 표 아래에 한 줄로 적는다(`변경 9 · 배정 9`).
 - 표 다음에 **추천과 그 이유**를 쓰고 산문으로 묻는다 — 이대로 갈지, 어디를 바꿀지. 사용자가 고치면 반영해 다시 보여 준다. 합의될 때까지 Phase 3 으로 가지 않는다.
 
 ## Phase 3 — Task 작성 · 진행 표시 · 검사
 
-1. **Task 작성** — 합의한 행마다 템플릿을 `.task/TSK-<NNN>.md` 로 복사해 TEMPLATE 경고 블록을 지우고 채운다:
+1. **Task 작성** — 합의한 행마다 템플릿을 `.task/tsk-<NNN>.md` 로 복사해 TEMPLATE 경고 블록을 지우고 채운다:
    - 메타 — `문서 ID`, `유형`(한 값), `상태` = `draft`, `대상 Intent`(이 Task 의 Scope 가 속한 Intent, ` · ` 로), `선행 Task`(없으면 `none`), `작성` = `<git config user.name> · <오늘>`, `승인` = `pending`, `검증` = `pending`.
    - Goal — 계기 · 완료 상태. Intent 의 Problem · Outcome 에서 이 조각에 해당하는 것만.
    - Scope — Phase 1 의 `scope_line` · `prev_line` 을 **그대로** 옮긴다. `- Out of scope:` 에는 이 Task 가 하지 않는 것(다른 Task 가 맡는 항목 포함)을 쓴다.
@@ -136,15 +136,15 @@ python "$DH" intent-diff --repo . --intent <Intent ID> --json
    - Verification · Risks · Handoff — 템플릿 주석대로. Handoff 에 모르는 값은 묻는다(승인 조건에 `pending` 이 없어야 한다).
 2. **진행 표시** — Task 마다:
    ```bash
-   python "$DH" mark-intent --repo . --task .task/TSK-<NNN>.md
+   python "$DH" mark-intent --repo . --task .task/tsk-<NNN>.md
    ```
-   이 Task 의 표시를 Scope 와 같게 맞춘다 — 신규 · 변경 항목에 `[TSK-<NNN> 진행 중]`, 삭제 항목에 `[TSK-<NNN> 삭제 예정]` 을 붙이고, Scope 에서 빠진 항목의 이 Task 표시는 걷어 낸다. 고칠 때 지운 삭제 항목은 기준선의 문장으로 제자리에 다시 넣고 표시를 단다 — 코드에는 아직 그 동작이 있다. 하나라도 막히면 아무 Intent 도 고치지 않는다. **진행 표시를 손으로 붙이지 않는다.**
+   이 Task 의 표시를 Scope 와 같게 맞춘다 — 신규 · 변경 항목에 `[tsk-<NNN> 진행 중]`, 삭제 항목에 `[tsk-<NNN> 삭제 예정]` 을 붙이고, Scope 에서 빠진 항목의 이 Task 표시는 걷어 낸다. 고칠 때 지운 삭제 항목은 기준선의 문장으로 제자리에 다시 넣고 표시를 단다 — 코드에는 아직 그 동작이 있다. 하나라도 막히면 아무 Intent 도 고치지 않는다. **진행 표시를 손으로 붙이지 않는다.**
 
    **자르기를 고쳐 다시 표시할 때**(Phase 2 로 돌아갔거나 Phase 4 에서 Scope 를 고쳤을 때) — 먼저 이번 실행의 초안 Task **전부**를 `mark-intent --remove` 로 걷어 낸 뒤 Task 를 고치고 전부 다시 `mark-intent` 한다. 옛 초안의 표시가 남아 있으면 항목을 넘겨받은 Task 의 `mark-intent` 가 "다른 Task 의 표시" 로 막힌다.
-3. **Task 검사** — Task 마다 `python "$DH" check-task --repo . --file .task/TSK-<NNN>.md`. FAIL 은 세션이 고치고 다시 돌린다(Task 마다 최대 3번). 고쳐도 남으면 Phase 4 에서 그대로 보여 준다.
+3. **Task 검사** — Task 마다 `python "$DH" check-task --repo . --file .task/tsk-<NNN>.md`. FAIL 은 세션이 고치고 다시 돌린다(Task 마다 최대 3번). 고쳐도 남으면 Phase 4 에서 그대로 보여 준다.
 4. **자르기 검사** — 이번에 만든 Task 전부를 한 번에:
    ```bash
-   python "$DH" split-check --repo . --task .task/TSK-<NNN>.md [--task …]
+   python "$DH" split-check --repo . --task .task/tsk-<NNN>.md [--task …]
    ```
    바뀐 항목이 정확히 한 Task 에 들어갔는지(`SPLIT_UNASSIGNED` · `SPLIT_DUP`), Scope 가 변경 목록과 같은지(`SPLIT_EXTRA` · `SPLIT_KIND` · `SPLIT_TEXT` · `SPLIT_PREV`), 크기(`SPLIT_SIZE` WARN)를 본다. FAIL 이면 Phase 2 로 돌아가 자르기를 고친다.
 
@@ -154,16 +154,16 @@ python "$DH" intent-diff --repo . --intent <Intent ID> --json
 2. **승인 조건** — Task 마다 FAIL 0, Handoff 에 `pending` 없음, 대상 Intent 의 Open questions 가 none. `split-check` FAIL 0. 미충족이면 승인할 수 없다고 알리고 그 부분만 고친다.
 3. **승인 시** — Task 마다 메타 `상태` = `approved`, `승인` = `<사용자> · <오늘>`, `검증` = `PASS — check-task PASS · split-check PASS`(WARN 을 알고 승인했으면 `PASS — … · WARN <코드>`). 그다음:
    ```bash
-   python "$DH" check-task --repo . --file .task/TSK-<NNN>.md      # Task 마다 — TSK_APPROVED_GATE 확인
+   python "$DH" check-task --repo . --file .task/tsk-<NNN>.md      # Task 마다 — TSK_APPROVED_GATE 확인
    python "$DH" task-catalog --repo . --write
-   python "$DH" intent-catalog --repo . --app <App> --write          # 대상 Intent 의 App 마다
+   python "$DH" intent-catalog --repo . --app <app> --write          # 대상 Intent 의 App 마다 — 상위 카탈로그도 함께
    python "$DH" intent-base --repo . --intent <Intent ID> --drop     # 대상 Intent 마다 — 기준선 소비
    ```
 4. **고칠 곳** — 반영해 다시 묻는다. Scope 가 바뀌었으면 Phase 3 의 2(표시 — 초안 전부를 걷어 낸 뒤 다시)부터, 문장만 바뀌었으면 3(검사)부터 다시 한다.
-5. **중단** — 만든 Task 를 남길지(초안 `draft`) 지울지 묻는다. 지우면 Task 마다 먼저 `python "$DH" mark-intent --repo . --task .task/TSK-<NNN>.md --remove` 로 진행 표시를 걷어 내고(다시 넣은 삭제 항목 줄도 빠진다) Task 파일을 지운다. 기준선은 남긴다 — 다음 실행이 같은 변경 목록을 본다. 남기든 지우든 카탈로그를 다시 쓴다 — 진행 표시와 Task 목록이 바뀌었다:
+5. **중단** — 만든 Task 를 남길지(초안 `draft`) 지울지 묻는다. 지우면 Task 마다 먼저 `python "$DH" mark-intent --repo . --task .task/tsk-<NNN>.md --remove` 로 진행 표시를 걷어 내고(다시 넣은 삭제 항목 줄도 빠진다) Task 파일을 지운다. 기준선은 남긴다 — 다음 실행이 같은 변경 목록을 본다. 남기든 지우든 카탈로그를 다시 쓴다 — 진행 표시와 Task 목록이 바뀌었다:
    ```bash
    python "$DH" task-catalog --repo . --write
-   python "$DH" intent-catalog --repo . --app <App> --write          # 대상 Intent 의 App 마다
+   python "$DH" intent-catalog --repo . --app <app> --write          # 대상 Intent 의 App 마다 — 상위 카탈로그도 함께
    ```
 
 ## Phase 5 — 개발 프롬프트
@@ -173,13 +173,13 @@ python "$DH" intent-diff --repo . --intent <Intent ID> --json
 ````markdown
 이 워크트리에서 아래 Task 를 순서대로 개발한다. Task 문서는 워크트리의 `.task/` 사본이다 — 문서(Task · Intent)는 고치지 않는다.
 
-1. TSK-012 — 업로드 재시도 뼈대 (선행 없음)
-2. TSK-013 — 재시도 횟수 응답 (선행 TSK-012)
+1. tsk-012 — 업로드 재시도 뼈대 (선행 없음)
+2. tsk-013 — 재시도 횟수 응답 (선행 tsk-012)
 
 Task 마다:
-- `.task/TSK-<NNN>.md` 의 Scope(바꿀 Intent 항목)와 Acceptance(완료 조건)를 읽는다. Intent 원문은 `docs/<App>/INTENT/<ID>.md`.
+- `.task/tsk-<NNN>.md` 의 Scope(바꿀 Intent 항목)와 Acceptance(완료 조건)를 읽는다. Intent 원문은 `intent/<app>/<ID>.md`.
 - 구현하고, Acceptance 를 테스트로 확인하고, 커밋한다.
-- 마치면 워크트리 안에서 `python "<WT_SETUP 절대경로>" finish TSK-<NNN>` 을 실행한다.
+- 마치면 워크트리 안에서 `python "<WT_SETUP 절대경로>" finish tsk-<NNN>` 을 실행한다.
 
 선행 Task 를 먼저 한다. Task 파일이 워크트리에 없으면 멈추고 알린다 — 메인에서 `/worktree-init <이름>` 을 같은 이름으로 다시 실행하면 복사된다.
 ````
@@ -190,7 +190,7 @@ Task 마다:
 
 ## 산출물 경계
 
-- **만드는 것**: `.task/TSK-<NNN>.md` n 개, 대상 Intent 의 진행 표시(`mark-intent`), 생성물 `.task/task-catalog.md` · `docs/<App>/<App>-INT-CATALOG.md`(`--write` 가 쓴다), 기준선 소비(`intent-base --drop`). 전부 커밋하지 않는다.
+- **만드는 것**: `.task/tsk-<NNN>.md` n 개, 대상 Intent 의 진행 표시(`mark-intent`), 생성물 `.task/task-catalog.md` · `intent/<app>/intent-catalog.md` · `intent/intent-app-catalog.md`(`--write` 가 쓴다), 기준선 소비(`intent-base --drop`). 전부 커밋하지 않는다.
 - **만들지 않는 것**: Intent 의 동작 문장 변경(진행 표시 · 다시 넣은 삭제 항목 줄 외), 코드, 브랜치 · 워크트리, 커밋.
 - 후속 스킬을 자동으로 호출하지 않는다.
 

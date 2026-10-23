@@ -23,3 +23,11 @@ def test_spec_and_standards_globs_cover_capital_docs():
     assert "`Docs/**/*.md`" in spec
     assert "대소문자를 구분" in spec
     assert "`Docs/architecture/**/*.md`" in standards
+
+
+def test_spec_globs_cover_intent_root_and_lowercase_tasks():
+    """Intent 는 루트 intent/, Task 는 .task/tsk-NNN.md — 둘 다 소문자라 glob 도 소문자 그대로다."""
+    spec = section(read("skills/branch-review/SKILL.md"), "#### 3-1.", "#### 3-2.")
+    assert "`intent/**/*.md`" in spec
+    assert "`.task/tsk-*.md`" in spec
+    assert "TSK-*" not in spec

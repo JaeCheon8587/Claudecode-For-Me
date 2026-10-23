@@ -7,7 +7,7 @@
 워크트리는 이름 하나로 만든다 — Task 를 읽지 않는다. 한 워크트리에서 Task 여러 개를
 개발할 수 있고, 어떤 Task 를 개발할지는 개발 세션에 주는 프롬프트(/task-split 이 만든다)가 정한다.
 
-설계 문서(문서 폴더 docs·Docs 와 .task/)는 커밋하지 않는다(팀 정책). 정본은 메인 작업트리에
+설계 문서(문서 폴더 docs·Docs · intent/ · .task/)는 커밋하지 않는다(팀 정책). 정본은 메인 작업트리에
 있고, init 이 워크트리에 사본을 복사한다. Task 상태 전이는 전부 메인 정본에 쓴다(커밋 없음).
 
 Subcommands
@@ -50,7 +50,7 @@ EXIT_BLOCKED = 2  # 게이트 미통과 (머지 안 됨 · 미커밋 변경 · T
 GUARDRAIL_FILES = ["CLAUDE.md", ".claude/settings.json"]
 # 문서 폴더는 레포마다 docs·Docs 로 표기가 갈린다 — 한 폴더로 보고 디스크 표기로 복사·보고한다.
 # 문서 폴더와 .task/ 는 커밋하지 않으므로 base 커밋에 없다 — 정본(메인 작업트리)을 복사해 넣는다.
-GUARDRAIL_DIRS = [".claude/rules", "docs", _dh.TASK_DIR]
+GUARDRAIL_DIRS = [".claude/rules", "docs", _dh.INTENT_DIR, _dh.TASK_DIR]
 
 # init 이 남기는 매니페스트. 워크트리 사본은 개발 세션 인수인계용,
 # 메인 repo 사본은 finish · delete · list 가 읽고 쓴다. 둘 다 .process/ 아래라 커밋되지 않는다.
@@ -58,7 +58,7 @@ MANIFEST_DIR = ".process/worktree"
 HANDOFF_NAME = "handoff.json"
 
 # 메인 repo 의 dirty 판정에서 빼는 폴더 — 이 helper 가 관리하거나 커밋하지 않는 것들이다.
-UNTRACKED_PREFIXES = (".worktree/", ".process/", "docs/", f"{_dh.TASK_DIR}/")
+UNTRACKED_PREFIXES = (".worktree/", ".process/", "docs/", f"{_dh.INTENT_DIR}/", f"{_dh.TASK_DIR}/")
 
 
 # ============================================================================
@@ -392,7 +392,7 @@ def _link_submodules(root: Path, wt: Path, log: list[str]) -> None:
 def _copy_guardrails(root: Path, wt: Path) -> tuple[list[str], list[str]]:
     """가드레일과 문서 사본을 메인 작업트리에서 워크트리로 복사한다 — 워크트리에 없는 파일만.
 
-    문서 폴더 · .task/ 는 링크하지 않고 복사한다. 링크가 남은 채 `git worktree remove --force` 를
+    문서 폴더 · intent/ · .task/ 는 링크하지 않고 복사한다. 링크가 남은 채 `git worktree remove --force` 를
     하면 링크 대상(메인 정본)의 내용까지 지워진다. 있는 파일을 덮지 않으므로 재실행하면 새 파일만 더해진다.
     """
     copied: list[str] = []
@@ -511,9 +511,9 @@ def cmd_init(args: argparse.Namespace) -> int:
         base_commit = _resolve_commit(root, "HEAD")
         if base_commit is None:
             _err("§F 커밋이 하나도 없다 — 프로젝트 골격(소스·테스트·솔루션)을 먼저 커밋한다. "
-                 "워크트리는 마지막 커밋을 복사한다(문서 폴더 · .task/ 는 커밋하지 않는다).", EXIT_BLOCKED)
+                 "워크트리는 마지막 커밋을 복사한다(문서 폴더 · intent/ · .task/ 는 커밋하지 않는다).", EXIT_BLOCKED)
 
-    # dirty 판정 전에 올린다 — 문서 폴더 · .task/ 가 untracked 로 잡히지 않게.
+    # dirty 판정 전에 올린다 — 문서 폴더 · intent/ · .task/ 가 untracked 로 잡히지 않게.
     exclude = _dh.ensure_local_exclude(root)
 
     wt, branch, created, base_applied = _ensure_worktree(
@@ -577,21 +577,17 @@ def cmd_init(args: argparse.Namespace) -> int:
 # ============================================================================
 # finish — 마감 (워크트리 안에서)
 # ============================================================================
-def _refresh_int_catalog(repo: Path, intent_rel: str) -> Optional[str]:
-    """<App>-INT-CATALOG.md 를 INTENT/ 에서 다시 생성한다.
+def _refresh_int_catalog(repo: Path, app: str) -> Optional[str]:
+    """intent/<app>/intent-catalog.md 와 상위 카탈로그 intent/intent-app-catalog.md 를 다시 생성한다.
 
     카탈로그는 파생 인덱스라 Intent 를 고친 직후 갱신한다. 실패해도 막지 않는다 —
-    docs_helpers.py check --app <App> 이 stale 로 잡는다.
+    docs_helpers.py check --app <app> 이 stale 로 잡는다. App 카탈로그 경로를 돌려준다(실패하면 None).
     """
-    parts = Path(intent_rel).parts
-    # 문서 폴더는 docs·Docs 둘 다 받는다 — 카탈로그는 Intent 와 같은 표기의 폴더에 둔다.
-    if len(parts) < 4 or parts[0].lower() != "docs" or parts[2] != "INTENT":
-        return None
-    app = parts[1]
-    rel = f"{parts[0]}/{app}/{app}-INT-CATALOG.md"
+    rel = f"{_dh.INTENT_DIR}/{app}/{_dh.INTENT_CATALOG_NAME}"
     try:   # 게이트가 아니다 — 문서 문제로 죽지 않는다 (쓰기 실패 포함)
         rows, _ = _dh._collect_intent_rows(repo, app)
         (repo / rel).write_text(_dh._render_intent_catalog(app, rows), encoding="utf-8", newline="\n")
+        _dh._write_app_catalog(repo)
     except Exception as e:
         print(f"WARN: {rel} 갱신 실패 ({type(e).__name__}: {e}). "
               f"docs_helpers.py check --app {app} 로 확인할 것.", file=sys.stderr)
@@ -647,10 +643,11 @@ def cmd_finish(args: argparse.Namespace) -> int:
         _err(f"§F 이 워크트리의 매니페스트가 없다 ({root / MANIFEST_DIR}) — /worktree-init 이 만든 워크트리인지 확인한다.",
              EXIT_BLOCKED)
 
-    task_ids = list(dict.fromkeys(args.task_ids))   # 순서를 지키며 중복 제거
+    # Task ID 는 소문자다 — `TSK-001` 로 줘도 받아 준다.
+    task_ids = list(dict.fromkeys(t.lower() for t in args.task_ids))   # 순서를 지키며 중복 제거
     bad = [t for t in task_ids if not _dh.TASK_ID_PATTERN.fullmatch(t)]
     if bad:
-        _err(f"§F Task ID 형식이 아니다: {bad} — TSK-<NNN> 으로 준다.", EXIT_BLOCKED)
+        _err(f"§F Task ID 형식이 아니다: {bad} — tsk-<NNN> 으로 준다.", EXIT_BLOCKED)
 
     listed = list(manifest.get("tasks") or [])
     todo: list[str] = []
@@ -658,7 +655,7 @@ def cmd_finish(args: argparse.Namespace) -> int:
     problems: list[str] = []
     for task_id in task_ids:
         path = root / _dh.TASK_DIR / f"{task_id}.md"
-        if not path.is_file():
+        if not _dh._exact_file(path):
             problems.append(f"{task_id}: 메인 정본에 없다 ({_dh.TASK_DIR}/{task_id}.md)")
             continue
         status = _task_status(path)
@@ -804,7 +801,7 @@ def _close_tasks(root: Path, task_ids: list[str]) -> tuple[list[str], list[str],
     plan: list[tuple[str, Path, object, Optional[str]]] = []   # (Task ID, 경로, 파싱 결과, done 으로 바꾼 본문 | None)
     for task_id in task_ids:
         path = root / _dh.TASK_DIR / f"{task_id}.md"
-        if not path.is_file():
+        if not _dh._exact_file(path):
             skipped.append(f"{task_id} (메인 정본에 없음)")
             continue
         task = _read_task(path)
@@ -834,7 +831,7 @@ def _close_tasks(root: Path, task_ids: list[str]) -> tuple[list[str], list[str],
         notes: list[str] = []
         for intent_id in task.targets:
             p = _dh._intent_path(root, intent_id)
-            if p is None or not p.is_file():
+            if p is None or not _dh._exact_file(p):
                 notes.append(f"{intent_id}: 파일 없음")
                 continue
             if p not in current:
@@ -858,9 +855,9 @@ def _close_tasks(root: Path, task_ids: list[str]) -> tuple[list[str], list[str],
     _write_all(task_writes + intent_writes)
     if plan:
         _refresh_task_catalog(root)
-    # Intent 줄이 지워지면 규모(FR 수)가 바뀐다 — 대상 Intent 의 App 카탈로그도 App 마다 한 번 다시 쓴다
-    for p in {p.parent: p for p in current}.values():
-        _refresh_int_catalog(root, p.relative_to(root).as_posix())
+    # Intent 줄이 지워지면 규모(FR 수)가 바뀐다 — 대상 Intent 의 App 카탈로그(와 상위 카탈로그)를 App 마다 한 번 다시 쓴다
+    for app in sorted({p.parent.name for p in current}):
+        _refresh_int_catalog(root, app)
     return lines, skipped, []
 
 
@@ -1090,7 +1087,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     pl.set_defaults(func=cmd_list)
 
     pf = sub.add_parser("finish", help="(워크트리 안에서) 마감 — 메인 정본 Task approved → in-review + 카탈로그 + 매니페스트 기록")
-    pf.add_argument("task_ids", nargs="+", metavar="TSK-NNN", help="마감할 Task ID (여러 개 가능)")
+    pf.add_argument("task_ids", nargs="+", metavar="tsk-NNN", help="마감할 Task ID (여러 개 가능)")
     pf.add_argument("--quiet", action="store_true", help="진행 로그 억제 (JSON만)")
     pf.set_defaults(func=cmd_finish)
 

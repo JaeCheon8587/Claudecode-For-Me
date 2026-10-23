@@ -1,27 +1,27 @@
 ---
 name: requirement-spec
 description: grill-me 인터뷰로 기능 문서(Intent)를 새로 쓰거나 고치는 스킬 — App 마다 Intent 1개, 계약이 바뀌면 호출하는 App · 제공하는 App 둘 다. Part 1(왜 · 무엇 · 결정)을 쓰고 Part 2(테스트할 수 있는 동작 FR · E · X)를 파생한 뒤, 코드 생성 체크리스트 + opus 판정 루프(Intent 마다 최대 3회)로 검증하고 품질 지표를 남겨 사용자 확정 1회로 끝낸다. 고칠 때는 고치기 전 사본(기준선)을 남겨 /task-split 이 바뀐 항목을 Task 로 자르게 한다. "요구사항 정리해서 명세까지", "기능 명세 만들어줘", "Intent 작성", "Intent 수정", "requirement-spec" 요청 시 트리거
-argument-hint: "[<Intent ID 또는 경로> ...] [--app <App> ...] [--no-gate]"
+argument-hint: "[<Intent ID 또는 경로> ...] [--app <app> ...] [--no-gate]"
 ---
 
 # Requirement Spec
 
 요구사항을 인터뷰로 도출해 **기능 문서(Intent)** 를 새로 쓰거나 고치는 스킬이다. Intent 는 기능 하나가 어떻게 동작해야 하는지를 담는 상시 문서다(App 소속, 기능 1개 = Intent 1개). 인터뷰 결과는 Part 1(왜 · 무엇 · 결정)이 되고, Part 2(테스트할 수 있는 동작 FR · E · X)는 Part 1만 근거로 세션이 파생한다. 파생한 Intent 는 코드가 생성한 체크리스트와 opus 서브에이전트 판정으로 검증하고, 결과를 품질 지표로 남긴 뒤 사용자 확정 1회로 끝내고 거기서 멈춘다. 다른 스킬을 쓸 때는 해당 `SKILL.md`를 읽어 **그 지침을 이 대화에서 그대로 수행**한다(인라인 실행 — 별도 프로세스·핸드오프 아님).
 
-흐름에서의 자리: **`requirement-spec`**(Intent 작성 · 수정) → `/task-split`(바뀐 항목을 Task 로) → `/worktree-init <이름>`(워크트리) → 개발 세션 → `finish TSK-<NNN>` → 머지 → `/worktree-delete`.
+흐름에서의 자리: **`requirement-spec`**(Intent 작성 · 수정) → `/task-split`(바뀐 항목을 Task 로) → `/worktree-init <이름>`(워크트리) → 개발 세션 → `finish tsk-<NNN>` → 머지 → `/worktree-delete`.
 
 ## 핵심 원칙
 
-- **산출물은 대상 Intent** — `docs/<App>/INTENT/<App>-INT-<NNN>.md`, App 마다 1개. 계약(API · 요청/응답 필드 · 오류 코드)이 바뀌면 호출하는 App 과 제공하는 App 의 Intent 를 한 실행에서 함께 쓴다. 새로 쓰기(새 기능)와 고치기(있는 기능)를 한 실행에 섞을 수 있다.
+- **산출물은 대상 Intent** — `intent/<app>/<app>-int-<NNN>.md`, App 마다 1개. 폴더 · 파일명 · 문서 ID 는 모두 소문자다(`<app>` = SYSTEM_CODE 의 소문자). 계약(API · 요청/응답 필드 · 오류 코드)이 바뀌면 호출하는 App 과 제공하는 App 의 Intent 를 한 실행에서 함께 쓴다. 새로 쓰기(새 기능)와 고치기(있는 기능)를 한 실행에 섞을 수 있다.
 - **인터뷰는 grill-me 1회** — 대상 Intent 가 여럿이어도 한 번이다.
 - **Part 2는 질문 없이 파생** — Part 1에서 도출한다.
 - **고치기 전에 기준선을 남긴다** — 문서는 커밋하지 않아 git 이력이 "고치기 전" 을 알려 주지 못한다. 고치기 전 사본(`.process/intent-base/<ID>.md`)이 `/task-split` 이 바뀐 항목을 뽑는 기준이다.
-- **바꾸지 않는 항목은 글자 하나도 고치지 않는다** — `/task-split` 은 기준선과 문장이 다른 FR · E · X 를 전부 변경으로 자른다. 진행 표시(`[TSK-<NNN> 진행 중]` · `[TSK-<NNN> 삭제 예정]`)가 붙은 항목은 그 Task 가 끝나기 전에 고치지 않는다.
+- **바꾸지 않는 항목은 글자 하나도 고치지 않는다** — `/task-split` 은 기준선과 문장이 다른 FR · E · X 를 전부 변경으로 자른다. 진행 표시(`[tsk-<NNN> 진행 중]` · `[tsk-<NNN> 삭제 예정]`)가 붙은 항목은 그 Task 가 끝나기 전에 고치지 않는다.
 - **검증 기준은 인터뷰다** — 인터뷰 전사에서 1회 도출한 오라클(`expected.md`, 이후 불변)과 코드가 회차마다 만드는 사실표를 함께 쓴다. LLM 판정은 Intent 마다 최대 3회다.
 - **확정은 1회** — Intent 에는 승인 행이 없다. 변경의 승인은 `/task-split` 이 Task 와 함께 받는다.
 - **완료 조건 · 확인 방법 · 위험 · 착수 정보는 쓰지 않는다** — Task 몫이다(`/task-split`).
 - **내부 코드 이름은 쓰지 않는다** — 클래스 · 인터페이스 · 메서드 · 함수 · 속성 · 필드 · 변수 · 네임스페이스 · 파일. 밖에서 보이는 이름(API 경로 · 요청/응답 필드 · 설정 키 · 오류/상태 코드 · 화면 문구)은 `종류어 + 백틱`으로 쓴다(응답 필드 `retryCount`). 상세는 Intent 템플릿 작성 규칙 1~3 · DOCUMENT_GUIDE §1.4.
-- **문서는 커밋하지 않는다** — 문서 폴더(`docs` · `Docs`) · `.task/` · `.process/` 는 `.git/info/exclude` 에 올리고 `git add` 하지 않는다(팀 정책).
+- **문서는 커밋하지 않는다** — 문서 폴더(`docs` · `Docs`) · `intent/` · `.task/` · `.process/` 는 `.git/info/exclude` 에 올리고 `git add` 하지 않는다(팀 정책).
 - **후속 단계(Task · 개발)는 자동 실행하지 않는다** — `/task-split` 을 안내만 한다.
 - 모든 대화·산출물은 **한국어**로 쓴다(섹션 헤딩은 템플릿의 영어 표기 유지).
 
@@ -36,17 +36,17 @@ DH="${CLAUDE_PLUGIN_ROOT}/scripts/docs_helpers.py"
 ## Phase 0 — Orient
 
 1. **Python 3.10+ 확인**: `python --version`(없으면 `py -3 --version`). 없으면 중단하고 설치를 안내한다 — 기준선 · 검사 · 카탈로그가 모두 스크립트다.
-2. **exclude 보장**: `python "$DH" ensure-exclude --repo .` — `ADDED` 면 한 줄 고지("`.git/info/exclude` 에 문서 폴더 · `.process/` 를 올렸다 — 커밋되지 않는다"). `WARN TRACKED` 가 있으면 그대로 전한다 — 이미 커밋된 문서는 숨지 않는다. 추적을 끊을지(`git rm --cached`)는 사용자가 정한다. **대신 하지 않는다.** `FAIL EXCLUDE`(git repo 아님)면 중단한다.
+2. **exclude 보장**: `python "$DH" ensure-exclude --repo .` — `ADDED` 면 한 줄 고지("`.git/info/exclude` 에 문서 폴더 · `intent/` · `.process/` 를 올렸다 — 커밋되지 않는다"). `WARN TRACKED` 가 있으면 그대로 전한다 — 이미 커밋된 문서는 숨지 않는다. 추적을 끊을지(`git rm --cached`)는 사용자가 정한다. **대신 하지 않는다.** `FAIL EXCLUDE`(git repo 아님)면 중단한다.
 3. **`--no-gate` 해석**: `$ARGUMENTS` 에 `--no-gate` 가 있으면 2a(오라클) · Phase 3 을 건너뛰고, Phase 4 는 최소 quality.json 만 쓴다. Phase 5 는 그대로 수행하고 검증을 `SKIPPED — --no-gate` 로 보고한다.
 4. **템플릿 경로 해석** — 순서대로 시도한다:
-   1. repo 의 `docs/.templates/App/INTENT/APP-INT-001-TEMPLATE.md`
-   2. 없으면 `${CLAUDE_PLUGIN_ROOT}/docs/.templates/App/INTENT/APP-INT-001-TEMPLATE.md`
+   1. repo 의 `docs/.templates/intent/app/app-int-001-template.md`
+   2. 없으면 `${CLAUDE_PLUGIN_ROOT}/docs/.templates/intent/app/app-int-001-template.md`
    3. 둘 다 없으면 **중단**하고 그 사실을 보고한다.
 5. **대상 정하기**:
-   - `$ARGUMENTS` 의 Intent ID(`LOADER-INT-003`) 또는 경로 → **고치기** 대상. 파일이 없으면 중단하고 보고한다.
-   - `--app <App>` → 그 App 의 **새로 쓰기** 대상 1개. 여러 번 줄 수 있다. 문서 ID 는 그 App 의 `INTENT/` 에 있는 `<App>-INT-*.md` 중 최대 번호 + 1(3자리 0패딩, 없으면 `001`)이다.
-   - 둘 다 없으면 **한 번** 묻는다(산문) — 있는 Intent 목록(ID · 제목 · 상태 — `docs` · `Docs` 둘 다 본다)을 보여 주고 "새 기능이면 App, 있는 기능을 고치면 Intent ID, 계약을 주고받는 App 이 있으면 모두" 를 묻는다. 답이 없으면 중단하고 사유를 보고한다.
-   - 문서 폴더는 레포에 이미 있는 표기를 쓴다 — `Docs/` 가 있으면 `Docs/<App>/INTENT/`. `docs` · `Docs` 는 같은 폴더로 보며(이 스킬의 `docs/` 는 둘 다를 뜻한다) 대소문자만 다른 폴더를 새로 만들거나 이름을 바꾸지 않는다.
+   - `$ARGUMENTS` 의 Intent ID(`loader-int-003`) 또는 경로 → **고치기** 대상. 파일이 없으면 중단하고 보고한다.
+   - `--app <app>` → 그 App 의 **새로 쓰기** 대상 1개. 여러 번 줄 수 있다. App 이름은 소문자로 받는다(`LOADER` 를 받으면 `loader`). 문서 ID 는 `intent/<app>/` 에 있는 `<app>-int-*.md` 중 최대 번호 + 1(3자리 0패딩, 없으면 `001`)이다.
+   - 둘 다 없으면 **한 번** 묻는다(산문) — 있는 Intent 목록(ID · 제목 · 상태 — `intent/intent-app-catalog.md` 와 App 카탈로그, 없거나 낡았으면 `intent/<app>/` 폴더)을 보여 주고 "새 기능이면 App, 있는 기능을 고치면 Intent ID, 계약을 주고받는 App 이 있으면 모두" 를 묻는다. 답이 없으면 중단하고 사유를 보고한다.
+   - Intent 는 레포 루트 `intent/` 에만 있다. 옛 위치(`docs/<App>/INTENT/`)나 대문자 이름의 Intent 는 읽지 않는다 — 그것만 있으면 중단하고 사용자에게 알린다(옮기는 일은 이 스킬 밖이다).
 6. **작업 폴더**: `<W>` = `.process/intent-check/<첫 대상 Intent ID>-<YYYYMMDD-HHMM>/` 를 만든다. 실행마다 새 폴더다 — 같은 Intent 를 다시 고쳐도 앞선 실행의 기록을 덮지 않는다. Intent 별 산출물은 하위 폴더 `<W>/<Intent ID>/` 에 쓴다.
 7. **고치기 대상마다**:
    1. **v1 판별** — 메타에 `유형` · `승인` · `검증` 행이 있거나 Part 2 에 `Acceptance` · `Verification` · `Risks` · `Handoff` 섹션이 있으면 v1(3.74 이하) 문서다. v2 로 옮길지 **한 번** 묻는다 — 거절하면 그 대상을 빼고 보고한다(남은 대상이 없으면 중단). 이 스킬은 v1 문서를 쓰지 않는다.
@@ -63,7 +63,7 @@ DH="${CLAUDE_PLUGIN_ROOT}/scripts/docs_helpers.py"
       - `next_ids` — 새 항목에 쓸 번호(D · C · FR · E · X). 지운 번호까지 세므로 이 값을 쓴다.
       - `mode` 가 `base` 이고 `changes` 가 있으면(`KEPT`) 앞선 고침이 아직 잘리지 않았다 — 목록을 고지한다. `mode` 가 `new` 면(`NEW`) 한 번도 자르지 않은 Intent 라 자를 때 항목 전부가 신규다 — 한 줄로 고지한다.
       - 진행 표시가 붙은 항목을 모아 고지한다 — 그 Task 가 끝나기(`done`) 전에는 고치지 않는다. 표시의 Task 가 초안(`draft`)이면 앞서 중단한 자르기다 — 그 항목을 고쳐야 하면 `/task-split` 을 다시 실행해 그 초안을 지운 뒤 고친다.
-8. **새로 쓰기 대상마다**: `docs/<App>/INTENT/` 가 없으면 만들고, 템플릿을 `docs/<App>/INTENT/<App>-INT-<NNN>.md` 로 복사한 뒤 TEMPLATE 경고 블록을 삭제한다. 메타 `문서 ID` · `작성`(`<작성자> · <YYYY-MM-DD>`)을 채우고 `상태` 는 `active` 로 둔다. 1행 제목 · `기능 ID` · `관련 Intent` 는 Phase 1 끝에 채운다.
+8. **새로 쓰기 대상마다**: `intent/<app>/` 가 없으면 만들고, 템플릿을 `intent/<app>/<app>-int-<NNN>.md` 로 복사한 뒤 TEMPLATE 경고 블록을 삭제한다. 메타 `문서 ID` · `작성`(`<작성자> · <YYYY-MM-DD>`)을 채우고 `상태` 는 `active` 로 둔다. 1행 제목 · `기능 ID` · `관련 Intent` 는 Phase 1 끝에 채운다.
 
 **전이 조건**: 대상 1개 이상 확정 + 고치기 대상의 사본 · 기준선 결과 기록 + 새로 쓰기 대상 파일 생성.
 
@@ -219,7 +219,7 @@ critic 이 쓴 `critic-round-<n>.txt` 가 있는지 확인한 뒤:
 Intent 마다 `<D>/quality.json` 을 세션이 **단일 작성**한다(expector·critic 은 자기 산출물 파일만 쓰고 quality.json 은 쓰지 않는다). 스키마:
 
 ```json
-{ "intent": "<App>-INT-<NNN>", "run": "<W 폴더 이름>", "mode": "new|edit", "baseline": "SAVED|KEPT|NEW|DROPPED|none", "implemented": false, "v1_migrated": false,
+{ "intent": "<app>-int-<NNN>", "run": "<W 폴더 이름>", "mode": "new|edit", "baseline": "SAVED|KEPT|NEW|DROPPED|none", "implemented": false, "v1_migrated": false,
   "max_rounds": 3, "rounds_used": 2, "final": "PASS|FAIL|OVERRIDE|SKIPPED", "verdict": "PASS — code PASS · llm PASS · 2/3",
   "code": {"status": "PASS|FAIL|SKIPPED", "inline_fixes": n, "last": {"pass": n, "warn": n, "fail": n, "fail_codes": []}},
   "llm":  {"status": "PASS|FAIL|FAIL(protocol)|SKIPPED", "judge": "subagent:general-purpose/opus|self|skipped", "per_round": [
@@ -273,17 +273,17 @@ Intent 마다 `<D>/quality.json` 을 세션이 **단일 작성**한다(expector�
    - **남기면** 그대로 둔다 — 기준선이 남아 다음 `requirement-spec` · `/task-split` 이 이어 간다.
    - **되돌리면** 고치기 대상은 `<W>/before/<ID>.md` 로 덮어 되돌리고, 기준선이 `SAVED`(이번 실행이 남김)면 `python "$DH" intent-base --repo . --intent <ID> --drop` 으로 지우고 quality.json 이 있으면 `baseline` 을 `DROPPED` 로 고친다(Phase 4 전에 중단했으면 quality.json 이 없다 — 만들지 않는다) — `KEPT` 는 앞선 고침의 기준선이라 남긴다. 새로 쓰기 대상은 파일을 지운다.
 5. **기준선 정리** — 확정했거나 남긴 고치기 대상의 기준선이 `SAVED` 이고 `--implemented` 로 남긴 것이 아닌데 `intent-diff` 의 `changes` 가 0 이면(Part 1 만 고쳤다 — 자를 변경이 없다) `intent-base --drop` 으로 지우고 quality.json 이 있으면 `baseline` 을 `DROPPED` 로 고친다. **`--implemented` 기준선은 변경이 없어도 남긴다** — 그 Intent 를 가리키는 Task 가 아직 없어 기준선이 "이미 구현됨" 의 유일한 기록이다. 지우면 다음 실행이 `NEW` 로 보고 `/task-split` 이 구현된 항목을 전부 신규로 자른다.
-6. **카탈로그 재생성** — 3~5 가 끝난 뒤 대상 App 마다 `python "$DH" intent-catalog --repo . --app <App> --write` 를 한 번 실행한다. **카탈로그를 손으로 쓰지 않는다** — 모든 열이 Intent 문서에서 파생된다.
-7. **종료 보고** — 대상마다 Intent 경로 · 기준선 결과 · 검증 값, 카탈로그 경로(`docs/<App>/<App>-INT-CATALOG.md`), PRD §7 에 더할 행(있으면), 대상 밖 `관련 Intent`(있으면). 확정했으면 다음 단계를 **한 줄로 안내만** 한다 — `/task-split <Intent ID> …`(이번 대상 전부, 자를 변경이 있는 것만). 후속은 **사용자가** 진행한다 — 이 스킬은 실행하지 않는다.
+6. **카탈로그 재생성** — 3~5 가 끝난 뒤 대상 App 마다 `python "$DH" intent-catalog --repo . --app <app> --write` 를 한 번 실행한다 — App 카탈로그와 상위 카탈로그(`intent/intent-app-catalog.md`)를 함께 다시 쓴다. **카탈로그를 손으로 쓰지 않는다** — 모든 열이 Intent 문서에서 파생된다.
+7. **종료 보고** — 대상마다 Intent 경로 · 기준선 결과 · 검증 값, 카탈로그 경로(`intent/<app>/intent-catalog.md` · `intent/intent-app-catalog.md`), PRD §7 에 더할 행(있으면), 대상 밖 `관련 Intent`(있으면). 확정했으면 다음 단계를 **한 줄로 안내만** 한다 — `/task-split <Intent ID> …`(이번 대상 전부, 자를 변경이 있는 것만). 후속은 **사용자가** 진행한다 — 이 스킬은 실행하지 않는다.
 
 ---
 
 ## 산출물 경계
 
 - **만드는 것** — 전부 커밋하지 않는다(`.git/info/exclude`):
-  - 대상 Intent — 새로 쓰거나 고친다(`docs/<App>/INTENT/<App>-INT-<NNN>.md`).
+  - 대상 Intent — 새로 쓰거나 고친다(`intent/<app>/<app>-int-<NNN>.md`).
   - 기준선 `.process/intent-base/<ID>.md` — 고치기 대상, `intent-base --save` 가 쓴다.
-  - 생성물 `docs/<App>/<App>-INT-CATALOG.md` — `intent-catalog --write` 가 쓴다(Phase 5 의 6에서 1회). 세션이 쓰지 않는다.
+  - 생성물 `intent/<app>/intent-catalog.md` · `intent/intent-app-catalog.md` — `intent-catalog --write` 가 쓴다(Phase 5 의 6에서 1회). 세션이 쓰지 않는다.
   - 검증 작업 폴더 `<W>/` — `interview.md` · `expected.md` · `before/<ID>.md` · `<ID>/{checklist-round-<n>.md, checklist-round-<n>.json, round-<n>.md, critic-round-<n>.txt, quality.json}`. 쓰는 주체: `expected.md` = expector, `critic-round-<n>.txt` = critic, 나머지 = 세션.
 - **만들지 않는 것**: Task(`.task/`) · 진행 표시 — `/task-split` 몫. PRD 수정, 인터뷰 정리본 · 별도 지시서, 구현 코드, 브랜치 · 워크트리 · 커밋.
 - 후속 스킬을 자동으로 호출하지 않는다. `ExitPlanMode` 를 호출하지 않는다.

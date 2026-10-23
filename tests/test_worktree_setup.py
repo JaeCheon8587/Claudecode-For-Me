@@ -33,18 +33,19 @@ def git_repo(tmp_path: Path) -> Path:
     return tmp_path
 
 
-TASK_REL = ".task/TSK-001.md"
+TASK_REL = ".task/tsk-001.md"
 TASK_CATALOG_REL = ".task/task-catalog.md"
-INTENT_REL = "docs/Demo/INTENT/Demo-INT-001.md"
-CATALOG_REL = "docs/Demo/Demo-INT-CATALOG.md"
+INTENT_REL = "intent/demo/demo-int-001.md"
+CATALOG_REL = "intent/demo/intent-catalog.md"
+APP_CATALOG_REL = "intent/intent-app-catalog.md"
 
-# 대상 Intent — 기능 문서(상시). TSK-001 이 바꾸는 항목 끝에 진행 표시가 붙어 있다
+# 대상 Intent — 기능 문서(상시). tsk-001 이 바꾸는 항목 끝에 진행 표시가 붙어 있다
 # (신규 · 변경 = 진행 중, 삭제 = 삭제 예정). FR 삭제가 있어서 done 뒤 INT 카탈로그의 규모(FR 수)가 바뀐다.
-INTENT_TEXT = """# Demo-INT-001 — 업로드
+INTENT_TEXT = """# demo-int-001 — 업로드
 
 | 항목 | 값 |
 |---|---|
-| 문서 ID | Demo-INT-001 |
+| 문서 ID | demo-int-001 |
 | 기능 ID | F001 |
 | 상태 | active |
 | 작성 | tester · 2026-10-01 |
@@ -78,26 +79,26 @@ none
 
 ### Functional requirements
 - FR-1. 업로드는 파일 하나를 받아 저장한다. (D1)
-- FR-2. 업로드 응답에 응답 필드 `retryCount` 로 재시도 횟수를 담는다. (D1) [TSK-001 진행 중]
-- FR-3. 업로드 응답에 처리 시간을 밀리초로 담는다. (D1) [TSK-001 진행 중]
-- FR-4. 업로드 응답에 응답 필드 `serverName` 으로 처리한 서버 이름을 담는다. (D1) [TSK-001 삭제 예정]
+- FR-2. 업로드 응답에 응답 필드 `retryCount` 로 재시도 횟수를 담는다. (D1) [tsk-001 진행 중]
+- FR-3. 업로드 응답에 처리 시간을 밀리초로 담는다. (D1) [tsk-001 진행 중]
+- FR-4. 업로드 응답에 응답 필드 `serverName` 으로 처리한 서버 이름을 담는다. (D1) [tsk-001 삭제 예정]
 
 ### Edge cases
-- E-1. 같은 파일을 두 번 올리면 한 번만 저장된다. (FR-1) [TSK-001 삭제 예정]
+- E-1. 같은 파일을 두 번 올리면 한 번만 저장된다. (FR-1) [tsk-001 삭제 예정]
 
 ### Error cases
 - X-1. 빈 파일은 상태 코드 `400` 과 오류 코드 `UPLOAD_EMPTY_FILE` 로 거부한다. (FR-1)
 """
 
 # 승인된 Task — Scope 는 위 Intent 항목의 사본이다 (진행 표시 제외).
-TASK_TEXT = """# TSK-001 — 업로드 응답 정리
+TASK_TEXT = """# tsk-001 — 업로드 응답 정리
 
 | 항목 | 값 |
 |---|---|
-| 문서 ID | TSK-001 |
+| 문서 ID | tsk-001 |
 | 유형 | 기능개발 |
 | 상태 | approved |
-| 대상 Intent | Demo-INT-001 |
+| 대상 Intent | demo-int-001 |
 | 선행 Task | none |
 | 작성 | tester · 2026-10-22 |
 | 승인 | tester · 2026-10-22 |
@@ -108,19 +109,19 @@ TASK_TEXT = """# TSK-001 — 업로드 응답 정리
 - 완료 상태: 응답에서 재시도 횟수와 밀리초 처리 시간을 보고, 서버 이름은 더 이상 오지 않는다.
 
 ## Scope
-- 신규 · Demo-INT-001 FR-2. 업로드 응답에 응답 필드 `retryCount` 로 재시도 횟수를 담는다. (D1)
-- 변경 · Demo-INT-001 FR-3. 업로드 응답에 처리 시간을 밀리초로 담는다. (D1)
+- 신규 · demo-int-001 FR-2. 업로드 응답에 응답 필드 `retryCount` 로 재시도 횟수를 담는다. (D1)
+- 변경 · demo-int-001 FR-3. 업로드 응답에 처리 시간을 밀리초로 담는다. (D1)
   - 이전: 업로드 응답에 처리 시간을 초로 담는다. (D1)
-- 삭제 · Demo-INT-001 FR-4. 업로드 응답에 응답 필드 `serverName` 으로 처리한 서버 이름을 담는다. (D1)
-- 삭제 · Demo-INT-001 E-1. 같은 파일을 두 번 올리면 한 번만 저장된다. (FR-1)
+- 삭제 · demo-int-001 FR-4. 업로드 응답에 응답 필드 `serverName` 으로 처리한 서버 이름을 담는다. (D1)
+- 삭제 · demo-int-001 E-1. 같은 파일을 두 번 올리면 한 번만 저장된다. (FR-1)
 
 - Out of scope: 화면 표시
 
 ## Acceptance
-- [ ] A-1. 업로드 응답에 응답 필드 `retryCount` 가 있다. (Demo-INT-001 FR-2)
-- [ ] A-2. 처리 시간이 밀리초로 온다. (Demo-INT-001 FR-3)
-- [ ] A-3. 업로드 응답에 응답 필드 `serverName` 이 없다. (Demo-INT-001 FR-4)
-- [ ] A-4. 같은 파일을 두 번 올리면 두 번 저장된다. (Demo-INT-001 E-1, R-1)
+- [ ] A-1. 업로드 응답에 응답 필드 `retryCount` 가 있다. (demo-int-001 FR-2)
+- [ ] A-2. 처리 시간이 밀리초로 온다. (demo-int-001 FR-3)
+- [ ] A-3. 업로드 응답에 응답 필드 `serverName` 이 없다. (demo-int-001 FR-4)
+- [ ] A-4. 같은 파일을 두 번 올리면 두 번 저장된다. (demo-int-001 E-1, R-1)
 
 ## Verification
 - 업로드 자동 테스트로 A-1 ~ A-4 를 확인한다.
@@ -149,36 +150,35 @@ def _write(path: Path, text: str, eol: str) -> Path:
     return path
 
 
-def write_intent(repo: Path, docs_dir: str = "docs", eol: str = "\n", replace: dict | None = None) -> Path:
+def write_intent(repo: Path, eol: str = "\n", replace: dict | None = None) -> Path:
     text = INTENT_TEXT
     for old, new in (replace or {}).items():
         assert old in text, f"replace target not found: {old!r}"
         text = text.replace(old, new)
-    return _write(repo / docs_dir / "Demo" / "INTENT" / "Demo-INT-001.md", text, eol)
+    return _write(repo / INTENT_REL, text, eol)
 
 
 def write_catalogs(repo: Path) -> None:
-    """/task-split 이 승인 뒤에 하듯 생성물 두 개를 다시 만든다."""
-    assert _dh.main(["intent-catalog", "--repo", str(repo), "--app", "Demo", "--write"]) == 0
+    """/task-split 이 승인 뒤에 하듯 생성물(App 카탈로그 · 상위 카탈로그 · Task 카탈로그)을 다시 만든다."""
+    assert _dh.main(["intent-catalog", "--repo", str(repo), "--app", "demo", "--write"]) == 0
     assert _dh.main(["task-catalog", "--repo", str(repo), "--write"]) == 0
 
 
 def write_task(
     repo: Path,
     status: str = "approved",
-    docs_dir: str = "docs",
     eol: str = "\n",
     intent: dict | None = None,
     catalogs: bool = True,
-    task_id: str = "TSK-001",
+    task_id: str = "tsk-001",
     **rows: str,
 ) -> Path:
     """Task(.task/<task_id>.md) + 대상 Intent (+ 카탈로그 2종). 커밋하지 않는다 — 문서는 로컬 정본이다.
 
     rows 는 메타 · Handoff 행 값, intent 는 Intent 본문 str.replace 쌍.
     """
-    write_intent(repo, docs_dir=docs_dir, eol=eol, replace=intent)
-    text = _meta_row(TASK_TEXT, "상태", status).replace("TSK-001", task_id)
+    write_intent(repo, eol=eol, replace=intent)
+    text = _meta_row(TASK_TEXT, "상태", status).replace("tsk-001", task_id)
     for key, value in rows.items():
         text = _meta_row(text, key, value)
     task = _write(repo / ".task" / f"{task_id}.md", text, eol)
@@ -217,14 +217,14 @@ def main_manifest(repo: Path, slug: str = "upload") -> dict:
     return json.loads((repo / ".process" / "worktree" / f"{slug}.json").read_text(encoding="utf-8"))
 
 
-def task_catalog_row(text: str, task_id: str = "TSK-001") -> str:
+def task_catalog_row(text: str, task_id: str = "tsk-001") -> str:
     return next((line for line in text.splitlines() if line.startswith(f"| [{task_id}](")), "")
 
 
 def catalog_row(text: str, intent_id: str) -> str:
     """INT 카탈로그 본문에서 해당 Intent 의 행 1줄을 뽑는다 (없으면 빈 문자열)."""
     for line in text.splitlines():
-        if line.startswith(f"| [{intent_id}](INTENT/"):
+        if line.startswith(f"| [{intent_id}]({intent_id}.md)"):
             return line
     return ""
 
@@ -249,7 +249,7 @@ def test_approved_task_fixture_is_clean(tmp_path: Path):
     results = _dh._check_task_file(tmp_path, task)
     bad = [f"{r.level} {r.code}: {r.message}" for r in results if r.level != "PASS"]
     assert not bad, bad
-    assert _dh.main(["check", "--repo", str(tmp_path), "--app", "Demo"]) == 0
+    assert _dh.main(["check", "--repo", str(tmp_path), "--app", "demo"]) == 0
 
 
 # ============================================================================
@@ -278,7 +278,7 @@ def test_init_does_not_need_any_task(git_repo: Path):
 
     assert result.returncode == 0, result.stderr
     manifest = manifest_from(result)
-    assert "docs/" in manifest["skipped"] and ".task/" in manifest["skipped"]
+    assert {"docs/", "intent/", ".task/"} <= set(manifest["skipped"])
 
 
 def test_init_branch_option_overrides_default(git_repo: Path):
@@ -318,7 +318,7 @@ def test_zero_commit_repo_blocks_with_and_without_force(tmp_path: Path):
 
 
 def test_init_puts_docs_in_local_exclude(git_repo: Path):
-    """문서 폴더 · .task/ 는 커밋하지 않는다 — 공유 .gitignore 대신 이 clone 의 info/exclude 에 올린다."""
+    """문서 폴더 · intent/ · .task/ 는 커밋하지 않는다 — 공유 .gitignore 대신 이 clone 의 info/exclude 에 올린다."""
     write_task(git_repo)
 
     result = run_init(git_repo)
@@ -328,7 +328,7 @@ def test_init_puts_docs_in_local_exclude(git_repo: Path):
     exclude = Path(manifest["exclude"])
     assert exclude.resolve() == (git_repo / ".git" / "info" / "exclude").resolve()
     lines = exclude.read_text(encoding="utf-8").splitlines()
-    for entry in (".worktree/", ".process/", "/docs/", "/Docs/", "/.task/"):
+    for entry in (".worktree/", ".process/", "/docs/", "/Docs/", "/intent/", "/.task/"):
         assert entry in lines
     assert manifest["exclude_added"]
     assert not (git_repo / ".gitignore").exists(), "공유 .gitignore 를 만들거나 고치지 않는다"
@@ -344,10 +344,10 @@ def test_init_copies_docs_and_tasks_as_snapshot(git_repo: Path):
     manifest = manifest_from(run_init(git_repo))
 
     wt = Path(manifest["worktree"])
-    assert "docs/" in manifest["copied"] and ".task/" in manifest["copied"]
-    for rel in (TASK_REL, TASK_CATALOG_REL, INTENT_REL, CATALOG_REL):
+    assert "intent/" in manifest["copied"] and ".task/" in manifest["copied"]
+    for rel in (TASK_REL, TASK_CATALOG_REL, INTENT_REL, CATALOG_REL, APP_CATALOG_REL):
         assert (wt / rel).read_bytes() == (git_repo / rel).read_bytes(), rel
-    for rel in ("docs", ".task"):
+    for rel in ("intent", ".task"):
         assert not _ws._is_dir_link(wt / rel), "링크는 worktree remove --force 때 정본을 지운다 — 복사해야 한다"
     replace_in(task, "| 상태 | approved |", "| 상태 | in-review |")
     assert "| 상태 | approved |" in (wt / TASK_REL).read_text(encoding="utf-8"), "사본은 정본을 따라가지 않는다"
@@ -358,10 +358,10 @@ def test_second_init_resumes_keeps_tasks_and_copies_only_new_files(git_repo: Pat
     first = manifest_from(run_init(git_repo))
     wt = Path(first["worktree"])
     recorded = main_manifest(git_repo)
-    recorded["tasks"] = ["TSK-001"]   # finish 가 남긴 것처럼
+    recorded["tasks"] = ["tsk-001"]   # finish 가 남긴 것처럼
     (git_repo / ".process" / "worktree" / "upload.json").write_text(json.dumps(recorded), encoding="utf-8")
     replace_in(git_repo / TASK_REL, "업로드 응답 정리", "업로드 응답 정리 (고침)")
-    write_task(git_repo, task_id="TSK-002", catalogs=False)
+    write_task(git_repo, task_id="tsk-002", catalogs=False)
     run_git(git_repo, "commit", "-q", "--allow-empty", "-m", "moved on")
 
     second = run_init(git_repo)
@@ -369,9 +369,9 @@ def test_second_init_resumes_keeps_tasks_and_copies_only_new_files(git_repo: Pat
     assert second.returncode == 0, second.stderr
     manifest = manifest_from(second)
     assert (manifest["created"], manifest["base_applied"]) == (False, False)
-    assert manifest["tasks"] == ["TSK-001"]
+    assert manifest["tasks"] == ["tsk-001"]
     assert (manifest["base"], manifest["base_commit"]) == (first["base"], first["base_commit"])
-    assert (wt / ".task" / "TSK-002.md").is_file(), "새로 생긴 Task 파일은 복사된다"
+    assert (wt / ".task" / "tsk-002.md").is_file(), "새로 생긴 Task 파일은 복사된다"
     assert "(고침)" not in (wt / TASK_REL).read_text(encoding="utf-8"), "있는 파일은 덮지 않는다"
 
 
@@ -381,7 +381,7 @@ def test_init_new_branch_ignores_stale_manifest_tasks(git_repo: Path):
     stale = git_repo / ".process" / "worktree" / "upload.json"
     stale.parent.mkdir(parents=True)
     stale.write_text(json.dumps({"slug": "upload", "branch": "work/upload", "base": "old-base",
-                                 "base_commit": "0" * 40, "tasks": ["TSK-001"]}), encoding="utf-8")
+                                 "base_commit": "0" * 40, "tasks": ["tsk-001"]}), encoding="utf-8")
 
     manifest = manifest_from(run_init(git_repo))
 
@@ -490,8 +490,8 @@ def test_guardrails_copy_claude_settings(git_repo: Path):
 
 @pytest.mark.parametrize("docs_dir", ["docs", "Docs"])
 def test_guardrails_copy_docs_folder_once_in_disk_spelling(git_repo: Path, docs_dir: str):
-    """docs·Docs 를 따로 세면 한 폴더가 다른 표기로 보고되거나 '복사' 와 'skip' 에 함께 오른다."""
-    write_task(git_repo, docs_dir=docs_dir)
+    """docs·Docs 를 따로 세면 한 폴더가 다른 표기로 보고되거나 '복사' 와 'skip' 에 함께 오른다(PRD 등 Intent 밖 문서)."""
+    write_task(git_repo)
     local = git_repo / docs_dir / "local" / "notes.md"
     local.parent.mkdir(parents=True)
     local.write_text("# local\n", encoding="utf-8")
@@ -710,7 +710,7 @@ def dev_commit(wt: Path, name: str = "feature.txt") -> None:
 
 
 def run_finish(wt: Path, *task_ids: str) -> subprocess.CompletedProcess:
-    return run_script(wt, "finish", *(task_ids or ("TSK-001",)), "--quiet")
+    return run_script(wt, "finish", *(task_ids or ("tsk-001",)), "--quiet")
 
 
 def finish_result(result: subprocess.CompletedProcess) -> dict:
@@ -726,18 +726,18 @@ def test_finish_moves_main_task_to_in_review_without_commit(git_repo: Path):
 
     assert result.returncode == 0, result.stderr
     out = finish_result(result)
-    assert out["tasks"] == [{"id": "TSK-001", "status": "in-review", "already": False}]
+    assert out["tasks"] == [{"id": "tsk-001", "status": "in-review", "already": False}]
     assert out["catalog"] == TASK_CATALOG_REL
     assert status_row(git_repo / TASK_REL) == "| 상태 | in-review |"
     assert "| in-review |" in task_catalog_row((git_repo / TASK_CATALOG_REL).read_text(encoding="utf-8"))
-    assert main_manifest(git_repo)["tasks"] == ["TSK-001"]
+    assert main_manifest(git_repo)["tasks"] == ["tsk-001"]
     assert run_git(wt, "rev-list", "--count", "HEAD").stdout.strip() == commits, "문서는 커밋하지 않는다"
     # 진행 표시는 머지를 확인한 delete 가 지운다 — 마감은 리뷰 전이라 남는다.
-    assert "[TSK-001 진행 중]" in (git_repo / INTENT_REL).read_text(encoding="utf-8")
+    assert "[tsk-001 진행 중]" in (git_repo / INTENT_REL).read_text(encoding="utf-8")
     assert status_row(wt / TASK_REL) == "| 상태 | approved |", "워크트리 사본은 스냅샷이라 따라가지 않는다"
     fails = [f"{r.code}: {r.message}" for r in _dh._check_task_file(git_repo, git_repo / TASK_REL) if r.level == "FAIL"]
     assert not fails, fails
-    assert _dh.main(["check", "--repo", str(git_repo), "--app", "Demo"]) == 0
+    assert _dh.main(["check", "--repo", str(git_repo), "--app", "demo"]) == 0
 
 
 def test_finish_keeps_main_task_line_endings(git_repo: Path):
@@ -753,26 +753,26 @@ def test_finish_keeps_main_task_line_endings(git_repo: Path):
 
 def test_finish_several_tasks_at_once(git_repo: Path):
     manifest, wt = init_worktree(git_repo)
-    write_task(git_repo, task_id="TSK-002", catalogs=False)
+    write_task(git_repo, task_id="tsk-002", catalogs=False)
     dev_commit(wt)
 
-    result = run_finish(wt, "TSK-002", "TSK-001", "TSK-002")
+    result = run_finish(wt, "tsk-002", "tsk-001", "tsk-002")
 
     assert result.returncode == 0, result.stderr
-    assert [t["id"] for t in finish_result(result)["tasks"]] == ["TSK-002", "TSK-001"]
-    assert main_manifest(git_repo)["tasks"] == ["TSK-002", "TSK-001"]
-    for task_id in ("TSK-001", "TSK-002"):
+    assert [t["id"] for t in finish_result(result)["tasks"]] == ["tsk-002", "tsk-001"]
+    assert main_manifest(git_repo)["tasks"] == ["tsk-002", "tsk-001"]
+    for task_id in ("tsk-001", "tsk-002"):
         assert status_row(git_repo / ".task" / f"{task_id}.md") == "| 상태 | in-review |"
 
 
 def test_finish_writes_nothing_when_one_task_cannot_change(git_repo: Path):
     """둘째 Task 의 상태 행을 못 바꾸면 첫째도 바꾸지 않는다 — 반쯤 마감하면 다시 실행해도 풀 수 없다."""
     manifest, wt = init_worktree(git_repo)
-    second = write_task(git_repo, task_id="TSK-002", catalogs=False)
+    second = write_task(git_repo, task_id="tsk-002", catalogs=False)
     replace_in(second, "| 상태 | approved |", "  | 상태 | approved |")   # 파서는 읽지만 고쳐 쓰지 못한다
     dev_commit(wt)
 
-    result = run_finish(wt, "TSK-001", "TSK-002")
+    result = run_finish(wt, "tsk-001", "tsk-002")
 
     assert result.returncode == 1
     assert "아무 Task 도 바꾸지 않았다" in result.stderr
@@ -841,7 +841,7 @@ def test_finish_refuses_task_not_approved(git_repo: Path, status: str):
     assert main_manifest(git_repo)["tasks"] == []
 
 
-@pytest.mark.parametrize("task_id, message", [("TSK-009", "메인 정본에 없다"), ("TSK-1", "형식")])
+@pytest.mark.parametrize("task_id, message", [("tsk-009", "메인 정본에 없다"), ("tsk-1", "형식")])
 def test_finish_refuses_unknown_or_malformed_task(git_repo: Path, task_id: str, message: str):
     manifest, wt = init_worktree(git_repo)
     dev_commit(wt)
@@ -860,8 +860,8 @@ def test_finish_twice_reports_already(git_repo: Path):
     second = run_finish(wt)
 
     assert second.returncode == 0, second.stderr
-    assert finish_result(second)["tasks"] == [{"id": "TSK-001", "status": "in-review", "already": True}]
-    assert main_manifest(git_repo)["tasks"] == ["TSK-001"]
+    assert finish_result(second)["tasks"] == [{"id": "tsk-001", "status": "in-review", "already": True}]
+    assert main_manifest(git_repo)["tasks"] == ["tsk-001"]
 
 
 def test_finish_refuses_task_finished_in_other_worktree(git_repo: Path):
@@ -885,7 +885,7 @@ def test_finish_finds_main_manifest_by_worktree_path(git_repo: Path):
     (wt / ".process" / "worktree" / "handoff.json").unlink()
 
     assert run_finish(wt).returncode == 0
-    assert main_manifest(git_repo)["tasks"] == ["TSK-001"]
+    assert main_manifest(git_repo)["tasks"] == ["tsk-001"]
 
 
 def test_finish_without_any_manifest_blocks(git_repo: Path):
@@ -976,18 +976,18 @@ def test_delete_after_merge_closes_finished_tasks(git_repo: Path):
 
     assert result.returncode == 0, result.stderr
     assert f"merged into:      {current_branch(git_repo)}" in result.stdout
-    assert "TSK-001 done (Demo-INT-001: 표시 2 · 삭제 줄 2)" in result.stdout
+    assert "tsk-001 done (demo-int-001: 표시 2 · 삭제 줄 2)" in result.stdout
     assert status_row(git_repo / TASK_REL) == "| 상태 | done |"
     intent = (git_repo / INTENT_REL).read_text(encoding="utf-8")
-    assert "[TSK-001" not in intent
+    assert "[tsk-001" not in intent
     assert "- FR-2. 업로드 응답에 응답 필드 `retryCount` 로 재시도 횟수를 담는다. (D1)\n" in intent
     assert "- FR-4." not in intent and "- E-1." not in intent
     assert "### Edge cases\nnone\n\n### Error cases" in intent   # 섹션이 비면 none 을 남긴다
     assert "| done |" in task_catalog_row((git_repo / TASK_CATALOG_REL).read_text(encoding="utf-8"))
-    assert "| FR 3 · " in catalog_row((git_repo / CATALOG_REL).read_text(encoding="utf-8"), "Demo-INT-001")
+    assert "| FR 3 · " in catalog_row((git_repo / CATALOG_REL).read_text(encoding="utf-8"), "demo-int-001")
     fails = [f"{r.code}: {r.message}" for r in _dh._check_task_file(git_repo, git_repo / TASK_REL) if r.level == "FAIL"]
     assert not fails, fails
-    assert _dh.main(["check", "--repo", str(git_repo), "--app", "Demo"]) == 0
+    assert _dh.main(["check", "--repo", str(git_repo), "--app", "demo"]) == 0
     assert not wt.exists() and not branch_exists(git_repo, "work/upload")
     assert not (git_repo / ".process" / "worktree" / "upload.json").exists()
     assert run_git(git_repo, "status", "--porcelain").stdout == ""
@@ -996,14 +996,14 @@ def test_delete_after_merge_closes_finished_tasks(git_repo: Path):
 @pytest.mark.parametrize("eol", ["\n", "\r\n"], ids=["lf", "crlf"])
 def test_delete_keeps_line_endings_and_other_task_marks(git_repo: Path, eol: str):
     x1 = "`UPLOAD_EMPTY_FILE` 로 거부한다. (FR-1)"
-    manifest, wt = finished_worktree(git_repo, eol=eol, intent={x1: x1 + " [TSK-002 진행 중]"})
+    manifest, wt = finished_worktree(git_repo, eol=eol, intent={x1: x1 + " [tsk-002 진행 중]"})
     merge(git_repo)
 
     assert run_delete(git_repo).returncode == 0
 
     intent = (git_repo / INTENT_REL).read_bytes()
-    assert "(FR-1) [TSK-002 진행 중]".encode() in intent, "다른 Task 의 표시는 그 Task 가 지운다"
-    assert b"[TSK-001" not in intent
+    assert "(FR-1) [tsk-002 진행 중]".encode() in intent, "다른 Task 의 표시는 그 Task 가 지운다"
+    assert b"[tsk-001" not in intent
     for rel in (INTENT_REL, TASK_REL):
         data = (git_repo / rel).read_bytes()
         lf, crlf = data.count(b"\n"), data.count(b"\r\n")
@@ -1033,7 +1033,7 @@ def test_delete_force_discards_without_touching_docs(git_repo: Path):
     result = run_delete(git_repo, "--force")
 
     assert result.returncode == 0, result.stderr
-    assert "task 그대로:      TSK-001" in result.stdout
+    assert "task 그대로:      tsk-001" in result.stdout
     assert status_row(git_repo / TASK_REL) == "| 상태 | in-review |"
     assert (git_repo / INTENT_REL).read_bytes() == intent_before
     assert not wt.exists() and not branch_exists(git_repo, "work/upload")
@@ -1078,8 +1078,8 @@ def test_delete_skips_recorded_task_that_is_not_in_review(git_repo: Path):
     result = run_delete(git_repo)
 
     assert result.returncode == 0, result.stderr
-    assert "task skip:        TSK-001 (approved — 마감하지 않았다)" in result.stdout
-    assert "[TSK-001 진행 중]" in (git_repo / INTENT_REL).read_text(encoding="utf-8")
+    assert "task skip:        tsk-001 (approved — 마감하지 않았다)" in result.stdout
+    assert "[tsk-001 진행 중]" in (git_repo / INTENT_REL).read_text(encoding="utf-8")
 
 
 def test_delete_stops_before_removing_anything_when_status_row_cannot_change(git_repo: Path):
@@ -1094,7 +1094,7 @@ def test_delete_stops_before_removing_anything_when_status_row_cannot_change(git
     assert "상태 행을 done 으로 바꾸지 못했다" in blocked.stderr
     assert wt.is_dir() and branch_exists(git_repo, "work/upload")
     assert (git_repo / ".process" / "worktree" / "upload.json").is_file()
-    assert "[TSK-001 진행 중]" in (git_repo / INTENT_REL).read_text(encoding="utf-8"), "done 이 아니면 표시를 지우지 않는다"
+    assert "[tsk-001 진행 중]" in (git_repo / INTENT_REL).read_text(encoding="utf-8"), "done 이 아니면 표시를 지우지 않는다"
     replace_in(git_repo / TASK_REL, "  | 상태 | in-review |", "| 상태 | in-review |")
 
     result = run_delete(git_repo)   # 고친 뒤 다시 실행하면 이어서 끝낸다
@@ -1123,12 +1123,12 @@ def test_delete_with_manifest_left_after_manual_removal(git_repo: Path, flag: st
     assert result.returncode == 0, result.stderr
     assert not mpath.exists()
     if flag == "--force":
-        assert "task 그대로:      TSK-001" in result.stdout
+        assert "task 그대로:      tsk-001" in result.stdout
         assert status_row(git_repo / TASK_REL) == "| 상태 | in-review |"
     else:
-        assert "TSK-001 done" in result.stdout
+        assert "tsk-001 done" in result.stdout
         assert status_row(git_repo / TASK_REL) == "| 상태 | done |"
-        assert "[TSK-001" not in (git_repo / INTENT_REL).read_text(encoding="utf-8")
+        assert "[tsk-001" not in (git_repo / INTENT_REL).read_text(encoding="utf-8")
 
 
 def test_delete_force_after_confirmed_merge_still_closes_tasks(git_repo: Path):
@@ -1153,7 +1153,7 @@ def test_delete_resumes_marker_cleanup_for_done_task(git_repo: Path):
     result = run_delete(git_repo)
 
     assert result.returncode == 0, result.stderr
-    assert "[TSK-001" not in (git_repo / INTENT_REL).read_text(encoding="utf-8")
+    assert "[tsk-001" not in (git_repo / INTENT_REL).read_text(encoding="utf-8")
 
 
 def test_delete_stops_on_non_utf8_intent_without_writing(git_repo: Path):
@@ -1177,7 +1177,7 @@ def test_delete_stops_on_commented_marker_line(git_repo: Path):
     """진행 표시 줄에 HTML 주석이 섞여 있으면 아무것도 쓰지 않는다 — 줄째 지우면 주석 여닫이가 깨진다."""
     manifest, wt = finished_worktree(git_repo)
     merge(git_repo)
-    replace_in(git_repo / INTENT_REL, "(FR-1) [TSK-001 삭제 예정]", "(FR-1) [TSK-001 삭제 예정] <!-- 메모")
+    replace_in(git_repo / INTENT_REL, "(FR-1) [tsk-001 삭제 예정]", "(FR-1) [tsk-001 삭제 예정] <!-- 메모")
     replace_in(git_repo / INTENT_REL, "### Error cases", "-->\n\n### Error cases")
     before = (git_repo / INTENT_REL).read_bytes()
 
@@ -1204,34 +1204,34 @@ def test_delete_write_failure_stops_and_rerun_finishes(git_repo: Path, monkeypat
 
     monkeypatch.setattr(os, "replace", flaky)
     with pytest.raises(SystemExit) as stop:
-        _ws._close_or_stop(git_repo, ["TSK-001"])
+        _ws._close_or_stop(git_repo, ["tsk-001"])
     assert stop.value.code == 2
     err = capsys.readouterr().err
     assert "쓰다가 멈춰 삭제를 멈춘다" in err and "다시 실행" in err, err
     intent = git_repo / INTENT_REL
     assert status_row(git_repo / TASK_REL) == "| 상태 | done |"
-    assert "[TSK-001 " in intent.read_text(encoding="utf-8")
+    assert "[tsk-001 " in intent.read_text(encoding="utf-8")
     assert not [p.name for p in intent.parent.iterdir() if p.name.endswith(".tmp")]
 
     monkeypatch.setattr(os, "replace", real)
-    closed, skipped = _ws._close_or_stop(git_repo, ["TSK-001"])
+    closed, skipped = _ws._close_or_stop(git_repo, ["tsk-001"])
     assert len(closed) == 1 and not skipped
-    assert "[TSK-001 " not in intent.read_text(encoding="utf-8")
-    catalog = git_repo / "docs" / "Demo" / "Demo-INT-CATALOG.md"
-    assert catalog.is_file() and "TSK-001" not in catalog.read_text(encoding="utf-8")
+    assert "[tsk-001 " not in intent.read_text(encoding="utf-8")
+    catalog = git_repo / CATALOG_REL
+    assert catalog.is_file() and "tsk-001" not in catalog.read_text(encoding="utf-8")
 
 
 def test_delete_rerun_rewrites_stale_catalogs(git_repo: Path):
     """앞선 delete 가 문서를 쓴 뒤 멈췄으면 카탈로그만 옛 상태다 — 다시 실행하면 바꿀 문서가 없어도 카탈로그를 다시 쓴다."""
     finished_worktree(git_repo)
     merge(git_repo)
-    _ws._close_or_stop(git_repo, ["TSK-001"])
-    catalogs = [git_repo / _dh.TASK_DIR / _dh.TASK_CATALOG_NAME, git_repo / "docs" / "Demo" / "Demo-INT-CATALOG.md"]
+    _ws._close_or_stop(git_repo, ["tsk-001"])
+    catalogs = [git_repo / _dh.TASK_DIR / _dh.TASK_CATALOG_NAME, git_repo / CATALOG_REL, git_repo / APP_CATALOG_REL]
     good = [c.read_bytes() for c in catalogs]
     for c in catalogs:
         c.write_text("옛 카탈로그\n", encoding="utf-8")
 
-    _ws._close_or_stop(git_repo, ["TSK-001"])
+    _ws._close_or_stop(git_repo, ["tsk-001"])
 
     assert [c.read_bytes() for c in catalogs] == good
 
@@ -1277,47 +1277,70 @@ def test_delete_refuses_from_inside_the_worktree(git_repo: Path):
 # ============================================================================
 # _refresh_int_catalog (단위)
 # ============================================================================
-@pytest.mark.parametrize("bad_rel", [
-    "docs/Demo/Demo-INT-001.md",          # 세그먼트 부족 (INTENT/ 없음)
-    "docs/Demo/TASK/Demo-INT-001.md",     # 세번째 세그먼트가 INTENT 가 아님
-])
-def test_refresh_int_catalog_rejects_non_intent_path(tmp_path: Path, bad_rel: str):
+def test_refresh_int_catalog_writes_app_and_top_catalogs(tmp_path: Path):
     write_intent(tmp_path)
 
-    assert _ws._refresh_int_catalog(tmp_path, bad_rel) is None
-    assert not (tmp_path / CATALOG_REL).exists()
+    rel = _ws._refresh_int_catalog(tmp_path, "demo")
 
-
-@pytest.mark.parametrize("docs_dir", ["docs", "Docs"])
-def test_refresh_int_catalog_writes_catalog_in_intent_spelling(tmp_path: Path, docs_dir: str):
-    write_intent(tmp_path, docs_dir=docs_dir)
-
-    rel = _ws._refresh_int_catalog(tmp_path, f"{docs_dir}/Demo/INTENT/Demo-INT-001.md")
-
-    assert rel == f"{docs_dir}/Demo/Demo-INT-CATALOG.md"
+    assert rel == CATALOG_REL
     catalog = (tmp_path / rel).read_text(encoding="utf-8")
-    assert catalog_row(catalog, "Demo-INT-001"), catalog
+    assert catalog_row(catalog, "demo-int-001"), catalog
     assert catalog.strip().splitlines()[-1] == "intents: 1"
+    top = (tmp_path / APP_CATALOG_REL).read_text(encoding="utf-8")
+    assert "| demo | [demo-intent-catalog](demo/intent-catalog.md) | 1 | 1 | 0 |" in top
+    assert top.strip().splitlines()[-1] == "apps: 1"
+
+
+def test_refresh_int_catalog_unknown_app_does_not_raise(tmp_path: Path, capsys):
+    """게이트가 아니다 — 폴더가 없어도 죽지 않고 WARN 한 줄만 남긴다."""
+    assert _ws._refresh_int_catalog(tmp_path, "nosuch") is None
+    assert "WARN" in capsys.readouterr().err
 
 
 # ============================================================================
-# 문서 폴더 대소문자 (docs · Docs)
+# Intent · Task 는 소문자 — intent/<app>/<app>-int-NNN.md · .task/tsk-NNN.md
 #
-# 레포마다 문서 폴더가 docs 또는 Docs 다 — 둘은 같은 폴더로 봐야 한다. 복사 · done 전이 ·
-# 카탈로그 재생성이 디스크 표기를 그대로 써야 한다. Task 는 레포 루트 .task/ 라 표기 문제가 없다.
+# 옛 표기(docs/<App>/INTENT/, TSK-001.md)는 읽지 않는다. 대소문자 무시 FS(Windows · macOS)에서도
+# 대문자 파일을 같은 파일로 보지 않는다.
 # ============================================================================
-@pytest.mark.parametrize("docs_dir", ["Docs", "docs"])
-def test_either_docs_spelling_through_init_finish_delete(git_repo: Path, docs_dir: str):
-    manifest, wt = finished_worktree(git_repo, docs_dir=docs_dir)
-    intent_rel = f"{docs_dir}/Demo/INTENT/Demo-INT-001.md"
-    assert f"{docs_dir}/" in manifest["copied"]
-    assert (wt / intent_rel).is_file()
+def test_finish_accepts_uppercase_task_id_input(git_repo: Path):
+    manifest, wt = init_worktree(git_repo)
+    dev_commit(wt)
+
+    result = run_finish(wt, "TSK-001")
+
+    assert result.returncode == 0, result.stderr
+    assert finish_result(result)["tasks"] == [{"id": "tsk-001", "status": "in-review", "already": False}]
+    assert status_row(git_repo / TASK_REL) == "| 상태 | in-review |"
+
+
+def test_finish_does_not_take_old_case_task_file(git_repo: Path):
+    """메인 정본이 옛 표기(TSK-002.md)면 없는 것으로 본다 — 대소문자 무시 FS 에서 열려도 마감하지 않는다."""
+    manifest, wt = init_worktree(git_repo)
+    dev_commit(wt)
+    old = git_repo / ".task" / "TSK-002.md"
+    old.write_text((git_repo / TASK_REL).read_text(encoding="utf-8").replace("tsk-001", "TSK-002"), encoding="utf-8")
+
+    result = run_finish(wt, "tsk-002")
+
+    assert result.returncode == 2
+    assert "메인 정본에 없다" in result.stderr
+
+
+def test_delete_through_intent_root_keeps_docs_untouched(git_repo: Path):
+    """done 전이 · 진행 표시 정리 · 카탈로그 재생성은 intent/ 에서만 일어난다 — docs/ 의 PRD 는 그대로다."""
+    prd = git_repo / "docs" / "DEMO" / "DEMO-PRD.md"
+    prd.parent.mkdir(parents=True)
+    prd.write_text("# DEMO-PRD\n", encoding="utf-8")
+    manifest, wt = finished_worktree(git_repo)
+    assert {"docs/", "intent/", ".task/"} <= set(manifest["copied"])
+    assert (wt / INTENT_REL).is_file() and (wt / "docs" / "DEMO" / "DEMO-PRD.md").is_file()
     assert run_git(git_repo, "status", "--porcelain").stdout == ""
     merge(git_repo)
 
     result = run_delete(git_repo)
 
     assert result.returncode == 0, result.stderr
-    assert "[TSK-001" not in (git_repo / intent_rel).read_text(encoding="utf-8")
-    assert docs_dir in os.listdir(git_repo)
-    assert _dh.main(["check", "--repo", str(git_repo), "--app", "Demo"]) == 0
+    assert "[tsk-001" not in (git_repo / INTENT_REL).read_text(encoding="utf-8")
+    assert prd.read_text(encoding="utf-8") == "# DEMO-PRD\n"
+    assert _dh.main(["check", "--repo", str(git_repo), "--app", "demo"]) == 0

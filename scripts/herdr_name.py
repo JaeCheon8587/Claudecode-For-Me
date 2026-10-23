@@ -3,9 +3,9 @@
 
 herdr 는 에이전트 이름을 `^[a-z][a-z0-9_-]{0,31}$` 로 제한하고, 살아 있는
 에이전트 사이에서 유일할 것을 요구한다. 그런데 이름의 출처가 되는 값(워크트리
-slug, 브랜치명, 문서 ID)은 대문자와 점을 그대로 갖는다 — 예를 들어
+slug, 브랜치명)은 대문자와 점을 그대로 가질 수 있다 — 예를 들어
 `worktree_setup.py` 의 `_slugify` 는 `[^A-Za-z0-9._-]` 만 치환하므로
-`MyApp-INT-007` 이 그대로 나온다. 그걸 `agent start` 에 넘기면 거부된다.
+`Login.Api-V2` 가 그대로 나온다. 그걸 `agent start` 에 넘기면 거부된다.
 
 이 규칙을 산문으로 두면 오적용되므로 결정적 함수로 고정한다.
 
@@ -36,7 +36,7 @@ def is_valid(name: str) -> bool:
 def normalize(raw: str, taken: Iterable[str] = ()) -> str:
     """raw 를 herdr 에이전트 이름으로 바꾼다. taken 과 겹치면 접미를 붙인다.
 
-    `MyApp-INT-007` → `myapp-int-007`
+    `Login.Api-V2` → `login-api-v2`
     """
     taken = set(taken)
 

@@ -1,15 +1,15 @@
-# TSK-{NNN} — {작업 제목}
+# tsk-{NNN} — {작업 제목}
 
-> ⚠ **TEMPLATE** — 본 파일은 Task 문서 템플릿이다. `/task-split` 이 복사해 채운다 — 모든 `{...}` placeholder 를 실제 값으로 채우거나 해당 줄을 삭제하고, **이 경고 블록을 삭제**한다. 결과 파일은 레포 루트 `.task/TSK-{NNN}.md` 이고 문서 ID 는 `TSK-{NNN}` 이다 (`NNN` = 3자리 0패딩, 레포 전체에서 하나의 번호열). **`.task/` 는 커밋하지 않는다** — 설계 문서라 `.git/info/exclude` 에 올린다(`docs_helpers.py ensure-exclude`).
+> ⚠ **TEMPLATE** — 본 파일은 Task 문서 템플릿이다. `/task-split` 이 복사해 채운다 — 모든 `{...}` placeholder 를 실제 값으로 채우거나 해당 줄을 삭제하고, **이 경고 블록을 삭제**한다. 결과 파일은 레포 루트 `.task/tsk-{NNN}.md` 이고 문서 ID 는 `tsk-{NNN}` 이다 (`NNN` = 3자리 0패딩, 레포 전체에서 하나의 번호열). **`.task/` 는 커밋하지 않는다** — 설계 문서라 `.git/info/exclude` 에 올린다(`docs_helpers.py ensure-exclude`).
 >
 > **Task 는 작업 계약서**: 이번 작업이 Intent(기능 문서)의 어느 항목을 어떻게 바꾸는지, 무엇이 되면 완료인지를 정한다. App 하나에 묶이지 않는다 — 여러 App 의 Intent 를 함께 바꾸는 작업도 Task 하나일 수 있다. 기능의 동작(FR · Edge · Error)은 Intent 에 있고, Scope 는 바뀐 항목의 사본이다. **내부 코드 이름(클래스 · 인터페이스 · 메서드 · 함수 · 속성 · 필드 · 변수 · 네임스페이스 · 파일)은 어디에도 쓰지 않는다** — 개발 세션 몫이다. 밖에서 보이는 이름(API 경로 · 요청/응답 필드 · 설정 키 · 오류/상태 코드 · 화면 문구)은 쓴다. 이름 규칙 상세는 DOCUMENT_GUIDE §1.4.
 
 | 항목 | 값 |
 |---|---|
-| 문서 ID | TSK-{NNN} |
+| 문서 ID | tsk-{NNN} |
 | 유형 | 기능개발 \| 버그수정 \| 리팩토링 |
 | 상태 | draft |
-| 대상 Intent | {App}-INT-{NNN} |
+| 대상 Intent | {app}-int-{NNN} |
 | 선행 Task | none |
 | 작성 | {작성자} · {YYYY-MM-DD} |
 | 승인 | pending |
@@ -17,10 +17,10 @@
 
 <!-- 유형: 하나만 남긴다 — 기능개발: Intent 를 바꾼다. 버그수정: Intent 는 그대로, 코드가 어긴 항목을 '위반'으로 담는다(스펙에 없던 경계에서 난 버그는 Intent 에 E/X 를 신규로 더한다). 리팩토링: Intent 는 그대로, 바뀌면 안 되는 항목을 '보존'으로 담는다.
      상태 허용값: draft | approved | in-review | done | dropped.
-       approved — /task-split 의 일괄 승인. in-review — 개발 세션이 워크트리 안에서 `worktree_setup.py finish TSK-{NNN}`.
+       approved — /task-split 의 일괄 승인. in-review — 개발 세션이 워크트리 안에서 `worktree_setup.py finish tsk-{NNN}`.
        done — 브랜치 머지를 확인한 /worktree-delete. dropped = 취소 — 작성 규칙 6 대로 Intent 를 되돌린다.
-     대상 Intent: 이 작업이 바꾸거나 기대는 Intent ID 를 ` · ` 로 나열한다 — App 이 달라도 된다(예 `LOADER-INT-003 · VIEWER-INT-001`). Intent 가 없는 영역의 리팩토링만 none.
-     선행 Task: 이 Task 를 시작하기 전에 끝나 있어야 하는 Task ID 를 ` · ` 로 나열한다(예 `TSK-012 · TSK-013`). 없으면 none. 작성 규칙 12.
+     대상 Intent: 이 작업이 바꾸거나 기대는 Intent ID 를 ` · ` 로 나열한다 — App 이 달라도 된다(예 `loader-int-003 · viewer-int-001`). Intent 가 없는 영역의 리팩토링만 none.
+     선행 Task: 이 Task 를 시작하기 전에 끝나 있어야 하는 Task ID 를 ` · ` 로 나열한다(예 `tsk-012 · tsk-013`). 없으면 none. 작성 규칙 12.
      승인: approved 시 `{승인자} · {YYYY-MM-DD}`. 검증: `pending` 또는 `<총평> — <내용>`, 총평 ∈ PASS | FAIL | OVERRIDE | SKIPPED (예 `PASS — check-task PASS · split-check PASS`).
      제목(H1)과 이 메타 표는 task-catalog.md 의 원천이다. -->
 
@@ -31,7 +31,7 @@
 
 ## Scope
 <!-- 이번 작업이 다루는 Intent 항목의 사본. FR 뿐 아니라 Edge(E) · Error(X) 항목도 같은 방식으로 담는다.
-     형식: `- {변경} · {App}-INT-{NNN} {항목 ID}. {Intent 문장}` — Intent ID 는 App 접두까지 쓴다. 문장은 Intent 와 글자까지 같다(진행 표시 제외).
+     형식: `- {변경} · {app}-int-{NNN} {항목 ID}. {Intent 문장}` — Intent ID 는 App 접두까지 쓴다. 문장은 Intent 와 글자까지 같다(진행 표시 제외).
      신규 · 변경 · 삭제 줄은 `docs_helpers.py intent-diff` 가 낸 `scope_line` · `prev_line` 을 그대로 옮긴다 — 손으로 다시 쓰지 않는다.
      변경: 신규 | 변경 | 삭제 | 위반 | 보존
        변경 — 바로 아래에 `  - 이전: {바뀌기 전 문장}` 한 줄을 붙인다. 바뀌기 전 문장이 남는 곳은 여기뿐이다.
@@ -39,15 +39,15 @@
        위반 — (버그수정) Intent 는 그대로인데 코드가 지키지 않는 항목. 지금 관찰되는 현상은 Goal 계기에 쓴다.
        보존 — (리팩토링) 바뀌면 안 되는 항목.
      대상 Intent 가 none 이면 none. -->
-- 신규 · {App}-INT-{NNN} FR-{n}. {Intent 문장}
+- 신규 · {app}-int-{NNN} FR-{n}. {Intent 문장}
 
 - Out of scope: {이번 작업에서 하지 않는 것 — 다른 Task 가 맡는 항목 포함}
 
 ## Acceptance
 <!-- 기능개발 · 버그수정: `- [ ] A-n. {완료 조건} (근거)` 체크리스트. 리팩토링: `- A-n. {보존할 동작} (근거)` 목록.
-     근거는 `({App}-INT-{NNN} FR-{n})` 처럼 Intent 항목, `(R-n)`, `(OS)`, 또는 대상 Intent 가 none 일 때 `(Goal)`. 여러 개는 `, ` 로 잇는다.
+     근거는 `({app}-int-{NNN} FR-{n})` 처럼 Intent 항목, `(R-n)`, `(OS)`, 또는 대상 Intent 가 none 일 때 `(Goal)`. 여러 개는 `, ` 로 잇는다.
      여러 App 에 걸친 작업이면 App 사이의 동작(한쪽이 준 값을 다른 쪽이 쓰는 것)을 확인하는 A 를 둔다. -->
-- [ ] A-1. {완료 조건} ({App}-INT-{NNN} FR-{n})
+- [ ] A-1. {완료 조건} ({app}-int-{NNN} FR-{n})
 
 ## Verification
 <!-- 완료를 확인하는 방법. 실행 명령 · 테스트 이름 · 코드 이름은 쓰지 않는다. -->
@@ -58,7 +58,7 @@
 - R-1. {리스크} → {대비}
 
 ## Handoff
-<!-- 개발 세션이 착수에 필요한 값. 모르는 값은 pending — 승인 전에 채운다. repo · app 은 `{repo} · {App}, {App}` 처럼 이 작업이 손대는 App 을 모두 쓴다. 손대지 말 영역은 폴더 · 프로젝트 단위 경로만 — 파일 경로는 쓰지 않는다.
+<!-- 개발 세션이 착수에 필요한 값. 모르는 값은 pending — 승인 전에 채운다. repo · app 은 `{repo} · {app}, {app}` 처럼 이 작업이 손대는 App 을 모두 쓴다. 손대지 말 영역은 폴더 · 프로젝트 단위 경로만 — 파일 경로는 쓰지 않는다.
      브랜치 · 분기점은 Task 가 아니라 워크트리가 정한다(`/worktree-init <이름>` — 브랜치 `work/<이름>`). 워크트리 하나에서 Task 여러 개를 개발할 수 있다. -->
 | 항목 | 값 |
 |---|---|
@@ -71,9 +71,9 @@
 2. 밖에서 보이는 이름은 쓴다 — 백틱으로 감싸고 바로 앞에 종류를 쓴다: API `POST /uploads` · 요청 필드 `fileName` · 응답 필드 `retryCount` · 설정 키 `upload.retry.max` · 오류 코드 `UPLOAD_RETRY_EXHAUSTED` · 상태 코드 `503`. 화면 문구는 큰따옴표.
 3. 판별 기준 — 사용자 · 외부 시스템 · 운영자가 코드를 열지 않고 볼 수 있는 이름이면 쓴다. 코드를 열어야 보이는 이름이면 쓰지 않는다. 대상을 가리켜야 하면 기능 영역 · 계층 · 패턴 용어로 쓴다.
 4. Task 는 새 동작을 만들지 않는다 — Scope 문장은 Intent 와 글자까지 같다. 동작(정상 · 경계 · 오류)이 바뀌면 Intent 를 먼저 고친다(requirement-spec).
-5. Intent 항목은 어디서든 App 접두를 붙여 가리킨다 — `LOADER-INT-003 FR-4`. Task 는 여러 App 에 걸칠 수 있어 접두 없는 `INT-003` 은 모호하다.
+5. Intent 항목은 어디서든 App 접두를 붙여 가리킨다 — `loader-int-003 FR-4`. Task 는 여러 App 에 걸칠 수 있어 접두 없는 `int-003` 은 모호하다.
 6. 변경 항목의 `이전` 문장은 Intent 를 고치기 전 기준선(`.process/intent-base/<ID>.md`, requirement-spec 수정 모드가 남긴다)의 문장이다 — `intent-diff` 가 옮겨 준다. 문서를 커밋하지 않으므로 git 이력은 기준이 되지 못한다. Task 를 취소(dropped)하면 Scope 로 Intent 를 되돌린다 — 신규 항목은 지우고, 변경 항목은 `이전` 문장으로 복원하고, 진행 표시를 지운다(삭제 예정 항목은 표시만 지운다).
-7. Scope 의 신규 · 변경 · 삭제 항목은 Intent 의 진행 표시와 1:1 이다 — 신규 · 변경 = `[TSK-{NNN} 진행 중]`, 삭제 = `[TSK-{NNN} 삭제 예정]`. 표시는 `docs_helpers.py mark-intent` 가 붙이고 done 전이(/worktree-delete)가 지운다. 위반 · 보존 항목에는 표시를 붙이지 않는다.
+7. Scope 의 신규 · 변경 · 삭제 항목은 Intent 의 진행 표시와 1:1 이다 — 신규 · 변경 = `[tsk-{NNN} 진행 중]`, 삭제 = `[tsk-{NNN} 삭제 예정]`. 표시는 `docs_helpers.py mark-intent` 가 붙이고 done 전이(/worktree-delete)가 지운다. 위반 · 보존 항목에는 표시를 붙이지 않는다.
 8. 모든 Scope 항목은 A 하나 이상의 근거로 쓰인다 — E · X 항목도 예외가 없다. 버그수정은 Goal 의 재현 조건을 다시 해 보는 A 를 둔다.
 9. A · R 항목은 1부터 오름차순 ID 를 갖는다. 지워도 번호를 재사용하지 않는다(빈 번호 허용).
 10. `상태: approved` 는 Handoff 에 pending 이 없고, 유형이 한 값이고, 검증이 PASS · OVERRIDE · SKIPPED 중 하나로 시작하고, 규칙 8 을 만족하고, 대상 Intent 의 Open questions 가 모두 none 일 때만 가능하다.

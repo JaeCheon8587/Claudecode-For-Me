@@ -65,9 +65,9 @@ def test_result_codes_exist():
 
 def test_flow_order():
     text = read(SKILL)
-    text = text[text.index("## Phase 1"):]   # 머리말의 흐름 한 줄(`finish TSK-<NNN>` 포함)은 빼고 본문 순서만
+    text = text[text.index("## Phase 1"):]   # 머리말의 흐름 한 줄(`finish tsk-<NNN>` 포함)은 빼고 본문 순서만
     steps =["intent-diff --repo . --intent", "mark-intent --repo . --task", "check-task --repo . --file",
-             "split-check --repo . --task", "task-catalog --repo . --write", "--drop", "finish TSK-<NNN>"]
+             "split-check --repo . --task", "task-catalog --repo . --write", "--drop", "finish tsk-<NNN>"]
     positions = [text.find(s) for s in steps]
     assert -1 not in positions, [s for s, p in zip(steps, positions) if p == -1]
     assert positions == sorted(positions), "변경 목록 → 표시 → 검사 → 승인 → 기준선 소비 → 개발 프롬프트 순서가 아니다"
@@ -107,5 +107,5 @@ def test_no_commit_and_no_follow_up_execution():
 
 def test_template_paths_resolve():
     text = read(SKILL)
-    assert "docs/.templates/.task/TSK-001-TEMPLATE.md" in text
-    assert (ROOT / "docs" / ".templates" / ".task" / "TSK-001-TEMPLATE.md").is_file()
+    assert "docs/.templates/.task/tsk-001-template.md" in text
+    assert (ROOT / "docs" / ".templates" / ".task" / "tsk-001-template.md").is_file()
